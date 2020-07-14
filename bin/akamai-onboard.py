@@ -107,7 +107,7 @@ pass_config = click.make_pass_decorator(Config, ensure=True)
 @pass_config
 def cli(config, edgerc, section, account_key):
     '''
-    Akamai CLI for Onboard
+    Akamai CLI for onboarding properties
     '''
     config.edgerc = edgerc
     config.section = section
