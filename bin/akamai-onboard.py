@@ -107,7 +107,7 @@ pass_config = click.make_pass_decorator(Config, ensure=True)
 @pass_config
 def cli(config, edgerc, section, account_key):
     '''
-    Akamai CLI for Cloudlets
+    Akamai CLI for Onboard
     '''
     config.edgerc = edgerc
     config.section = section
@@ -137,7 +137,7 @@ def create(config, file):
 
         #in the future, could look at validating the json schema
 
-    except TypeError:
+    except:
         print('ERROR: Unable to open setup file')
         exit(-1)
 
