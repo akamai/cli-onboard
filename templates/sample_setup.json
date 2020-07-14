@@ -1,0 +1,60 @@
+{
+    "property_info": {
+        "property_name": "",
+        "secure_network": "ENHANCED_TLS",
+        "contract_id": "ctr_",
+        "group_id": "grp_",
+        "product_id": "prd_",
+        "rule_format": "latest",
+        "default_cpcode": {
+            "create_new_cpcode": false,
+            "new_cpcode_name": ""
+
+        },
+        "file_info": {
+            "use_file": false,
+            "source_template_file": "",
+            "source_values_file": ""
+        },
+        "folder_info": {
+            "use_folder": false,
+            "folder_path": "",
+            "env_name": ""
+        }
+    },
+    "public_hostnames": [
+        ""
+    ],
+    "edge_hostname": {
+        "mode": "use_existing_edgehostname",
+        "use_existing_edgehostname": {
+            "edge_hostname": ""
+        },
+        "new_standard_tls_edgehostname": {},
+        "new_enhanced_tls_edgehostname": {
+            "ssl_cert_info": {
+                "use_existing_enrollment_id": false,
+                "existing_enrollment_id": "",
+                "existing_slot_number": "",
+                "create_new_ssl_cert": false,
+                "ssl_cert_template_file": "",
+                "ssl_cert_template_values": "",
+                "temp_existing_edge_hostname": ""
+
+            }
+        }
+    },
+    "activate_property_staging": false,
+    "update_waf_info": {
+        "add_selected_host": false,
+        "waf_config_name": "",
+        "update_match_target": false,
+        "waf_match_target_id": ""
+    },
+    "activate_waf_policy_staging": false,
+    "activate_property_production": false,
+    "activate_waf_policy_production": false,
+    "notification_emails": [
+        ""
+    ]
+}

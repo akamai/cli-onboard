@@ -1,0 +1,68 @@
+{
+    "validationType": "dv",
+    "ra": "lets-encrypt",
+    "certificateType": "san",
+    "enableMultiStackedCertificates": false,
+    "signatureAlgorithm": "SHA-256",
+    "networkConfiguration": {
+        "geography": "core",
+        "secureNetwork": "enhanced-tls",
+        "mustHaveCiphers": "ak-akamai-default-2017q3",
+        "preferredCiphers": "ak-akamai-default-2017q3",
+        "disallowedTlsVersions": [
+            "None"
+        ],
+        "sni": {
+          "cloneDnsNames": true,
+          "dnsNames": "${env.sni_dnsnames}"
+        }
+    },
+    "changeManagement": false,
+    "csr": {
+        "cn": "${env.csr_cn}",
+        "c": "${env.csr_c}",
+        "st": "${env.csr_st}",
+        "l": "${env.csr_l}",
+        "o": "${env.csr_o}",
+        "ou": "${env.csr_ou}",
+        "sans": "${env.csr_sans}"
+    },
+    "org": {
+        "name": "${env.org_name}",
+        "addressLineOne": "${env.org_addressLineOne}",
+        "addressLineTwo": "${env.org_addressLineTwo}",
+        "city": "${env.org_city}",
+        "region": "${env.org_region}",
+        "postalCode": "${env.org_postalCode}",
+        "country": "${env.org_country}",
+        "phone": "${env.org_phone}"
+    },
+    "adminContact": {
+        "firstName": "${env.admincontact_firstName}",
+        "lastName": "${env.admincontact_lastName}",
+        "phone": "${env.admincontact_phone}",
+        "email": "${env.admincontact_email}",
+        "addressLineOne": "${env.admincontact_addressLineOne}",
+        "addressLineTwo": "${env.admincontact_addressLineTwo}",
+        "city": "${env.admincontact_city}",
+        "country": "${env.admincontact_country}",
+        "organizationName": "${env.admincontact_organizationName}",
+        "postalCode": "${env.admincontact_postalCode}",
+        "region": "${env.admincontact_region}",
+        "title": "${env.admincontact_title}"
+    },
+    "techContact": {
+        "firstName": "${env.techcontact_firstName}",
+        "lastName": "${env.techcontact_lastName}",
+        "phone": "${env.techcontact_phone}",
+        "email": "${env.techcontact_email}",
+        "addressLineOne": "${env.techcontact_addressLineOne}",
+        "addressLineTwo": "${env.techcontact_addressLineTwo}",
+        "city": "${env.techcontact_city}",
+        "country": "${env.techcontact_country}",
+        "organizationName": "${env.techcontact_organizationName}",
+        "postalCode": "${env.techcontact_postalCode}",
+        "region": "${env.techcontact_region}",
+        "title": "${env.techcontact_title}"
+    }
+}

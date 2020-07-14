@@ -1,0 +1,13 @@
+{
+  "requirements": {
+    "python": "3.0.0"
+  },
+  "commands": [
+    {
+      "name": "onboard",
+      "aliases": ["onboard"],
+      "version": "1.0.0",
+      "description": "Onboard Akamai delivery and WAF configuration"
+    }
+  ]
+}
