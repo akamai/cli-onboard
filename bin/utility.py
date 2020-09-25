@@ -51,10 +51,6 @@ class utility(object):
                 #Check specifically for akamai pipeline
                 print('\nThis program needs akamai CLI module property-manager as a pre-requisite')
                 print('Please install from https://github.com/akamai/cli-property-manager')
-            elif 'appsec' in command:
-                #Check specifically for akamai appsec
-                print('\nThis program needs akamai CLI module appsec as a pre-requisite')
-                print('Please install from https://github.com/akamai/cli-appsec')
             else:
                 #Generic commands for future
                 print(command + ' is not installed.')
