@@ -44,17 +44,13 @@ class utility(object):
         """
         Function to execute Linux commands
         """
-        p = subprocess.call(command, shell=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+        p = subprocess.call(command, shell=True, stdout=None, stderr=subprocess.STDOUT)
         if p != 0:
             #NON-Zero code in Linux indicates Failure
             if 'pipeline' in command:
                 #Check specifically for akamai pipeline
                 print('\nThis program needs akamai CLI module property-manager as a pre-requisite')
                 print('Please install from https://github.com/akamai/cli-property-manager')
-            elif 'appsec' in command:
-                #Check specifically for akamai appsec
-                print('\nThis program needs akamai CLI module appsec as a pre-requisite')
-                print('Please install from https://github.com/akamai/cli-appsec')
             else:
                 #Generic commands for future
                 print(command + ' is not installed.')
@@ -394,7 +390,7 @@ class utility(object):
             shutil.rmtree('temp_pm')
         if os.path.exists('temp_cps'):
             shutil.rmtree('temp_cps')
-        subprocess.call('rm devops*.log', shell=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)    
+        subprocess.call('rm devops*.log', shell=True, stdout=None, stderr=subprocess.STDOUT)    
 
 
         try:
@@ -442,13 +438,13 @@ class utility(object):
 
                 #Run pipeline merge
                 if merge_type == "pm":
-                    p = subprocess.call('akamai pipeline merge -n -p temp_pm test', shell=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+                    p = subprocess.call('akamai pipeline merge -n -p temp_pm test', shell=True, stdout=None, stderr=subprocess.STDOUT)
                 else:
-                    p = subprocess.call('akamai pipeline merge -n -p temp_cps test', shell=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+                    p = subprocess.call('akamai pipeline merge -n -p temp_cps test', shell=True, stdout=None, stderr=subprocess.STDOUT)
             else:
                 #Copy the folder and run pipeline merge
                 copy_tree(onboard_object.folder_path, 'temp_pm')
-                p = subprocess.call('akamai pipeline merge -n -p temp_pm ' + onboard_object.env_name, shell=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+                p = subprocess.call('akamai pipeline merge -n -p temp_pm ' + onboard_object.env_name, shell=True, stdout=None, stderr=subprocess.STDOUT)
 
             #if pipeline merge command was not successful, return false
             if p != 0:
