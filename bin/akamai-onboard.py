@@ -36,7 +36,7 @@ In case you need quick explanation contact the initiators.
 Initiators: vbhat@akamai.com and aetsai@akamai.com
 """
 
-PACKAGE_VERSION = "1.0.1"
+PACKAGE_VERSION = "1.0.2"
 
 # Setup logging
 if not os.path.exists('logs'):
@@ -154,7 +154,7 @@ def create(config, file):
 
     #Validate akamai cli and cli pipeline are installed
     cli_installed = utility_object.installedCommandCheck('akamai')
-    pipeline_installed = utility_object.executeCommand('akamai | grep pipeline')
+    pipeline_installed = utility_object.executeCommand('akamai pipeline')
 
     #Determine necessary execution steps
     steps_object = steps.executionSteps()
