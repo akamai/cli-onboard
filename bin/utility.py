@@ -44,26 +44,27 @@ class utility(object):
         """
         Function to execute Linux commands
         """
-        p = subprocess.call(command, shell=True, stdout=None, stderr=subprocess.STDOUT)
-        if p != 0:
-            #NON-Zero code in Linux indicates Failure
-            if 'pipeline' in command:
-                #Check specifically for akamai pipeline
-                print('\nThis program needs akamai CLI module property-manager as a pre-requisite')
-                print('Please install from https://github.com/akamai/cli-property-manager')
-            else:
-                #Generic commands for future
-                print(command + ' is not installed.')
+        try:
+            FILE = open('command_output', 'w')        
+            subprocess.call(command, shell=True, stdout=FILE, stderr=None)
+            for option in options:
+                if 'pipeline' in option:
+                    with open('command_output','r') as file_content_handler:
+                        if 'pipeline' not in file_content_handler.read():
+                            #Check specifically for akamai pipeline
+                            print('\nThis program needs akamai CLI module property-manager as a pre-requisite')
+                            print('Please install from https://github.com/akamai/cli-property-manager')
 
-            #Common assignment for Failure cases
-            self.valid = False
-            return self.valid
-        else:
-            #Zero in Linux indicates Success
-            return self.valid
+                            #Common assignment for Failure cases
+                            self.valid = False
+                            return self.valid
+                        else:
+                            return self.valid
+             finally:   
+                os.remove('command_output')                        
 
         #Default Return, ideally code shouldnt come here
-        return self.valid
+        return self.valid   
 
 
     def checkPermissions(self, session, apicalls_wrapper_object):
@@ -386,11 +387,14 @@ class utility(object):
         #For PM merge, it will use temp_pm folder
         #For CPS merge, it will use temp_cps folder
         #Delete these folders if they exist to start
+
+        FILE = open('command_output', 'w')   
+
         if os.path.exists('temp_pm'):
             shutil.rmtree('temp_pm')
         if os.path.exists('temp_cps'):
             shutil.rmtree('temp_cps')
-        subprocess.call('rm devops*.log', shell=True, stdout=None, stderr=subprocess.STDOUT)    
+        subprocess.call('rm devops*.log', shell=True, stdout=FILE, stderr=None)    
 
 
         try:
@@ -438,13 +442,13 @@ class utility(object):
 
                 #Run pipeline merge
                 if merge_type == "pm":
-                    p = subprocess.call('akamai pipeline merge -n -p temp_pm test', shell=True, stdout=None, stderr=subprocess.STDOUT)
+                    p = subprocess.call('akamai pipeline merge -n -p temp_pm test', shell=True, stdout=FILE, stderr=None)
                 else:
-                    p = subprocess.call('akamai pipeline merge -n -p temp_cps test', shell=True, stdout=None, stderr=subprocess.STDOUT)
+                    p = subprocess.call('akamai pipeline merge -n -p temp_cps test', shell=True, stdout=FILE, stderr=None)
             else:
                 #Copy the folder and run pipeline merge
                 copy_tree(onboard_object.folder_path, 'temp_pm')
-                p = subprocess.call('akamai pipeline merge -n -p temp_pm ' + onboard_object.env_name, shell=True, stdout=None, stderr=subprocess.STDOUT)
+                p = subprocess.call('akamai pipeline merge -n -p temp_pm ' + onboard_object.env_name, shell=True, stdout=FILE, stderr=None)
 
             #if pipeline merge command was not successful, return false
             if p != 0:
@@ -457,3 +461,6 @@ class utility(object):
             print(e)
             print('\nERROR: Exception occurred while trying to merge. Check devops-logs.log and/or temp_* folder to see if files were copied or merged correctly')
             return False
+
+        finally:
+            os.remove('command_output')    
