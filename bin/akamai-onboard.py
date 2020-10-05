@@ -73,7 +73,7 @@ def init_config(edgerc_file, section):
 
     if not section:
         if not os.getenv("AKAMAI_EDGERC_SECTION"):
-            section = "papi"
+            section = "onboard"
         else:
             section = os.getenv("AKAMAI_EDGERC_SECTION")
 
