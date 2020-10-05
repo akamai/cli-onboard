@@ -45,26 +45,26 @@ class utility(object):
         """
         Function to execute Linux commands
         """
-        try:
-            FILE = open('command_output', 'w')        
-            subprocess.call(command, shell=True, stdout=FILE, stderr=None)
-            for option in options:
-                if 'pipeline' in option:
-                    with open('command_output','r') as file_content_handler:
-                        if 'pipeline' not in file_content_handler.read():
-                            #Check specifically for akamai pipeline
-                            print('\nThis program needs akamai CLI module property-manager as a pre-requisite')
-                            print('Please install from https://github.com/akamai/cli-property-manager')
+        FILE = open('command_output', 'w')        
+        subprocess.call(command, shell=True, stdout=FILE, stderr=None)
+        for option in options:
+            if 'pipeline' in option:
+                with open('command_output','r') as file_content_handler:
+                    if 'pipeline' not in file_content_handler.read():
+                        #Check specifically for akamai pipeline
+                        print('\nThis program needs akamai CLI module property-manager as a pre-requisite')
+                        print('Please install from https://github.com/akamai/cli-property-manager')
 
-                            #Common assignment for Failure cases
-                            self.valid = False
-                            return self.valid
-                        else:
-                            return self.valid
-        finally:   
-            os.remove('command_output')                        
+                        #Common assignment for Failure cases
+                        self.valid = False
+                        os.remove('command_output')
+                        return self.valid
+                    else:
+                        os.remove('command_output')
+                        return self.valid                                       
 
         #Default Return, ideally code shouldnt come here
+        os.remove('command_output')
         return self.valid   
 
 
@@ -453,15 +453,16 @@ class utility(object):
 
             #if pipeline merge command was not successful, return false
             if p != 0:
+                os.remove('command_output')
                 return False
             
             #process call worked, return true
+            os.remove('command_output')
             return True
 
         except Exception as e:
             print(e)
             print('\nERROR: Exception occurred while trying to merge. Check devops-logs.log and/or temp_* folder to see if files were copied or merged correctly')
+            os.remove('command_output')
             return False
-
-        finally:
-            os.remove('command_output')    
+                
