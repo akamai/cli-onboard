@@ -62,7 +62,7 @@ class utility(object):
                         else:
                             return self.valid
         finally:   
-        os.remove('command_output')                        
+            os.remove('command_output')                        
 
         #Default Return, ideally code shouldnt come here
         return self.valid   
