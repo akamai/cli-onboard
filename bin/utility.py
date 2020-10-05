@@ -5,6 +5,7 @@ from urllib import parse
 import os
 from distutils.dir_util import copy_tree
 import shutil
+import os
 
 class utility(object):
     def __init__(self):
@@ -60,8 +61,8 @@ class utility(object):
                             return self.valid
                         else:
                             return self.valid
-             finally:   
-                os.remove('command_output')                        
+        finally:   
+        os.remove('command_output')                        
 
         #Default Return, ideally code shouldnt come here
         return self.valid   
