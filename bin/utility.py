@@ -395,7 +395,7 @@ class utility(object):
             shutil.rmtree('temp_pm')
         if os.path.exists('temp_cps'):
             shutil.rmtree('temp_cps')
-        subprocess.call('rm devops*.log', shell=True, stdout=FILE, stderr=None)    
+        #subprocess.call('rm devops*.log', shell=True, stdout=FILE, stderr=None)    
 
 
         try:
