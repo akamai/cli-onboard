@@ -33,6 +33,7 @@ class utility(object):
 
             #Common assignment for Failure cases
             self.valid = False
+            exit(-1)
             return self.valid
         else:
             #This is a success state, if the command is installed
@@ -58,6 +59,7 @@ class utility(object):
                         #Common assignment for Failure cases
                         self.valid = False
                         os.remove('command_output')
+                        exit(-1)
                         return self.valid
                     else:
                         os.remove('command_output')
