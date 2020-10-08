@@ -177,6 +177,7 @@ class papiFunctions(object):
             shutil.rmtree('temp_pm')
             try:
                 os.remove('devops.log')
+                os.remove('devops-logs.log')
             except:
                 pass    
 
@@ -258,6 +259,7 @@ class papiFunctions(object):
                         shutil.rmtree('temp_cps')
                         try:
                             os.remove('devops.log')
+                            os.remove('devops-logs.log')
                         except:
                             pass    
             
