@@ -397,9 +397,13 @@ class utility(object):
             shutil.rmtree('temp_cps')
         try:
             os.remove('devops.log')    
+        except:
+            pass  
+
+        try:
             os.remove('devops-logs.log')    
         except:
-            pass   
+            pass 
 
 
         try:

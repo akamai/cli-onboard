@@ -177,10 +177,13 @@ class papiFunctions(object):
             shutil.rmtree('temp_pm')
             try:
                 os.remove('devops.log')
-                os.remove('devops-logs.log')
             except:
                 pass    
 
+            try:
+                os.remove('devops-logs.log')    
+            except:
+                pass 
 
     def processEdgeHostnameInput(self, session, onboard_object, wrapper_object, utility_object, setup_json_content):
         """
@@ -259,9 +262,13 @@ class papiFunctions(object):
                         shutil.rmtree('temp_cps')
                         try:
                             os.remove('devops.log')
-                            os.remove('devops-logs.log')
                         except:
                             pass    
+
+                        try:
+                            os.remove('devops-logs.log')    
+                        except:
+                            pass 
             
                     if onboard_object.temp_existing_edge_hostname != "":
                         print('\nNOTE: New edge hostname cannot be created yet from this new certificate.  Please create edge hostname after certificate has been deployed. Associating specified temp_edge_hostname to property for now.')
