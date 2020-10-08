@@ -443,13 +443,13 @@ class utility(object):
 
                 #Run pipeline merge
                 if merge_type == "pm":
-                    p = subprocess.call('akamai pipeline merge -n -p temp_pm test', shell=False, stdout=FILE, stderr=None)
+                    p = subprocess.call('akamai pipeline merge -n -p temp_pm test', shell=True, stdout=FILE, stderr=None)
                 else:
-                    p = subprocess.call('akamai pipeline merge -n -p temp_cps test', shell=False, stdout=FILE, stderr=None)
+                    p = subprocess.call('akamai pipeline merge -n -p temp_cps test', shell=True, stdout=FILE, stderr=None)
             else:
                 #Copy the folder and run pipeline merge
                 copy_tree(onboard_object.folder_path, 'temp_pm')
-                p = subprocess.call('akamai pipeline merge -n -p temp_pm ' + onboard_object.env_name, shell=False, stdout=FILE, stderr=None)
+                p = subprocess.call('akamai pipeline merge -n -p temp_pm ' + onboard_object.env_name, shell=True, stdout=FILE, stderr=None)
 
             #if pipeline merge command was not successful, return false
             if p != 0:
