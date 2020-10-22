@@ -42,31 +42,29 @@ class utility(object):
         #Default Return, ideally code shouldnt come here
         return self.valid
 
-    def executeCommand(self, command, options=[]):
+    def executeCommand(self, command):
         """
         Function to execute Linux commands
         """
-        FILE = open('command_output', 'w')        
-        subprocess.call(command, shell=False, stdout=FILE, stderr=None)
-        for option in options:
-            if 'pipeline' in option:
-                with open('command_output','r') as file_content_handler:
-                    if 'pipeline' not in file_content_handler.read():
-                        #Check specifically for akamai pipeline
-                        print('\nThis program needs akamai CLI module property-manager as a pre-requisite')
-                        print('Please install from https://github.com/akamai/cli-property-manager')
+        cmdOut = subprocess.Popen([command], 
+                    stdout=subprocess.PIPE, 
+                    stderr=subprocess.STDOUT)
+        stdout,stderr = cmdOut.communicate()    
 
-                        #Common assignment for Failure cases
-                        self.valid = False
-                        os.remove('command_output')
-                        exit(-1)
-                        return self.valid
-                    else:
-                        os.remove('command_output')
-                        return self.valid                                       
+        if 'pipeline' in command:
+            if 'akamai [global flags]' in stdout:
+                #Check specifically for akamai pipeline
+                print('\nThis program needs akamai CLI module property-manager as a pre-requisite')
+                print('Please install from https://github.com/akamai/cli-property-manager')
+
+                #Common assignment for Failure cases
+                self.valid = False
+                exit(-1)
+                return self.valid
+            else:
+                return self.valid                                       
 
         #Default Return, ideally code shouldnt come here
-        os.remove('command_output')
         return self.valid   
 
 
@@ -453,26 +451,39 @@ class utility(object):
 
                 #Run pipeline merge
                 if merge_type == "pm":
-                    p = subprocess.call('akamai pipeline merge -n -p temp_pm test', shell=True, stdout=FILE, stderr=None)
+                    command = 'akamai pipeline merge -n -p temp_pm test'
+                    child_process = subprocess.Popen([command], 
+                                        stdout=subprocess.PIPE, 
+                                        stderr=subprocess.STDOUT)
+                    stdout,stderr = child_process.communicate()   
+                    rtn_code = child_process.returncode               
                 else:
-                    p = subprocess.call('akamai pipeline merge -n -p temp_cps test', shell=True, stdout=FILE, stderr=None)
+                    command = 'akamai pipeline merge -n -p temp_cps test -n -p temp_pm test'
+                    child_process = subprocess.Popen([command], 
+                                        stdout=subprocess.PIPE, 
+                                        stderr=subprocess.STDOUT)
+                    stdout,stderr = child_process.communicate()   
+                    rtn_code = child_process.returncode                  
             else:
                 #Copy the folder and run pipeline merge
                 copy_tree(onboard_object.folder_path, 'temp_pm')
-                p = subprocess.call('akamai pipeline merge -n -p temp_pm ' + onboard_object.env_name, shell=True, stdout=FILE, stderr=None)
+                command = 'akamai pipeline merge -n -p temp_pm '
+                child_process = subprocess.Popen([command], 
+                                    stdout=subprocess.PIPE, 
+                                    stderr=subprocess.STDOUT)
+                stdout,stderr = child_process.communicate()   
+                rtn_code = child_process.returncode               
 
             #if pipeline merge command was not successful, return false
-            if p != 0:
-                os.remove('command_output')
+            if rtn_code != 0:
+                print('\n Merging the template file failed')
                 return False
             
             #process call worked, return true
-            os.remove('command_output')
             return True
 
         except Exception as e:
             print(e)
             print('\nERROR: Exception occurred while trying to merge. Check devops-logs.log and/or temp_* folder to see if files were copied or merged correctly')
-            os.remove('command_output')
             return False
                 

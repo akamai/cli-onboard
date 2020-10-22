@@ -154,7 +154,7 @@ def create(config, file):
 
     #Validate akamai cli and cli pipeline are installed
     cli_installed = utility_object.installedCommandCheck('akamai')
-    pipeline_installed = utility_object.executeCommand('akamai', options= ['pipeline'])
+    pipeline_installed = utility_object.executeCommand('akamai pipeline')
 
     #Determine necessary execution steps
     steps_object = steps.executionSteps()
