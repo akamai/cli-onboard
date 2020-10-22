@@ -46,7 +46,7 @@ class utility(object):
         """
         Function to execute Linux commands
         """
-        cmdOut = subprocess.Popen([command], 
+        cmdOut = subprocess.Popen(command, 
                     stdout=subprocess.PIPE, 
                     stderr=subprocess.STDOUT)
         stdout,stderr = cmdOut.communicate()    
@@ -451,15 +451,15 @@ class utility(object):
 
                 #Run pipeline merge
                 if merge_type == "pm":
-                    command = 'akamai pipeline merge -n -p temp_pm test'
-                    child_process = subprocess.Popen([command], 
+                    command = ['akamai', 'pipeline', 'merge', '-n', '-p', 'temp_pm', 'test']
+                    child_process = subprocess.Popen(command, 
                                         stdout=subprocess.PIPE, 
                                         stderr=subprocess.STDOUT)
                     stdout,stderr = child_process.communicate()   
                     rtn_code = child_process.returncode               
                 else:
-                    command = 'akamai pipeline merge -n -p temp_cps test -n -p temp_pm test'
-                    child_process = subprocess.Popen([command], 
+                    command = ['akamai', 'pipeline', 'merge', '-n', '-p', 'temp_cps', 'test']
+                    child_process = subprocess.Popen(command, 
                                         stdout=subprocess.PIPE, 
                                         stderr=subprocess.STDOUT)
                     stdout,stderr = child_process.communicate()   
@@ -467,8 +467,8 @@ class utility(object):
             else:
                 #Copy the folder and run pipeline merge
                 copy_tree(onboard_object.folder_path, 'temp_pm')
-                command = 'akamai pipeline merge -n -p temp_pm '
-                child_process = subprocess.Popen([command], 
+                command = ['akamai', 'pipeline', 'merge', '-n', '-p', 'temp_pm']
+                child_process = subprocess.Popen(command, 
                                     stdout=subprocess.PIPE, 
                                     stderr=subprocess.STDOUT)
                 stdout,stderr = child_process.communicate()   
