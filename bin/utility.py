@@ -5,6 +5,7 @@ from urllib import parse
 import os
 from distutils.dir_util import copy_tree
 import shutil
+import os
 
 class utility(object):
     def __init__(self):
@@ -32,6 +33,7 @@ class utility(object):
 
             #Common assignment for Failure cases
             self.valid = False
+            exit(-1)
             return self.valid
         else:
             #This is a success state, if the command is installed
@@ -40,30 +42,30 @@ class utility(object):
         #Default Return, ideally code shouldnt come here
         return self.valid
 
-    def executeCommand(self, command, options=[]):
+    def executeCommand(self, command):
         """
         Function to execute Linux commands
         """
-        p = subprocess.call(command, shell=True, stdout=None, stderr=subprocess.STDOUT)
-        if p != 0:
-            #NON-Zero code in Linux indicates Failure
-            if 'pipeline' in command:
+        childprocess = subprocess.Popen(command, 
+                    stdout=subprocess.PIPE, 
+                    stderr=subprocess.STDOUT)
+        stdout,stderr = childprocess.communicate()    
+
+        if 'pipeline' in command:
+            if 'akamai [global flags]' in str(stdout):
                 #Check specifically for akamai pipeline
                 print('\nThis program needs akamai CLI module property-manager as a pre-requisite')
                 print('Please install from https://github.com/akamai/cli-property-manager')
-            else:
-                #Generic commands for future
-                print(command + ' is not installed.')
 
-            #Common assignment for Failure cases
-            self.valid = False
-            return self.valid
-        else:
-            #Zero in Linux indicates Success
-            return self.valid
+                #Common assignment for Failure cases
+                self.valid = False
+                exit(-1)
+                return self.valid
+            else:
+                return self.valid                                       
 
         #Default Return, ideally code shouldnt come here
-        return self.valid
+        return self.valid   
 
 
     def checkPermissions(self, session, apicalls_wrapper_object):
@@ -325,6 +327,7 @@ class utility(object):
                 else:
                     pass
         else:
+            print(json.dumps(get_products_response.json(), indent=4))
             pass
 
         return products    
@@ -386,11 +389,22 @@ class utility(object):
         #For PM merge, it will use temp_pm folder
         #For CPS merge, it will use temp_cps folder
         #Delete these folders if they exist to start
+
+        FILE = open('command_output', 'w')   
+
         if os.path.exists('temp_pm'):
             shutil.rmtree('temp_pm')
         if os.path.exists('temp_cps'):
             shutil.rmtree('temp_cps')
-        subprocess.call('rm devops*.log', shell=True, stdout=None, stderr=subprocess.STDOUT)    
+        try:
+            os.remove('devops.log')    
+        except:
+            pass  
+
+        try:
+            os.remove('devops-logs.log')    
+        except:
+            pass 
 
 
         try:
@@ -438,16 +452,32 @@ class utility(object):
 
                 #Run pipeline merge
                 if merge_type == "pm":
-                    p = subprocess.call('akamai pipeline merge -n -p temp_pm test', shell=True, stdout=None, stderr=subprocess.STDOUT)
+                    command = ['akamai', 'pipeline', 'merge', '-n', '-p', 'temp_pm', 'test']
+                    child_process = subprocess.Popen(command, 
+                                        stdout=subprocess.PIPE, 
+                                        stderr=subprocess.STDOUT)
+                    stdout,stderr = child_process.communicate()   
+                    rtn_code = child_process.returncode               
                 else:
-                    p = subprocess.call('akamai pipeline merge -n -p temp_cps test', shell=True, stdout=None, stderr=subprocess.STDOUT)
+                    command = ['akamai', 'pipeline', 'merge', '-n', '-p', 'temp_cps', 'test']
+                    child_process = subprocess.Popen(command, 
+                                        stdout=subprocess.PIPE, 
+                                        stderr=subprocess.STDOUT)
+                    stdout,stderr = child_process.communicate()   
+                    rtn_code = child_process.returncode                  
             else:
                 #Copy the folder and run pipeline merge
                 copy_tree(onboard_object.folder_path, 'temp_pm')
-                p = subprocess.call('akamai pipeline merge -n -p temp_pm ' + onboard_object.env_name, shell=True, stdout=None, stderr=subprocess.STDOUT)
+                command = ['akamai', 'pipeline', 'merge', '-n', '-p', 'temp_pm']
+                child_process = subprocess.Popen(command, 
+                                    stdout=subprocess.PIPE, 
+                                    stderr=subprocess.STDOUT)
+                stdout,stderr = child_process.communicate()   
+                rtn_code = child_process.returncode               
 
             #if pipeline merge command was not successful, return false
-            if p != 0:
+            if rtn_code != 0:
+                print('\n Merging the template file failed')
                 return False
             
             #process call worked, return true
@@ -457,3 +487,4 @@ class utility(object):
             print(e)
             print('\nERROR: Exception occurred while trying to merge. Check devops-logs.log and/or temp_* folder to see if files were copied or merged correctly')
             return False
+                

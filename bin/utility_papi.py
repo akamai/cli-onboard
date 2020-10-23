@@ -175,8 +175,15 @@ class papiFunctions(object):
         #Step 7: Delete the temporary pipeline directory structure for property manager merge
         if os.path.exists('temp_pm'):
             shutil.rmtree('temp_pm')
-            subprocess.call('rm devops*.log', shell=True, stdout=None, stderr=subprocess.STDOUT)
+            try:
+                os.remove('devops.log')
+            except:
+                pass    
 
+            try:
+                os.remove('devops-logs.log')    
+            except:
+                pass 
 
     def processEdgeHostnameInput(self, session, onboard_object, wrapper_object, utility_object, setup_json_content):
         """
@@ -253,8 +260,16 @@ class papiFunctions(object):
                     #If we didn't get here, leave the temp_cps folder the so user can debug
                     if os.path.exists('temp_cps'):
                         shutil.rmtree('temp_cps')
-                        subprocess.call('rm devops*.log', shell=True, stdout=None, stderr=subprocess.STDOUT)
+                        try:
+                            os.remove('devops.log')
+                        except:
+                            pass    
 
+                        try:
+                            os.remove('devops-logs.log')    
+                        except:
+                            pass 
+            
                     if onboard_object.temp_existing_edge_hostname != "":
                         print('\nNOTE: New edge hostname cannot be created yet from this new certificate.  Please create edge hostname after certificate has been deployed. Associating specified temp_edge_hostname to property for now.')
                         edgehostname_id = 'ehn_' + str(onboard_object.edge_hostname_id)
