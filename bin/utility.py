@@ -327,6 +327,7 @@ class utility(object):
                 else:
                     pass
         else:
+            print(json.dumps(get_products_response.json(), indent=4))
             pass
 
         return products    
