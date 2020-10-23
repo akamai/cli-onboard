@@ -46,13 +46,13 @@ class utility(object):
         """
         Function to execute Linux commands
         """
-        cmdOut = subprocess.Popen(command, 
+        childprocess = subprocess.Popen(command, 
                     stdout=subprocess.PIPE, 
                     stderr=subprocess.STDOUT)
-        stdout,stderr = cmdOut.communicate()    
+        stdout,stderr = childprocess.communicate()    
 
         if 'pipeline' in command:
-            if 'akamai [global flags]' in stdout:
+            if 'akamai [global flags]' in str(stdout):
                 #Check specifically for akamai pipeline
                 print('\nThis program needs akamai CLI module property-manager as a pre-requisite')
                 print('Please install from https://github.com/akamai/cli-property-manager')
