@@ -20,7 +20,9 @@ class wafFunctions(object):
                 activation_status_response = wrapper_object.pollWafActivationStatus(session, onboard_object.contract_id, onboard_object.group_id, onboard_object.onboard_property_id, activation_id)
                 if activation_status_response.status_code == 200:
                     if network in activation_status_response.json()['network']:
-                        if activation_status_response.json()['status'] != 'ACTIVATED':
+                        if 'status' not in activation_status_response.json():
+                            time.sleep(30) 
+                        elif activation_status_response.json()['status'] != 'ACTIVATED':
                             time.sleep(30)
                         elif activation_status_response.json()['status'] == 'ACTIVATED':
                             end_time = round(time.time())
