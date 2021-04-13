@@ -16,7 +16,7 @@ class wafFunctions(object):
             activation_status = False
             activation_id = act_response.json()['activationId']
             while activation_status is False:
-                print('Polling 30s...')
+                print('Polling 30s... (' + str(activation_id) + ')')
                 activation_status_response = wrapper_object.pollWafActivationStatus(session, onboard_object.contract_id, onboard_object.group_id, onboard_object.onboard_property_id, activation_id)
                 if activation_status_response.status_code == 200:
                     if network in activation_status_response.json()['network']:
