@@ -144,7 +144,7 @@ def create(config, file):
 
 
     #Object Instantiaions
-    onboard_object = onboard.onboard(setup_json_content)
+    onboard_object = onboard.onboard(setup_json_content, config)
     wrapper_object = wrapper_api.apiCallsWrapper(base_url, account_switch_key)
 
     #Validate setup file

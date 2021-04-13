@@ -11,10 +11,11 @@ Copyright 2019 Akamai Technologies, Inc. All Rights Reserved.
  See the License for the specific language governing permissions and
  limitations under the License.
 """
+import os
 
 class onboard(object):
     #Initialize the object
-    def __init__(self, setup_json_content):
+    def __init__(self, setup_json_content, config):
         #Read values from setup.json or --file
         #Certain values (onboard_) are updated in main processing later
         try:
@@ -66,6 +67,24 @@ class onboard(object):
             self.activate_property_production = setup_json_content['activate_property_production']
             self.activate_waf_policy_production = setup_json_content['activate_waf_policy_production']
             self.notification_emails = setup_json_content['notification_emails']
+
+            #Read config object that contains the command line parameters
+            if not config.edgerc:
+                if not os.getenv("AKAMAI_EDGERC"):
+                    self.edgerc = os.path.join(os.path.expanduser("~"), '.edgerc')
+                else:
+                    self.edgerc = os.getenv("AKAMAI_EDGERC")
+            else:
+                self.edgerc = config.edgerc
+
+            if not config.section:
+                if not os.getenv("AKAMAI_EDGERC_SECTION"):
+                    self.section = "onboard"
+                else:
+                    self.section = os.getenv("AKAMAI_EDGERC_SECTION")
+            else:
+                self.section = config.section                    
+
         except KeyError as k:
             print('\nInput file is missing ' + str(k))    
             exit(-1)
