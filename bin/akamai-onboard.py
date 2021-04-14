@@ -36,7 +36,7 @@ In case you need quick explanation contact the initiators.
 Initiators: vbhat@akamai.com and aetsai@akamai.com
 """
 
-PACKAGE_VERSION = "1.0.2"
+PACKAGE_VERSION = "1.0.3"
 
 # Setup logging
 #if not os.path.exists('logs'):
@@ -144,7 +144,7 @@ def create(config, file):
 
 
     #Object Instantiaions
-    onboard_object = onboard.onboard(setup_json_content)
+    onboard_object = onboard.onboard(setup_json_content, config)
     wrapper_object = wrapper_api.apiCallsWrapper(base_url, account_switch_key)
 
     #Validate setup file

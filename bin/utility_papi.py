@@ -39,7 +39,7 @@ class papiFunctions(object):
                                     activation_status = False
                                     return activation_status
                 else:
-                    print(json.dumps(act_response.json(), indent=4))
+                    print(json.dumps(activation_status_response.json(), indent=4))
                     print('ERROR: Unable to get activation status')
                     return False
         else:

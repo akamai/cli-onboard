@@ -452,14 +452,14 @@ class utility(object):
 
                 #Run pipeline merge
                 if merge_type == "pm":
-                    command = ['akamai', 'pipeline', 'merge', '-n', '-p', 'temp_pm', 'test']
+                    command = ['akamai', 'pipeline', 'merge', '-n', '-p', 'temp_pm', 'test', '--edgerc', onboard_object.edgerc, '--section', onboard_object.section]
                     child_process = subprocess.Popen(command, 
                                         stdout=subprocess.PIPE, 
                                         stderr=subprocess.STDOUT)
                     stdout,stderr = child_process.communicate()   
                     rtn_code = child_process.returncode               
                 else:
-                    command = ['akamai', 'pipeline', 'merge', '-n', '-p', 'temp_cps', 'test']
+                    command = ['akamai', 'pipeline', 'merge', '-n', '-p', 'temp_cps', 'test', '--edgerc', onboard_object.edgerc, '--section', onboard_object.section]
                     child_process = subprocess.Popen(command, 
                                         stdout=subprocess.PIPE, 
                                         stderr=subprocess.STDOUT)
@@ -468,7 +468,7 @@ class utility(object):
             else:
                 #Copy the folder and run pipeline merge
                 copy_tree(onboard_object.folder_path, 'temp_pm')
-                command = ['akamai', 'pipeline', 'merge', '-n', '-p', 'temp_pm']
+                command = ['akamai', 'pipeline', 'merge', '-n', '-p', 'temp_pm', '--edgerc', onboard_object.edgerc, '--section', onboard_object.section]
                 child_process = subprocess.Popen(command, 
                                     stdout=subprocess.PIPE, 
                                     stderr=subprocess.STDOUT)
