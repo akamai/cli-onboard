@@ -468,7 +468,12 @@ class utility(object):
             else:
                 #Copy the folder and run pipeline merge
                 copy_tree(onboard_object.folder_path, 'temp_pm')
-                command = ['akamai', 'pipeline', 'merge', '-n', '-p', 'temp_pm', '--edgerc', onboard_object.edgerc, '--section', onboard_object.section]
+                with open(os.path.join(onboard_object.folder_path, 'temp_pm', 'projectInfo.json'), 'r+') as f:
+                    content = json.loads(f.read())
+                    content['name'] = 'temp_pm'
+                    f.write(content)
+                command = ['akamai', 'pipeline', 'merge', '-n', '-p', 'temp_pm', onboard_object.env_name,'--edgerc', onboard_object.edgerc, '--section', onboard_object.section]                
+    
                 child_process = subprocess.Popen(command, 
                                     stdout=subprocess.PIPE, 
                                     stderr=subprocess.STDOUT)
