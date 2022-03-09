@@ -468,7 +468,7 @@ class utility(object):
             else:
                 #Copy the folder and run pipeline merge
                 copy_tree(onboard_object.folder_path, 'temp_pm')
-                with open(os.path.join(onboard_object.folder_path, 'temp_pm', 'projectInfo.json'), 'r+') as f:
+                with open(os.path.join('temp_pm', 'projectInfo.json'), 'r+') as f:
                     content = json.loads(f.read())
                     content['name'] = 'temp_pm'
                     f.write(content)
