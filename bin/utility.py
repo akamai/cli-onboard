@@ -468,7 +468,18 @@ class utility(object):
             else:
                 #Copy the folder and run pipeline merge
                 copy_tree(onboard_object.folder_path, 'temp_pm')
-                command = ['akamai', 'pipeline', 'merge', '-n', '-p', 'temp_pm', '--edgerc', onboard_object.edgerc, '--section', onboard_object.section]
+
+                #Read the projectInfo file to update the name of it
+                with open(os.path.join('temp_pm', 'projectInfo.json'), 'r') as f:
+                    content = json.loads(f.read())
+                    content['name'] = 'temp_pm'
+
+                #Write the projectInfo file with updated name
+                with open(os.path.join('temp_pm', 'projectInfo.json'), 'w') as f:
+                    f.write(json.dumps(content, indent=4))
+
+                command = ['akamai', 'pipeline', 'merge', '-n', '-p', 'temp_pm', onboard_object.env_name,'--edgerc', onboard_object.edgerc, '--section', onboard_object.section]                
+    
                 child_process = subprocess.Popen(command, 
                                     stdout=subprocess.PIPE, 
                                     stderr=subprocess.STDOUT)
@@ -478,6 +489,8 @@ class utility(object):
             #if pipeline merge command was not successful, return false
             if rtn_code != 0:
                 print('\n Merging the template file failed')
+                print(stdout)
+                print(stderr)
                 return False
             
             #process call worked, return true
