@@ -422,14 +422,21 @@ class utility(object):
                 with open(os.path.join('temp_' + merge_type,'projectInfo.json'),'w') as projectFile:
                     projectFile.write(json.dumps(projectInfo, indent=4))
 
+                if merge_type == "pm":
+                    templateFile = onboard_object.source_template_file
+                    valuesFile = onboard_object.source_values_file
+                else:
+                    templateFile = onboard_object.ssl_cert_template_file
+                    valuesFile = onboard_object.ssl_cert_template_values
+
                 #Create main.json with contents of templateContent
-                with open(onboard_object.source_template_file,'r') as templateHandler:
+                with open(templateFile,'r') as templateHandler:
                     templateData = json.load(templateHandler)
                 with open(os.path.join('temp_' + merge_type,'templates','main.json'),'w') as mainContentHandler:
                     mainContentHandler.write(json.dumps(templateData, indent=4))
 
                 #create values file for test env from variables
-                with open(onboard_object.source_values_file,'r') as valuesHandler, \
+                with open(valuesFile,'r') as valuesHandler, \
                      open(os.path.join('temp_' + merge_type,'environments','test','variables.json'),'w') as testValuesHandler:
                     value_json = valuesHandler.read()
                     testValuesHandler.write(value_json)
