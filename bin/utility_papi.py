@@ -223,14 +223,10 @@ class papiFunctions(object):
                 #Response will be either the edgeHostnameId of -1 in case of failure
                 return edgehostname_id
             elif onboard_object.create_new_ssl_cert is True:
-                #Create a new certificate
-                certificate = type('', (), {})()
-                certificate.source_template_file = onboard_object.ssl_cert_template_file
-                certificate.source_values_file = onboard_object.ssl_cert_template_values
-                
+                            
                 #Invoke merge
                 print('\nTrying to create ssl cert json from merging files specified in ssl_cert_info')
-                if(utility_object.doCliPipelineMerge(certificate,merge_type="cps")):
+                if(utility_object.doCliPipelineMerge(onboard_object, create_mode=True, merge_type="cps")):
                     print('Successfully merged variables and values from ssl_cert_info')
 
                     #Read the certificate data file, created from merge
