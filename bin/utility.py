@@ -1,13 +1,22 @@
-from shutil import which
-import subprocess
-import json
-from urllib import parse
-import os
-from distutils.dir_util import copy_tree
-import shutil
-import os
+from __future__ import annotations
 
-class utility(object):
+import json
+import os
+import shutil
+import subprocess
+import sys
+from shutil import which
+from urllib import parse
+
+from distutils.dir_util import copy_tree
+from exceptions import setup_logger
+
+logger = setup_logger()
+space = ' '
+len_lmt = 20
+
+
+class utility:
     def __init__(self):
         """
         Function to initialize a common status indicator,
@@ -15,313 +24,301 @@ class utility(object):
         defined in validation modules to indicate validation status.
         This avoid usage of too many IF Conditions.
         """
-        #Initialize the variable to true
+        # Initialize the variable to true
         self.valid = True
 
-    def installedCommandCheck(self, command_name):
+    def installedCommandCheck(self, command_name) -> bool:
         """
         Function to check installation of a command.
         """
         if which(command_name) is None:
-            #This is a failure state, if the command is installed
-            print('\nThis program needs ' + command_name + ' as a pre-requisite')
-            if command_name == 'akamai':
-                print('Please install from https://github.com/akamai/cli')
-            else:
-                #Default print statement
-                print('\n' + command_name + ' is not installed')
-
-            #Common assignment for Failure cases
             self.valid = False
-            exit(-1)
-            return self.valid
-        else:
-            #This is a success state, if the command is installed
-            return self.valid
+            logger.error(f'This program needs {command_name} as a pre-requisite')
+            if command_name == 'akamai':
+                logger.warning('Please install from https://github.com/akamai/cli')
+            else:
+                logger.error(f'{command_name} is not installed')
 
-        #Default Return, ideally code shouldnt come here
         return self.valid
 
-    def executeCommand(self, command):
+    def executeCommand(self, command) -> bool:
         """
         Function to execute Linux commands
         """
-        childprocess = subprocess.Popen(command, 
-                    stdout=subprocess.PIPE, 
+        childprocess = subprocess.Popen(command,
+                    stdout=subprocess.PIPE,
                     stderr=subprocess.STDOUT)
-        stdout,stderr = childprocess.communicate()    
-
-        if 'pipeline' in command:
-            if 'akamai [global flags]' in str(stdout):
-                #Check specifically for akamai pipeline
-                print('\nThis program needs akamai CLI module property-manager as a pre-requisite')
-                print('Please install from https://github.com/akamai/cli-property-manager')
-
-                #Common assignment for Failure cases
-                self.valid = False
-                exit(-1)
-                return self.valid
-            else:
-                return self.valid                                       
-
-        #Default Return, ideally code shouldnt come here
-        return self.valid   
-
+        stdout, stderr = childprocess.communicate()
+        if 'pipeline' in command and 'akamai [global flags]' in str(stdout):
+            self.valid = False
+            logger.error('This program needs akamai CLI module property-manager as a pre-requisite')
+            logger.warning('Please install from https://github.com/akamai/cli-property-manager')
+            logger.warning('or run >> akamai install property-manager')
+            return self.valid
+        return self.valid
 
     def checkPermissions(self, session, apicalls_wrapper_object):
         """
         Function to check credentials permissions required
         """
-        #This function is not used. Helpful in future if we want to check permissions of credential
+        # This function is not used. Helpful in future if we want to check permissions of credential
         credential_details_response = apicalls_wrapper_object.checkAuthorization(session)
         print(json.dumps(credential_details_response.json(), indent=4))
         if credential_details_response.status_code == 200:
-        	for scope in credential_details_response.json()['scope'].split(" "):
-        		o = parse.urlparse(scope)
-        		apis = o.path.split("/")
-        		print('{0:35} {1:10}'.format(apis[3], apis[5]))
+            for scope in credential_details_response.json()['scope'].split(' '):
+                o = parse.urlparse(scope)
+                apis = o.path.split('/')
+                print(f'{apis[3]:35} {apis[5]:10}')
         else:
             pass
-        #Default Return, ideally code shouldnt come here
+        # Default Return, ideally code shouldnt come here
         return self.valid
 
-    def validateSetupSteps(self, session, onboard_object, wrapper_object):
+    def validateSetupSteps(self, onboard_object, wrapper_object, cli_mode='create') -> bool:
         """
         Function to validate the input values of setup.json
         """
-        if onboard_object.secure_network != 'ENHANCED_TLS' and onboard_object.secure_network != 'STANDARD_TLS':
-            print('ERROR: secure_network must be either ENHANCED_TLS or STANDARD_TLS')
-            self.valid = False
-            return False
-        
-        if onboard_object.use_file is True and onboard_object.use_folder is True:
-            print('ERROR: Both use_file and use_folder cannot be set to true')
-            self.valid = False
-            return False
+        count = 0
+        print()
+        logger.warning('Validating setup file information')
 
-        if onboard_object.use_file is not True and onboard_object.use_folder is not True:
-            print('ERROR: Either use_file or use_folder must be set to true')
-            self.valid = False
-            return False
-
-        if onboard_object.create_new_cpcode is True:
-            if onboard_object.new_cpcode_name == "":
-                print('ERROR: If create_new_cpcode is true, new_cpcode_name must be specified')
-                self.valid = False
-
-        if onboard_object.use_file is True:
-            if onboard_object.source_template_file == "":
-                print('ERROR: If use_file is true, source_template_file must be specified')
-                self.valid = False
-            if onboard_object.source_values_file == "":
-                print('ERROR: If use_file is true, source_values_file must be specified')
-                self.valid = False
-
-
-        if onboard_object.use_folder is True:
-            if onboard_object.folder_path == "":
-                print('ERROR: If use_folder is true, folder_path must be specified')
-                self.valid = False
-            if onboard_object.env_name == "":
-                print('ERROR: If use_folder is true, env_name must be specified')
-                self.valid = False
-
-
-        if onboard_object.activate_property_production is True:
-            if onboard_object.activate_property_staging is not True:
-                print('ERROR: Must activate property to STAGING before activating to PRODUCTION')
-                self.valid = False
-            else:
-                pass
-
-
-        if onboard_object.add_selected_host is True:
-            if onboard_object.activate_property_staging is not True:
-                print('ERROR: If adding WAF selected hosts, property must be activated to STAGING')
-                self.valid = False
-            else:
-                pass
-
-        if onboard_object.update_match_target is True:
-            if onboard_object.activate_property_staging is not True:
-                print('ERROR: If adding WAF match target, property must be activated to STAGING')
-                self.valid = False
-            else:
-                pass
-
-        if onboard_object.update_match_target is True:
-            if onboard_object.add_selected_host is not True:
-                print('ERROR: If adding WAF match target, must be added to WAF selected hosts')
-                self.valid = False
-            else:
-                pass
-
-        if onboard_object.activate_waf_policy_staging is True:
-            if onboard_object.add_selected_host is not True:
-                print('ERROR: If activating WAF policy to STAGING, must at least add WAF selected hosts')
-                self.valid = False
-            else:
-                pass
-
-        if onboard_object.activate_waf_policy_production is True:
-            if onboard_object.activate_waf_policy_staging is not True:
-                print('ERROR: Must activate WAF policy to STAGING before activating to PRODUCTION.')
-                self.valid = False
-            else:
-                pass
-
-        #Check if product_id is valid for contract
-        print('Checking if valid product_id: ' + onboard_object.product_id)
-        product_detail = self.validateProductId(session, wrapper_object, onboard_object.contract_id, onboard_object.product_id)
-        if product_detail['Found'] is True:
-            print('Confirmed valid product_id')
+        # check if property name exists
+        if wrapper_object.property_exists(onboard_object.property_name):
+            logger.error(f'{onboard_object.property_name:<30}{space:>20}invalid property name; already in use')
+            count += 1
         else:
-            print('ERROR: Invalid product_id for contract: ' + onboard_object.contract_id)
-            print('ERROR: Please select from valid product_ids for this contract: ' + str(product_detail['products']))
-            self.valid = False
+            logger.info(f'{onboard_object.property_name:<30}{space:>20}valid property name')
 
+        # use file or folder but not both
+        if onboard_object.use_file and onboard_object.use_folder:
+            logger.error('Both use_file and use_folder cannot be set to true')
+            count += 1
 
-        if onboard_object.edge_hostname_mode == 'use_existing_edgehostname':
-            if self.valid:
-                print('\nedge_hostname_mode = use_existing_edgehostname\n')
-            if onboard_object.edge_hostname == "":
-                    print('ERROR: If use_existing_edgehostname, edge_hostname is mandatory')
-                    self.valid = False
+        if not onboard_object.use_file and not onboard_object.use_folder:
+            logger.error('Either use_file or use_folder must be set to true')
+            count += 1
+
+        # if create_new_cpcode, must specify a name
+        if onboard_object.create_new_cpcode:
+            if onboard_object.new_cpcode_name == '':
+                logger.error('If create_new_cpcode is true, new_cpcode_name must be specified')
+                count += 1
+
+        # if use_file, template file and variable file must exist
+        if onboard_object.use_file:
+            if onboard_object.source_template_file == '':
+                logger.error('If use_file is true, source_template_file must be specified')
+                count += 1
+
+            if onboard_object.source_values_file == '':
+                logger.error('If use_file is true, source_values_file must be specified')
+                count += 1
+
+        # if use_folder, folder path and env_name must be specified
+        if onboard_object.use_folder:
+            if onboard_object.folder_path == '':
+                logger.error('If use_folder is true, folder_path must be specified')
+                count += 1
+
+            if onboard_object.env_name == '':
+                logger.error('If use_folder is true, env_name must be specified')
+                count += 1
+
+        # if activating pm to prod, must active to staging first
+        if onboard_object.activate_property_production:
+            if onboard_object.activate_property_staging is not True:
+                logger.error('Must activate property to STAGING before activating to PRODUCTION')
+                count += 1
+
+        # must activate waf config to staging before activating waf to prodution
+        if onboard_object.activate_waf_policy_production:
+            if not onboard_object.activate_waf_policy_staging:
+                logger.error('Must activate WAF policy to STAGING before activating to PRODUCTION.')
+                count += 1
+
+        # validate product id available per contract
+        product_detail = self.validateProductId(wrapper_object,
+                                                onboard_object.contract_id,
+                                                onboard_object.product_id)
+        if product_detail['Found']:
+            logger.info(f'{onboard_object.product_id:<30}{space:>20}valid product_id')
+            logger.info(f'{onboard_object.group_id:<30}{space:>20}valid group_id')
+            logger.info(f'{onboard_object.contract_id:<30}{space:>20}valid contract_id')
+        else:
+            logger.error(f'{onboard_object.product_id:<30}{space:>20}invalid product_id')
+            logger.error(f'Available valid product_id for contract {onboard_object.contract_id}')
+            count += 1
+            products_list = sorted(product_detail['products'])
+            for p in products_list:
+                logger.error(p)
+
+        # network must be either STANDARD_TLS or ENHANCED_TLS
+        if onboard_object.secure_network not in ['STANDARD_TLS', 'ENHANCED_TLS']:
+            logger.error(f'{onboard_object.secure_network}{space:>20}invalid secure_network')
+            count += 1
+
+        # must be one of three valid modes
+        valid_modes = ['use_existing_edgehostname', 'new_standard_tls_edgehostname', 'new_enhanced_tls_edgehostname']
+        logger.info(f'{onboard_object.edge_hostname_mode:<30}{space:>20}edge hostname mode')
+        if onboard_object.edge_hostname_mode not in valid_modes:
+            logger.error(f'{onboard_object.edge_hostname_mode:<30}{space:>20}invalid edge_hostname_mode')
+            count += 1
+            logger.info('valid options: use_existing_edgehostname, new_standard_tls_edgehostname, new_enhanced_tls_edgehostname')
+        elif onboard_object.edge_hostname_mode == 'use_existing_edgehostname':
+            ehn_id = 0
+            if onboard_object.edge_hostname is None:
+                logger.error(f'edge_hostname{space:>20}missing')
+                count += 1
             else:
-                if onboard_object.secure_network == 'ENHANCED_TLS':
-                    if not str(onboard_object.edge_hostname).endswith('edgekey.net'):
-                        print('ERROR: If secure_network is ENHANCED_TLS, existing edge_hostname must end with edgekey.net')
-                        self.valid = False
-                        return False
-                elif onboard_object.secure_network == 'STANDARD_TLS':    
-                    if not str(onboard_object.edge_hostname).endswith('edgesuite.net'):
-                        print('ERROR: If secure_network is STANDARD_TLS, existing edge_hostname must end with edgesuite.net')
-                        self.valid = False
-                        return False
-
-            #Validate edgehostname and validate the necessary
-            if self.valid:
-                #Check the validity of edgehostname
-                print('Checking if valid edge_hostname: ' + str(onboard_object.edge_hostname))
-                ehn_id = self.validateEdgeHostnameExists(session, wrapper_object, str(onboard_object.edge_hostname))
-                if ehn_id > 0:
-                    print('Confirmed valid edge_hostname: ehn_' + str(ehn_id))
+                try:
+                    # check to see if specified edge hostname exists
+                    ehn_id = self.validateEdgeHostnameExists(wrapper_object, str(onboard_object.edge_hostname))
+                    public_hostname_str = ', '.join(onboard_object.public_hostnames)
+                    logger.info(f'ehn_{ehn_id:<26}{space:>20}valid edge_hostname_id')
+                    logger.info(f'{onboard_object.edge_hostname:<30}{space:>20}valid edge hostname')
+                    logger.info(f'{public_hostname_str:<30}{space:>20}valid public hostname')
                     onboard_object.edge_hostname_id = ehn_id
-                else:
-                    print('ERROR: edge_hostname is not found')
-                    self.valid = False
+                except:
+                    logger.error(f'{onboard_object.edge_hostname:<30}{space:>20}invalid edge hostname')
+                    count += 1
 
-        if onboard_object.edge_hostname_mode == 'new_standard_tls_edgehostname':
-            print('\nedge_hostname_mode = new_standard_tls_edgehostname\n')
-            if onboard_object.secure_network != 'STANDARD_TLS':    
-                print('ERROR: For new_standard_tls_edgehostname, secure_network must be STANDARD_TLS')
-                self.valid = False
-                return False                    
+        elif onboard_object.edge_hostname_mode == 'new_standard_tls_edgehostname':
+            if onboard_object.secure_network != 'STANDARD_TLS':
+                logger.error('For new_standard_tls_edgehostname, secure_network must be STANDARD_TLS')
+                count += 1
+        elif onboard_object.edge_hostname_mode == 'new_enhanced_tls_edgehostname':
+            if onboard_object.secure_network != 'ENHANCED_TLS':
+                logger.error('For new_enhanced_tls_edgehostname, secure_network must be ENHANCED_TLS')
+                count += 1
 
-        if onboard_object.edge_hostname_mode == 'new_enhanced_tls_edgehostname':
-            print('\nedge_hostname_mode = new_enhanced_tls_edgehostname\n')
-            if onboard_object.secure_network != 'ENHANCED_TLS':    
-                print('ERROR: For new_enhanced_tls_edgehostname, secure_network must be ENHANCED_TLS')
-                self.valid = False
-                return False                    
-            
             if onboard_object.use_existing_enrollment_id is True:
                 if onboard_object.create_new_ssl_cert is True:
-                    print('ERROR: Both use_existing_enrollment_id and create_new_ssl_cert cannot be set to true')
-                    self.valid = False
-                if onboard_object.existing_enrollment_id == "":
-                    print('ERROR: If use_existing_enrollment_id is true, existing_enrollment_id is mandatory')
-                    self.valid = False
-                if onboard_object.existing_slot_number == "":
-                    print('ERROR: If use_existing_enrollment_id is true, existing_slot_number is mandatory')
-                    self.valid = False
-            elif onboard_object.create_new_ssl_cert is True:
-                if onboard_object.temp_existing_edge_hostname == "":
-                    print('ERROR: If create_new_ssl_cert is true, temp_existing_edge_hostname must be specified')
-                    self.valid = False
-                else:
-                    if onboard_object.secure_network == 'ENHANCED_TLS':
-                        if not str(onboard_object.temp_existing_edge_hostname).endswith('edgekey.net'):
-                            print('ERROR: If secure_network is ENHANCED_TLS, temp_existing_edge_hostname must end with edgekey.net')
-                            self.valid = False
-                            return False
-                if onboard_object.ssl_cert_template_file is None or onboard_object.ssl_cert_template_values is None:
-                    print('ERROR: If create_new_ssl_cert is true, ssl_cert_template_file and ssl_cert_template_values must be specified')
-                    self.valid = False
-                if self.validateFile(onboard_object.ssl_cert_template_file):
-                    if self.validateFile(onboard_object.ssl_cert_template_values):
-                        pass
-                    else:
-                        #File does not exist
-                        print('ERROR: ' + onboard_object.ssl_cert_template_values + ' does not exist')
-                        self.valid = False
-                else:
-                    #File does not exist
-                    print('ERROR: ' + onboard_object.ssl_cert_template_file + ' does not exist')
-                    self.valid = False
-
-                #Validate the temp_existing_edge_hostname
-                if self.valid:
-                    print('Checking if valid temp_existing_edge_hostname: ' + str(onboard_object.temp_existing_edge_hostname))
-                    ehn_id = self.validateEdgeHostnameExists(session, wrapper_object, str(onboard_object.temp_existing_edge_hostname))
-                    if ehn_id > 0:
-                        print('Confirmed valid temp_existing_edge_hostname: ehn_' + str(ehn_id))
-                        onboard_object.edge_hostname_id = ehn_id
-                    else:
-                        print('ERROR: temp_existing_edge_hostname is not found')
-                        self.valid = False
-
-
-        if onboard_object.use_file is True:
-            if self.validateFile(onboard_object.source_template_file):
-                if self.validateFile(onboard_object.source_values_file):
-                    pass
-                else:
-                    #File does not exist
-                    print('ERROR: ' + onboard_object.source_values_file + ' does not exist')
-                    self.valid = False
+                    logger.error('Both use_existing_enrollment_id and create_new_ssl_cert cannot be set to true')
+                    count += 1
+                if onboard_object.existing_enrollment_id == 0:
+                    logger.error(f"{'existing_enrollment_id':<30}{space:>20}missing")
+                    count += 1
             else:
-                #File does not exist
-                print('ERROR: ' + onboard_object.source_template_file + ' does not exist')
-                self.valid = False
-        
-        #If supposed to something with WAF, can we find waf_config_id for the specifed name
-        if onboard_object.add_selected_host is True:
-            print('\nChecking if valid waf_config_name: ' + onboard_object.waf_config_name)
-            config_detail = self.getWafConfigIdByName(session, wrapper_object,onboard_object.waf_config_name)
-            if config_detail['Found'] is True:
-                onboard_object.onboard_waf_config_id = config_detail['details']['id']
-                print('Found valid waf_config_id: ' + str(onboard_object.onboard_waf_config_id))
+                logger.error('If new_enhanced_tls_edgehostname, use_existing_enrollment_id must be true')
+                count += 1
 
-                onboard_object.onboard_waf_prev_version = config_detail['details']['latestVersion']
+            if onboard_object.create_new_ssl_cert is True:
+                logger.error('Unable to create_new_ssl_cert enrollment, please use existing_enrollment_id instead')
+                count += 1
+
+        # validate source and variable file is use_file mode (create only)
+        if onboard_object.use_file:
+            if self.validateFile('source_template_file', onboard_object.source_template_file):
+                if self.validateFile('source_values_file', onboard_object.source_values_file) is False:
+                    count += 1
             else:
-                print('ERROR: Unable to find valid waf configuration for waf_config_name: ' + onboard_object.waf_config_name)
-                self.valid = False
+                count += 1
 
-        #Default Return, only use this return as every settings needs to be checked
+        # If supposed to something with WAF, can we find waf_config_id for the specifed name
+        if cli_mode == 'create':
+            if not onboard_object.add_selected_host:
+                if onboard_object.update_match_target:
+                    logger.error('If update_match_target, add_selected_host must be true')
+                    count += 1
+                if onboard_object.activate_waf_policy_staging:
+                    logger.error('If activating WAF to STAGING, add_selected_host must be true')
+                    count += 1
+            else:
+                if not onboard_object.activate_property_staging:
+                    logger.error('If adding WAF selected hosts, property must be activated to STAGING')
+                    count += 1
+
+                if not onboard_object.activate_waf_policy_staging:
+                    logger.error('If adding WAF selected hosts, property must be activated to STAGING')
+                    count += 1
+
+                if onboard_object.update_match_target and onboard_object.activate_waf_policy_staging:
+                    config_detail = self.getWafConfigIdByName(wrapper_object, onboard_object.waf_config_name)
+                    if config_detail['Found']:
+                        onboard_object.onboard_waf_config_id = config_detail['details']['id']
+                        onboard_object.onboard_waf_prev_version = config_detail['details']['latestVersion']
+                        logger.debug(f'{onboard_object.onboard_waf_config_id} {onboard_object.onboard_waf_config_version}')
+                        logger.info(f'{onboard_object.waf_config_name:<30}{space:>20}valid waf_config_name')
+                        logger.info(f'{onboard_object.onboard_waf_config_id:<30}{space:>20}found existing onboard_waf_config_id')
+                        logger.info(f'{onboard_object.onboard_waf_prev_version:<30}{space:>20}found latest onboard_waf_prev_version')
+                    else:
+                        count += 1
+                        logger.error(f'{onboard_object.waf_config_name:<30}{space:>20}invalid waf_config_name, not found')
+
+                    if onboard_object.onboard_waf_config_id is not None:
+                        logger.debug(f'{onboard_object.onboard_waf_config_id} {onboard_object.onboard_waf_prev_version}')
+                        _, policies = wrapper_object.get_waf_policy(onboard_object)
+                        _, target_ids = wrapper_object.list_match_targets(onboard_object.onboard_waf_config_id,
+                                                                          onboard_object.onboard_waf_prev_version,
+                                                                          policies)
+                        if onboard_object.waf_match_target_id in target_ids:
+                            for k in policies:
+                                if onboard_object.waf_match_target_id in policies[k]:
+                                    logger.info(f'{policies[k][0]:<30}{space:>20}found existing policy')
+                                    logger.info(f'{onboard_object.waf_match_target_id:<30}{space:>20}found waf_match_target_id')
+                        else:
+                            logger.error(f'{onboard_object.waf_match_target_id:<30}{space:>20}invalid waf_match_target_id')
+                            count += 1
+                            # we will not auto correct waf_match_target_id
+                            # onboard_object.waf_match_target_id = correct_target_id
+                            # logger.info(f'{onboard_object.waf_match_target_id:<30}{space:>20}auto correct waf_match_target_id')
+
+        elif cli_mode == 'single_host':
+            if onboard_object.edge_hostname and onboard_object.existing_enrollment_id > 0:
+                logger.error('Only "use_existing_edge_hostname" or "create_from_existing_enrollment_id" can be used, not both')
+                count += 1
+            if onboard_object.use_existing_enrollment_id:
+                onboard_object.edge_hostname = onboard_object.public_hostnames[0]
+
+            if onboard_object.create_new_security_config:
+                config_detail = self.getWafConfigIdByName(wrapper_object, onboard_object.waf_config_name)
+                if config_detail['Found']:
+                    count += 1
+                    onboard_object.onboard_waf_config_id = config_detail['details']['id']
+                    onboard_object.onboard_waf_prev_version = config_detail['details']['latestVersion']
+                    logger.error(f'{onboard_object.waf_config_name:<30}{space:>20}duplicate waf_config_name already exists')
+                    logger.info(f'{onboard_object.onboard_waf_config_id:<30}{space:>20}found existing onboard_waf_config_id')
+                    logger.info(f'{onboard_object.onboard_waf_prev_version:<30}{space:>20}found latest onboard_waf_prev_version')
+                else:
+                    # valid means this waf name doesn't exists
+                    logger.info(f'{onboard_object.waf_config_name:<30}{space:>20}new waf_config_name')
+
+        else:
+            pass
+
+        if count == 0:
+            self.valid is True
+            print()
+            logger.warning('Onboarding Delivery Config')
+        else:
+            sys.exit(logger.error('Please review all errors'))
+
         return self.valid
 
-    #Validate file
-    def validateFile(self, file_location):
-        if os.path.isfile(file_location):
+    # Validate file
+    def validateFile(self, source: str, file_location: str) -> bool:
+        # logger.debug(f'{file_location} {type(file_location)} {os.path.exists(file_location)}')
+        # logger.debug(f'{file_location} {type(file_location)} {os.path.isfile(file_location)}')
+        # logger.debug(os.path.abspath(file_location))
+        if os.path.isfile(os.path.abspath(file_location)):
             return True
         else:
+            logger.error(f'{source} {file_location}...........missing')
             return False
 
-    def validateProductId(self, session, wrapper_object, contract_id, product_id):
+    def validateProductId(self, wrapper_object, contract_id, product_id) -> dict:
         """
         Function to validate product ids for a contract
         """
-        
         products = dict()
         products['Found'] = False
         products['products'] = []
-        get_products_response = wrapper_object.getProductsByContract(session, contract_id)
+        get_products_response = wrapper_object.getProductsByContract(contract_id)
         if get_products_response.status_code == 200:
             items = get_products_response.json()['products']['items']
             for each_item in items:
                 if 'productId' in each_item:
-                    if each_item['productId'].lower() == product_id.lower():
+                    if each_item['productId'] == product_id:
                         products['Found'] = True
                     products['products'].append(each_item['productId'])
                 else:
@@ -330,42 +327,39 @@ class utility(object):
             print(json.dumps(get_products_response.json(), indent=4))
             pass
 
-        return products    
+        return products
 
-    def validateEdgeHostnameExists(self, session, wrapper_object, edge_hostname):
+    def validateEdgeHostnameExists(self, wrapper_object, edge_hostname) -> bool:
         """
         Function to validate edge hostname
         """
-
         ehn_id = 0
-        edgehostname_response = wrapper_object.checkEdgeHostname(session, edge_hostname)
+        edgehostname_response = wrapper_object.checkEdgeHostname(edge_hostname)
         record_name = edge_hostname
         if str(edge_hostname).endswith('edgekey.net'):
             record_name = str(edge_hostname).split('.edgekey.net')[0]
         elif str(edge_hostname).endswith('edgesuite.net'):
-            record_name = str(edge_hostname).split('.edgesuite.net')[0]  
-
+            record_name = str(edge_hostname).split('.edgesuite.net')[0]
         if edgehostname_response.status_code == 200:
             ehns = edgehostname_response.json()['edgeHostnames']
             for every_ehn in ehns:
                 if every_ehn['recordName'] == record_name:
                     ehn_id = every_ehn['edgeHostnameId']
+                    logger.debug(f'{ehn_id:<30}{space:>20}found edgeHostnameId')
                     return ehn_id
                 else:
-                    pass    
+                    pass
         else:
-            print(json.dumps(edgehostname_response.json(), indent=4))
             return 0
+        return ehn_id
 
-        return ehn_id 
-
-    def getWafConfigIdByName(self, session, wrapper_object, config_name):
+    def getWafConfigIdByName(self, wrapper_object, config_name) -> dict:
         """
         Function to get WAF config ID and version
         """
         config_detail = dict()
         config_detail['Found'] = False
-        waf_configs_response = wrapper_object.getWafConfigurations(session)
+        waf_configs_response = wrapper_object.getWafConfigurations()
         if waf_configs_response.status_code == 200:
             configurations = waf_configs_response.json()['configurations']
             for each_config in configurations:
@@ -373,138 +367,148 @@ class utility(object):
                     if each_config['name'] == config_name:
                         config_detail['Found'] = True
                         config_detail['details'] = each_config
-                    else:
-                        pass
-                else:
-                    pass
-        else:
-            pass
-
         return config_detail
 
-    def doCliPipelineMerge(self, onboard_object, create_mode=True, merge_type="pm"):
+    def doCliPipelineMerge(self, config, onboard_object, create_mode=True, merge_type='pm') -> bool:
         """
         Function to use Akamai property-manager CLI and merge template
         """
-        #For PM merge, it will use temp_pm folder
-        #For CPS merge, it will use temp_cps folder
-        #Delete these folders if they exist to start
-
-        FILE = open('command_output', 'w')   
+        # For PM merge, it will use temp_pm folder
+        # For CPS merge, it will use temp_cps folder
+        # Delete these folders if they exist to start
 
         if os.path.exists('temp_pm'):
             shutil.rmtree('temp_pm')
         if os.path.exists('temp_cps'):
             shutil.rmtree('temp_cps')
         try:
-            os.remove('devops.log')    
+            os.remove('devops.log')
         except:
-            pass  
+            pass
 
         try:
-            os.remove('devops-logs.log')    
+            os.remove('devops-logs.log')
         except:
-            pass 
-
+            pass
 
         try:
             if create_mode:
-                #Build projectInfo contents
-                projectInfo = dict(environments = ['test'], name = 'temp_' + merge_type)
+                # Build projectInfo contents
+                projectInfo = dict(environments=['test'], name=f'temp_{merge_type}')
 
-                #Create pipeline specific folders are files
-                if not os.path.exists(os.path.join('temp_' + merge_type,'dist')):
-                    os.makedirs(os.path.join('temp_' + merge_type,'dist'))
-                if not os.path.exists(os.path.join('temp_' + merge_type,'environments','test')):
-                    os.makedirs(os.path.join('temp_' + merge_type,'environments','test'))
-                if not os.path.exists(os.path.join('temp_' + merge_type,'templates')):
-                    os.makedirs(os.path.join('temp_' + merge_type,'templates'))
-                with open(os.path.join('temp_' + merge_type,'projectInfo.json'),'w') as projectFile:
+                # Create pipeline specific folders are files
+                if not os.path.exists(os.path.join(f'temp_{merge_type}', 'dist')):
+                    os.makedirs(os.path.join(f'temp_{merge_type}', 'dist'))
+                if not os.path.exists(os.path.join(f'temp_{merge_type}', 'environments', 'test')):
+                    os.makedirs(os.path.join(f'temp_{merge_type}', 'environments', 'test'))
+                if not os.path.exists(os.path.join(f'temp_{merge_type}', 'templates')):
+                    os.makedirs(os.path.join(f'temp_{merge_type}', 'templates'))
+
+                with open(os.path.join(f'temp_{merge_type}', 'projectInfo.json'), 'w') as projectFile:
                     projectFile.write(json.dumps(projectInfo, indent=4))
 
-                if merge_type == "pm":
+                if merge_type == 'pm':
                     templateFile = onboard_object.source_template_file
                     valuesFile = onboard_object.source_values_file
                 else:
                     templateFile = onboard_object.ssl_cert_template_file
                     valuesFile = onboard_object.ssl_cert_template_values
 
-                #Create main.json with contents of templateContent
-                with open(templateFile,'r') as templateHandler:
+                # Create main.json with contents of templateContent
+                with open(templateFile) as templateHandler:
                     templateData = json.load(templateHandler)
-                with open(os.path.join('temp_' + merge_type,'templates','main.json'),'w') as mainContentHandler:
+                with open(os.path.join(f'temp_{merge_type}',
+                                        'templates', 'main.json'), 'w') as mainContentHandler:
                     mainContentHandler.write(json.dumps(templateData, indent=4))
 
-                #create values file for test env from variables
-                with open(valuesFile,'r') as valuesHandler, \
-                     open(os.path.join('temp_' + merge_type,'environments','test','variables.json'),'w') as testValuesHandler:
+                # Create values file for test env from variables
+                with open(valuesFile) as valuesHandler, \
+                     open(os.path.join(f'temp_{merge_type}',
+                                        'environments', 'test', 'variables.json'),
+                                        'w') as testValuesHandler:
                     value_json = valuesHandler.read()
                     testValuesHandler.write(value_json)
 
-                #prepare the variable definitions file contents
+                # Prepare the variable definitions file contents
                 varDefinitions = {}
                 varDefinitions['definitions'] = {}
                 for eachKey in json.loads(value_json).keys():
                     varDefinitions['definitions'][eachKey] = {}
-                    varDefinitions['definitions'][eachKey]['default'] = ""
-                    varDefinitions['definitions'][eachKey]['type'] = "userVariableValue"
+                    varDefinitions['definitions'][eachKey]['default'] = ''
+                    varDefinitions['definitions'][eachKey]['type'] = 'userVariableValue'
 
-                with open(os.path.join('temp_' + merge_type,'environments','variableDefinitions.json'),'w') as definitionHandler:
+                with open(os.path.join(f'temp_{merge_type}',
+                                        'environments', 'variableDefinitions.json'),
+                                        'w') as definitionHandler:
                     definitionHandler.write(json.dumps(varDefinitions, indent=4))
 
-                #Create envInfo.json else it will error out
-                testEnvInfo = dict(name = "test")
-                with open(os.path.join('temp_' + merge_type,'environments','test','envInfo.json'),'w') as testValuesHandler:
+                # Create envInfo.json else it will error out
+                testEnvInfo = dict(name='test')
+                with open(os.path.join(f'temp_{merge_type}',
+                                       'environments', 'test', 'envInfo.json'),
+                                       'w') as testValuesHandler:
                     testValuesHandler.write(json.dumps(testEnvInfo, indent=4))
 
-                #Run pipeline merge
-                if merge_type == "pm":
-                    command = ['akamai', 'pipeline', 'merge', '-n', '-p', 'temp_pm', 'test', '--edgerc', onboard_object.edgerc, '--section', onboard_object.section]
-                    child_process = subprocess.Popen(command, 
-                                        stdout=subprocess.PIPE, 
+                # Run pipeline merge
+                if merge_type == 'pm':
+                    command = ['akamai', 'pipeline', 'merge',
+                               '-n', '-p', 'temp_pm', 'test', '--edgerc',
+                               config.edgerc, '--section', config.section]
+                    command_str = ' '.join(command)
+                    logger.debug(f'Success command: {command_str}')
+                    child_process = subprocess.Popen(command,
+                                        stdout=subprocess.PIPE,
                                         stderr=subprocess.STDOUT)
-                    stdout,stderr = child_process.communicate()   
-                    rtn_code = child_process.returncode               
+                    stdout, stderr = child_process.communicate()
+                    rtn_code = child_process.returncode
                 else:
-                    command = ['akamai', 'pipeline', 'merge', '-n', '-p', 'temp_cps', 'test', '--edgerc', onboard_object.edgerc, '--section', onboard_object.section]
-                    child_process = subprocess.Popen(command, 
-                                        stdout=subprocess.PIPE, 
+                    command = ['akamai', 'pipeline', 'merge',
+                               '-n', '-p', 'temp_cps', 'test', '--edgerc',
+                               config.edgerc, '--section', config.section]
+                    command_str = ' '.join(command)
+                    logger.debug(f'Success command: {command_str}')
+                    child_process = subprocess.Popen(command,
+                                        stdout=subprocess.PIPE,
                                         stderr=subprocess.STDOUT)
-                    stdout,stderr = child_process.communicate()   
-                    rtn_code = child_process.returncode                  
+                    stdout, stderr = child_process.communicate()
+                    rtn_code = child_process.returncode
             else:
-                #Copy the folder and run pipeline merge
+                # Copy the folder and run pipeline merge
                 copy_tree(onboard_object.folder_path, 'temp_pm')
 
-                #Read the projectInfo file to update the name of it
-                with open(os.path.join('temp_pm', 'projectInfo.json'), 'r') as f:
+                # Read the projectInfo file to update the name of it
+                with open(os.path.join('temp_pm', 'projectInfo.json')) as f:
                     content = json.loads(f.read())
                     content['name'] = 'temp_pm'
 
-                #Write the projectInfo file with updated name
+                # Write the projectInfo file with updated name
                 with open(os.path.join('temp_pm', 'projectInfo.json'), 'w') as f:
                     f.write(json.dumps(content, indent=4))
 
-                command = ['akamai', 'pipeline', 'merge', '-n', '-p', 'temp_pm', onboard_object.env_name,'--edgerc', onboard_object.edgerc, '--section', onboard_object.section]                
-    
-                child_process = subprocess.Popen(command, 
-                                    stdout=subprocess.PIPE, 
+                command = ['akamai', 'pipeline', 'merge', '-n', '-p', 'temp_pm',
+                           onboard_object.env_name, '--edgerc', config.edgerc,
+                           '--section', config.section]
+                command_str = ' '.join(command)
+                logger.debug(f'Success command: {command_str}')
+                child_process = subprocess.Popen(command,
+                                    stdout=subprocess.PIPE,
                                     stderr=subprocess.STDOUT)
-                stdout,stderr = child_process.communicate()   
-                rtn_code = child_process.returncode               
+                stdout, stderr = child_process.communicate()
+                rtn_code = child_process.returncode
 
-            #if pipeline merge command was not successful, return false
+            # If pipeline merge command was not successful, return false
             if rtn_code != 0:
-                print('\n Merging the template file failed')
-                print(stdout)
-                print(stderr)
+                logger.error('Merging the template file failed')
+                logger.info(stdout)
+                logger.error(stderr)
                 return False
-            
-            #process call worked, return true
+
+            # Process call worked, return true
             return True
 
         except Exception as e:
-            print(e)
-            print('\nERROR: Exception occurred while trying to merge. Check devops-logs.log and/or temp_* folder to see if files were copied or merged correctly')
+            logger.error(e)
+            logger.error('Exception occurred while trying to merge. '
+                  'Check devops-logs.log and/or temp_* folder '
+                  'to see if files were copied or merged correctly')
             return False
-                

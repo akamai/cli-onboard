@@ -1,0 +1,34 @@
+{
+  "version": 1,
+  "disable_existing_loggers": false,
+  "formatters": {
+    "short": {
+      "format": "%(levelname)s: %(message)s"
+    },
+    "long": {
+      "format": "%(asctime)s %(process)d %(filename)-17s %(lineno)-3d %(levelname)s: %(message)s",
+      "datefmt": "%Y-%m-%y %H:%M:%S"
+    }
+  },
+  "handlers": {
+    "console": {
+      "class": "logging.StreamHandler",
+      "level": "INFO",
+      "formatter": "short"
+    },
+    "file_handler": {
+      "class": "logging.FileHandler",
+      "level": "INFO",
+      "filename": "logs/onboard.log",
+      "formatter": "long",
+      "delay": true,
+      "mode": "w"
+    }
+  },
+  "root": {
+    "handlers": [
+      "console",
+      "file_handler"
+    ]
+  }
+}

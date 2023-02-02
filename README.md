@@ -40,13 +40,13 @@ client_token = [CLIENT_TOKEN_HERE]
 
 
 ```bash
-akamai onboard create --file /templates/sample_setup.json
+akamai onboard create --file /templates/sample_setup_files/setup.json
 akamai onboard create --file ~/path/to/setup.json
 ```
 
 ### Setup JSON File Documentation
 
-See templates/sample_setup.json file for an initial empty setup file.  Details below
+See templates/sample_setup_files/setup.json file for an initial empty setup file.  Details below
 ```bash
 {
     "property_info": {
@@ -84,8 +84,7 @@ See templates/sample_setup.json file for an initial empty setup file.  Details b
         "new_enhanced_tls_edgehostname": {
             "ssl_cert_info": {
                 "use_existing_enrollment_id": false,
-                "existing_enrollment_id": "",
-                "existing_slot_number": "",
+                "existing_enrollment_id": 0,
                 "create_new_ssl_cert": false,
                 "ssl_cert_template_file": "",
                 "ssl_cert_template_values": "",
@@ -99,7 +98,7 @@ See templates/sample_setup.json file for an initial empty setup file.  Details b
         "add_selected_host": false,
         "waf_config_name": "",
         "update_match_target": false,
-        "waf_match_target_id": ""
+        "waf_match_target_id": 0
     },
     "activate_waf_policy_staging": false,
     "activate_property_production": false,
@@ -151,15 +150,14 @@ See templates/sample_setup.json file for an initial empty setup file.  Details b
 * edge_hostname: Specify the existing edge hostname to use. If using ENHANCED_TLS, this should end with edgekey.net ; otherwise if using STANDARD_TLS, this should end with edgesuite.net
 ----------
 **new_enhanced_tls_edgehostname -- use existing enrollment**
-* use_existing_enrollment_id: Set to true if you want to create a new edge hostname from an existing certificate enrollment. If true, you must also put in values for the existing_enrollment_id and existing_slot_number.
+* use_existing_enrollment_id: Set to true if you want to create a new edge hostname from an existing certificate enrollment. If true, you must also put in values for the existing_enrollment_id.
 * existing_enrollment_id: Enrollment ID of the existing certificate
-* existing_slot_number: Slot number for the existing certificate
 ----------
 **new_enhanced_tls_edgehostname -- create new enrollment**
-* create_new_ssl_cert: Set to true if you want to brand new certificate enrollment. If true, you must also put in values for the ssl_cert_template_file, ssl_cert_template_values, and use_temp_existing_edge_hostname_id
-* ssl_cert_template_file: File path to ssl certificate template json file. This can be for any certificate type (see templates/ssl_certs folder for some examples)
-* ssl_cert_template_values: Values for the ssl certificate template to be used (see templates/ssl_certs folder for some examples)
-* temp_existing_edge_hostname: Due to backend api limitations, a new edge hostname cannot be immediately made that references a newly created certificate enrollment for a brief period of time. Rather than be blocked by this process, specify a temporary edge hostname to use as a placeholder. This value is not really used and just a place holder to proceed with the property manager configuration creation. If using ENHANCED_TLS, use an existing edge hostname ends with edgekey.net ; otherwise if using STANDARD_TLS, use an existing edge hostname that ends with edgesuite.net
+* create_new_ssl_cert: Set to true if you want to brand new certificate enrollment. If true, you must also put in values for the ssl_cert_template_file, ssl_cert_template_values, and use_temp_existing_edge_hostname_id (NOT USED ANYMORE)
+* ssl_cert_template_file: File path to ssl certificate template json file. This can be for any certificate type (NOT USED ANYMORE)
+* ssl_cert_template_values: Values for the ssl certificate template to be used (NOT USED ANYMORE)
+* temp_existing_edge_hostname: Due to backend api limitations, a new edge hostname cannot be immediately made that references a newly created certificate enrollment for a brief period of time. Rather than be blocked by this process, specify a temporary edge hostname to use as a placeholder. This value is not really used and just a place holder to proceed with the property manager configuration creation. If using ENHANCED_TLS, use an existing edge hostname ends with edgekey.net ; otherwise if using STANDARD_TLS, use an existing edge hostname that ends with edgesuite.net (NOT USED ANYMORE)
 ----------
 **update_waf_info**
 * add_selected_host: Set to true if you want to add specified public_hostnames to WAF selected hosts

@@ -1,0 +1,33 @@
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.3.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: debug-statements
+      - id: double-quote-string-fixer
+      - id: requirements-txt-fixer
+      - id: check-case-conflict
+      - id: check-json
+      - id: mixed-line-ending
+      # - id: pretty-format-json
+  - repo: https://github.com/asottile/reorder_python_imports
+    rev: v3.9.0
+    hooks:
+      - id: reorder-python-imports
+        exclude: ^(pre_commit/resources/|testing/resources/python3_hooks_repo/)
+        args: [--py37-plus, --add-import, "from __future__ import annotations"]
+  - repo: https://github.com/asottile/pyupgrade
+    rev: v3.2.0
+    hooks:
+      - id: pyupgrade
+        args: [--py37-plus]
+  - repo: https://github.com/PyCQA/flake8
+    rev: 5.0.4
+    hooks:
+      - id: flake8
+        args:
+          - "--max-line-length=140"
+          - "--max-complexity=18"
+          #- "--ignore=E402,F841,F401,E302,E305,E128,E265,C901,F403,F405,E722,W504,E241"
+          - "--ignore=E127,E501,E124,E125,E128,E722,F841,C901,F401"
