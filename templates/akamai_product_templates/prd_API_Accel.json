@@ -1,0 +1,237 @@
+{
+    "rules": {
+        "name": "default",
+        "children": [
+            {
+                "name": "Performance",
+                "children": [
+                    {
+                        "name": "Compressible Objects",
+                        "children": [],
+                        "behaviors": [
+                            {
+                                "name": "gzipResponse",
+                                "options": {
+                                    "behavior": "ALWAYS"
+                                }
+                            }
+                        ],
+                        "criteria": [
+                            {
+                                "name": "contentType",
+                                "options": {
+                                    "matchCaseSensitive": false,
+                                    "matchOperator": "IS_ONE_OF",
+                                    "matchWildcard": true,
+                                    "values": [
+                                        "text/*",
+                                        "application/javascript",
+                                        "application/x-javascript",
+                                        "application/x-javascript*",
+                                        "application/json",
+                                        "application/x-json",
+                                        "application/*+json",
+                                        "application/*+xml",
+                                        "application/text",
+                                        "application/vnd.microsoft.icon",
+                                        "application/vnd-ms-fontobject",
+                                        "application/x-font-ttf",
+                                        "application/x-font-opentype",
+                                        "application/x-font-truetype",
+                                        "application/xmlfont/eot",
+                                        "application/xml",
+                                        "font/opentype",
+                                        "font/otf",
+                                        "font/eot",
+                                        "image/svg+xml",
+                                        "image/vnd.microsoft.icon"
+                                    ]
+                                }
+                            }
+                        ],
+                        "criteriaMustSatisfy": "all",
+                        "comments": "Compresses content to improve performance of clients with slow connections. Applies Last Mile Acceleration to requests when the returned object supports gzip compression."
+                    }
+                ],
+                "behaviors": [
+                    {
+                        "name": "http2",
+                        "options": {
+                            "enabled": ""
+                        }
+                    },
+                    {
+                        "name": "sureRoute",
+                        "options": {
+                            "enabled": true,
+                            "forceSslForward": false,
+                            "raceStatTtl": "30m",
+                            "testObjectUrl": "/akamai/sureroute-test-object.html",
+                            "toHostStatus": "INCOMING_HH",
+                            "type": "PERFORMANCE",
+                            "enableCustomKey": false
+                        }
+                    },
+                    {
+                        "name": "allowTransferEncoding",
+                        "options": {
+                            "enabled": true
+                        }
+                    },
+                    {
+                        "name": "dnsAsyncRefresh",
+                        "options": {
+                            "enabled": true,
+                            "timeout": "2h"
+                        }
+                    }
+                ],
+                "criteria": [],
+                "criteriaMustSatisfy": "all",
+                "comments": "Improves the performance of delivering objects to end users. Behaviors in this rule are applied to all requests as appropriate."
+            },
+            {
+                "name": "Offload",
+                "children": [
+                    {
+                        "name": "Uncacheable Responses",
+                        "children": [],
+                        "behaviors": [
+                            {
+                                "name": "downstreamCache",
+                                "options": {
+                                    "behavior": "TUNNEL_ORIGIN"
+                                }
+                            }
+                        ],
+                        "criteria": [
+                            {
+                                "name": "cacheability",
+                                "options": {
+                                    "matchOperator": "IS_NOT",
+                                    "value": "CACHEABLE"
+                                }
+                            }
+                        ],
+                        "criteriaMustSatisfy": "all",
+                        "comments": "Overrides the default downstream caching behavior for uncacheable object types. Instructs the edge server to pass Cache-Control and/or Expire headers from the origin to the client."
+                    }
+                ],
+                "behaviors": [
+                    {
+                        "name": "caching",
+                        "options": {
+                            "behavior": "NO_STORE"
+                        }
+                    },
+                    {
+                        "name": "cacheError",
+                        "options": {
+                            "enabled": false
+                        }
+                    },
+                    {
+                        "name": "downstreamCache",
+                        "options": {
+                            "allowBehavior": "LESSER",
+                            "behavior": "ALLOW",
+                            "sendHeaders": "CACHE_CONTROL_AND_EXPIRES",
+                            "sendPrivate": false
+                        }
+                    },
+                    {
+                        "name": "removeVary",
+                        "options": {
+                            "enabled": true
+                        }
+                    },
+                    {
+                        "name": "modifyViaHeader",
+                        "options": {
+                            "enabled": true,
+                            "modificationOption": "REMOVE_HEADER"
+                        }
+                    },
+                    {
+                        "name": "tieredDistribution",
+                        "options": {
+                            "enabled": false
+                        }
+                    }
+                ],
+                "criteria": [],
+                "criteriaMustSatisfy": "all",
+                "comments": "Controls caching, which offloads traffic away from the origin. Most objects types are not cached. However, the child rules override this behavior for certain subsets of requests."
+            }
+        ],
+        "behaviors": [
+            {
+                "name": "cpCode",
+                "options": {
+                    "value": {
+                        "id": 0
+                    }
+                }
+            },
+            {
+                "name": "origin",
+                "options": {
+                    "cacheKeyHostname": "ORIGIN_HOSTNAME",
+                    "compress": true,
+                    "enableTrueClientIp": true,
+                    "forwardHostHeader": "REQUEST_HOST_HEADER",
+                    "httpPort": 80,
+                    "httpsPort": 443,
+                    "ipVersion": "IPV4",
+                    "originSni": true,
+                    "originType": "CUSTOMER",
+                    "trueClientIpClientSetting": false,
+                    "trueClientIpHeader": "True-Client-IP",
+                    "verificationMode": "PLATFORM_SETTINGS",
+                    "hostname": "${env.origin_default}",
+                    "originCertificate": "",
+                    "ports": ""
+                }
+            },
+            {
+                "name": "originCharacteristics",
+                "options": {
+                    "authenticationMethod": "AUTOMATIC",
+                    "country": "GLOBAL_MULTI_GEO",
+                    "authenticationMethodTitle": ""
+                }
+            },
+            {
+                "name": "allowPost",
+                "options": {
+                    "allowWithoutContentLength": false,
+                    "enabled": true
+                }
+            },
+            {
+                "name": "allowPut",
+                "options": {
+                    "enabled": true
+                }
+            },
+            {
+                "name": "allowPatch",
+                "options": {
+                    "enabled": true
+                }
+            },
+            {
+                "name": "allowDelete",
+                "options": {
+                    "allowBody": false,
+                    "enabled": true
+                }
+            }
+        ],
+        "options": {
+            "is_secure": false
+        },
+        "variables": [],
+        "comments": "The behaviors in the Default Rule apply to all requests for the property hostname(s) unless another rule overrides the Default Rule settings."
+    }
+}

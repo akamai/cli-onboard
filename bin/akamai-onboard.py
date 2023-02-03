@@ -11,24 +11,32 @@ Copyright 2019 Akamai Technologies, Inc. All Rights Reserved.
  See the License for the specific language governing permissions and
  limitations under the License.
 """
+from __future__ import annotations
 
 import configparser
 import json
-import logging
+import logging.config
 import os
-import requests
 import sys
 import time
-from time import strftime
+from pathlib import Path
 from time import gmtime
-from akamai.edgegrid import EdgeGridAuth, EdgeRc
+from time import strftime
+
+import _logging as lg
 import click
-import wrapper_api
 import onboard
-import utility
+import onboard_single_host
+import requests
 import steps
+import utility
 import utility_papi
 import utility_waf
+import wrapper_api
+from akamai.edgegrid import EdgeGridAuth
+from akamai.edgegrid import EdgeRc
+from exceptions import setup_logger
+from model.single_host import SingleHost
 
 """
 This code leverages Akamai OPEN API.
@@ -36,72 +44,58 @@ In case you need quick explanation contact the initiators.
 Initiators: vbhat@akamai.com and aetsai@akamai.com
 """
 
-PACKAGE_VERSION = "1.0.5"
-
-# Setup logging
-#if not os.path.exists('logs'):
-#    os.makedirs('logs')
-#log_file = os.path.join('logs', 'onboard.log')
-
-# Set the format of logging in console and file separately
-#log_formatter = logging.Formatter(
-#    "%(asctime)s [%(threadName)-12.12s] [%(levelname)-5.5s]  %(message)s")
-#console_formatter = logging.Formatter("%(message)s")
-#root_logger = logging.getLogger()
-
-#logfile_handler = logging.FileHandler(log_file, mode='w')
-#logfile_handler.setFormatter(log_formatter)
-#root_logger.addHandler(logfile_handler)
-
-#console_handler = logging.StreamHandler()
-#console_handler.setFormatter(console_formatter)
-#root_logger.addHandler(console_handler)
-# Set Log Level to DEBUG, INFO, WARNING, ERROR, CRITICAL
-#root_logger.setLevel(logging.INFO)
+PACKAGE_VERSION = '2.0.0'
+logger = setup_logger()
 
 
-def init_config(edgerc_file, section):
-    if not edgerc_file:
-        if not os.getenv("AKAMAI_EDGERC"):
-            edgerc_file = os.path.join(os.path.expanduser("~"), '.edgerc')
+class Config:
+    def __init__(self):
+        pass
+
+
+pass_config = click.make_pass_decorator(Config, ensure=True)
+
+
+def init_config(config):
+    if not config.edgerc:
+        if not os.getenv('AKAMAI_EDGERC'):
+            edgerc_file = os.path.join(os.path.expanduser('~'), '.edgerc')
         else:
-            edgerc_file = os.getenv("AKAMAI_EDGERC")
+            edgerc_file = os.getenv('AKAMAI_EDGERC')
+    else:
+        edgerc_file = config.edgerc
 
     if not os.access(edgerc_file, os.R_OK):
-        print("Unable to read edgerc file \"%s\"" % edgerc_file)
-        exit(1)
+        lg._log_error(f'Unable to read edgerc file {edgerc_file}')
 
-    if not section:
-        if not os.getenv("AKAMAI_EDGERC_SECTION"):
-            section = "onboard"
+    if not config.section:
+        if not os.getenv('AKAMAI_EDGERC_SECTION'):
+            section = 'onboard'
         else:
-            section = os.getenv("AKAMAI_EDGERC_SECTION")
-
+            section = os.getenv('AKAMAI_EDGERC_SECTION')
+    else:
+        section = config.section
     try:
-        edgerc = EdgeRc(edgerc_file)
+        edgerc = EdgeRc(config.edgerc)
         base_url = edgerc.get(section, 'host')
-
         session = requests.Session()
         session.auth = EdgeGridAuth.from_edgerc(edgerc, section)
 
-        return base_url, session
     except configparser.NoSectionError:
-        print("Edgerc section \"%s\" not found" % section)
-        exit(1)
+        lg._log_error(f'Edgerc section {section} not found')
     except Exception:
-        print(
-            "Unknown error occurred trying to read edgerc file (%s)" %
-            edgerc_file)
-        exit(1)
+        lg._log_error(f'Unknown error occurred trying to read edgerc file {edgerc_file}')
+    finally:
+        wrap_api = wrapper_api.apiCallsWrapper(session, base_url, config.account_key)
 
-class Config(object):
-    def __init__(self):
-        pass
-pass_config = click.make_pass_decorator(Config, ensure=True)
+    return session, wrap_api
 
-@click.group(context_settings={'help_option_names':['-h','--help']})
-@click.option('--edgerc', metavar='', default=os.path.join(os.path.expanduser("~"),'.edgerc'),help='Location of the credentials file [$AKAMAI_EDGERC]', required=False)
-@click.option('--section', metavar='', help='Section of the credentials file [$AKAMAI_EDGERC_SECTION]', required=False)
+
+@click.group(context_settings={'help_option_names': ['-h', '--help']})
+@click.option('--edgerc', metavar='', default=os.path.join(os.path.expanduser('~'), '.edgerc'),
+              help='Location of the credentials file [$AKAMAI_EDGERC]', required=False)
+@click.option('--section', metavar='', default='onboard',
+              help='Section of the credentials file [$AKAMAI_EDGERC_SECTION]', required=False)
 @click.option('--account-key', metavar='', help='Account Key', required=False)
 @click.version_option(version=PACKAGE_VERSION)
 @pass_config
@@ -113,6 +107,7 @@ def cli(config, edgerc, section, account_key):
     config.section = section
     config.account_key = account_key
 
+
 @cli.command()
 @click.pass_context
 def help(ctx):
@@ -122,170 +117,299 @@ def help(ctx):
     print(ctx.parent.get_help())
 
 
+@cli.command(short_help='Create a simple delivery and security configuration with one hostname and one WAF policy')
+@click.option('--file', metavar='', required=True,
+              help='File containing setup/onboard config key-value pairs in JSON')
+@pass_config
+def single_host(config, file):
+    start_time = time.perf_counter()
+
+    # Populate onboarding data from user input and default values
+    json_data = load_json(file)
+    setup = onboard_single_host.onboard(json_data)
+    onboard = SingleHost(setup.property_name,
+                         setup.contract_id,
+                         setup.product_id,
+                         setup.public_hostnames,
+                         setup.edge_hostname,
+                         setup.notification_emails
+    )
+
+    # Override default
+    onboard.new_cpcode_name = setup.new_cpcode_name
+    onboard.create_new_security_config = setup.create_new_security_config
+    if len(setup.waf_config_name) > 0:
+        onboard.waf_config_name = setup.waf_config_name
+    home = str(Path.home())
+    template_path = f'{home}/.akamai-cli/src/cli-onboard/templates/akamai_product_templates'
+    onboard.source_template_file = f'{template_path}/{setup.product_id}.json'
+    onboard.source_values_file = f'{template_path}/template_variables.json'
+    logger.info(f'Rule Template Location: {onboard.source_template_file}')
+    if setup.existing_enrollment_id > 0:
+        onboard.use_existing_enrollment_id = True
+        onboard.edge_hostname_mode = 'new_enhanced_tls_edgehostname'
+        onboard.existing_enrollment_id = setup.existing_enrollment_id
+    if setup.version_notes is not None:
+        onboard.version_notes = setup.version_notes
+    if not setup.activate_production:
+        onboard.activate_property_production = False
+        onboard.activate_waf_policy_production = False
+
+    # Validate setup and akamai cli and cli pipeline are installed
+    util = utility.utility()
+    util.installedCommandCheck('akamai')
+    util.executeCommand(['akamai', 'pipeline'])
+
+    # Load business rule for delivery and security
+    util_papi = utility_papi.papiFunctions()
+    util_waf = utility_waf.wafFunctions()
+
+    _, wrap_api = init_config(config)
+    groups = wrap_api.get_groups_without_parent()
+    for grp in groups:
+        if grp['contractIds'][0] == onboard.contract_id:
+            onboard.group_id = grp['groupId']
+            exit
+    if onboard.group_id is None:
+        sys.exit(logger.error('Unknown Error: Cannot find top level group_id'))
+
+    util.validateSetupSteps(onboard, wrap_api, cli_mode='single_host')
+    if util.valid:
+        if onboard.create_new_cpcode:
+            util_papi.createNewCpCode(onboard, wrap_api,
+                                      onboard.new_cpcode_name,
+                                      onboard.contract_id,
+                                      onboard.group_id,
+                                      onboard.product_id)
+
+        # Create the property, merge & update the property rules, figure out edgehostname logic
+        util_papi.createAndUpdateProperty(config, onboard, wrap_api, util)
+
+        if onboard.activate_property_staging is False:
+            logger.info('Activate Property Staging: SKIPPING')
+        else:
+            status = util_papi.activateAndPoll(wrap_api,
+                                               onboard.property_name,
+                                               onboard.contract_id,
+                                               onboard.group_id,
+                                               onboard.onboard_property_id, version=1,
+                                               network='STAGING',
+                                               emailList=onboard.notification_emails,
+                                               notes='Onboard CLI Activation')
+            if not status:
+                lg._log_exception(msg='Unable to activate property to staging network')
+            else:
+                if not onboard.create_new_security_config:
+                    print()
+                    logger.warning('Create Security configuration on Staging: SKIPPING')
+                else:
+                    if onboard.onboard_waf_config_id == 0:
+                        waf_ver = util_waf.create_waf_config(wrap_api, onboard)
+                        if not waf_ver:
+                            sys.exit()
+                        waf_policy = util_waf.create_waf_policy(wrap_api, onboard)
+                        if not waf_policy:
+                            sys.exit()
+                        waf_match_tgt = util_waf.create_waf_match_target(wrap_api, onboard)
+                        if not waf_match_tgt:
+                            sys.exit()
+                    if onboard.activate_waf_policy_staging:
+                        status = util_waf.activateAndPoll(wrap_api, onboard, network='STAGING')
+                        if not status:
+                            sys.exit()
+                    else:
+                        logger.warning('Activate Security configuration on Staging: SKIPPING')
+
+        if not onboard.activate_property_production:
+            print()
+            logger.warning('Activate Property Production: SKIPPING')
+        else:
+            status = util_papi.activateAndPoll(wrap_api,
+                                            onboard.property_name,
+                                            onboard.contract_id,
+                                            onboard.group_id,
+                                            onboard.onboard_property_id, version=1,
+                                            network='PRODUCTION',
+                                            emailList=onboard.notification_emails,
+                                            notes='Onboard CLI Activation')
+            if not status:
+                logger.error('Unable to activate property to staging network')
+            else:
+                if onboard.create_new_security_config and onboard.activate_waf_policy_production:
+                    status = util_waf.activateAndPoll(wrap_api, onboard, network='PRODUCTION')
+                    if not status:
+                        sys.exit()
+                else:
+                    logger.info('Activate Security configuration on Staging: PRODUCTION')
+    print()
+    end_time = time.perf_counter()
+    elapse_time = str(strftime('%H:%M:%S', gmtime(end_time - start_time)))
+    logger.info(f'TOTAL DURATION: {elapse_time}, End Akamai CLI onboard')
+    return 0
+
+
 @cli.command(short_help='Create a configuration')
 @click.option('--file', metavar='', help='File containing setup/onboard config key-value pairs in JSON', required=True)
 @pass_config
 def create(config, file):
-    start_time = round(time.time())
-    base_url, session = init_config(config.edgerc, config.section)
-    account_switch_key = config.account_key
+    start_time = time.perf_counter()
 
-    #open setup.json to validate in next step
-    try:
-        with open(file, mode='r') as setup_file_handler:
-            setup_json_content = json.load(setup_file_handler)
-
-        #in the future, could look at validating the json schema
-
-    except:
-        print('ERROR: Unable to open setup file')
-        exit(-1)
-
-
-
-    #Object Instantiaions
+    setup_json_content = load_json(file)
     onboard_object = onboard.onboard(setup_json_content, config)
-    wrapper_object = wrapper_api.apiCallsWrapper(base_url, account_switch_key)
 
-    #Validate setup file
+    # Validate setup and akamai cli and cli pipeline are installed
     utility_object = utility.utility()
+    utility_object.installedCommandCheck('akamai')
+    utility_object.executeCommand(['akamai', 'pipeline'])
+
+    # Validate akamai cli and cli pipeline are installed
     utility_papi_object = utility_papi.papiFunctions()
     utility_waf_object = utility_waf.wafFunctions()
 
-    #Validate akamai cli and cli pipeline are installed
-    cli_installed = utility_object.installedCommandCheck('akamai')
-    pipeline_installed = utility_object.executeCommand(['akamai', 'pipeline'])
-
-    #Determine necessary execution steps
+    # Determine necessary execution steps
     steps_object = steps.executionSteps()
+    _, wrapper_object = init_config(config)
+    utility_object.validateSetupSteps(onboard_object, wrapper_object, cli_mode='create')
 
-    #Validate if setup steps are specified in the right order
-    print('\n*************************************')
-    print('**Validating setup file information**')
-    print('*************************************\n')
-    setup_values_validation = utility_object.validateSetupSteps(session, onboard_object, wrapper_object)
-
-    #Got this far, we are ready to try and execute the actual steps
+    # Got this far, we are ready to try and execute the actual steps
     if utility_object.valid is True:
-        print('\n*************************************')
-        print('**Starting onboarding process********')
-        print('*************************************\n')
-
-        #Create new cpcode
+        # Create new cpcode
         if steps_object.doCreateNewCpCode(setup_json_content):
-            utility_papi_object.createNewCpCode(session, onboard_object, wrapper_object, onboard_object.new_cpcode_name, onboard_object.contract_id, \
-                                                        onboard_object.group_id, onboard_object.product_id)
-        
-        #Create the property, merge & update the property rules, figure out edgehostname logic
-        utility_papi_object.createAndUpdateProperty(session, setup_json_content, onboard_object, wrapper_object, utility_object)
+            utility_papi_object.createNewCpCode(onboard_object, wrapper_object,
+                                                onboard_object.new_cpcode_name,
+                                                onboard_object.contract_id,
+                                                onboard_object.group_id,
+                                                onboard_object.product_id)
 
-        #Activate property to staging
+        # Create the property, merge & update the property rules, figure out edgehostname logic
+        utility_papi_object.createAndUpdateProperty(config, onboard_object, wrapper_object, utility_object)
+
+        # Activate property to staging
         if steps_object.doPropertyActivateStaging(setup_json_content):
-            activation_status = utility_papi_object.activateAndPoll(session, wrapper_object, onboard_object.property_name, \
-                                                    onboard_object.contract_id, onboard_object.group_id, onboard_object.onboard_property_id, version=1, \
-                                                    network='STAGING', emailList=onboard_object.notification_emails, notes='Onboard CLI Activation')
+            activation_status = utility_papi_object.activateAndPoll(wrapper_object,
+                                                    onboard_object.property_name,
+                                                    onboard_object.contract_id,
+                                                    onboard_object.group_id,
+                                                    onboard_object.onboard_property_id, version=1,
+                                                    network='STAGING',
+                                                    emailList=onboard_object.notification_emails,
+                                                    notes='Onboard CLI Activation')
             if activation_status is False:
-                print('ERROR: Unable to activate property to staging network')
+                logger.error('Unable to activate property to staging network')
                 exit(-1)
         else:
-            print('\nActivate Property Staging: SKIPPING')
+            logger.info('Activate Property Staging: SKIPPING')
 
-        #Add WAF selected hosts
+        # Add WAF selected hosts
         if steps_object.doWafAddSelectedHosts(setup_json_content):
-            #First have to create a new WAF config version
-            print('\nTrying to create new version for WAF configuration: ' + str(onboard_object.waf_config_name))
-            create_waf_version = utility_waf_object.createWafVersion(session, setup_json_content, utility_object, wrapper_object, onboard_object)
-            if create_waf_version is True:
-                print('Successfully created WAF configuruation version: ' + str(onboard_object.onboard_waf_config_version))
-            else:
-                print('ERROR: Unable create new version for WAF configuration')
-                exit(-1)
+            # First have to create a new WAF config version
+            print()
+            logger.warning('Onboarding Security Config')
+            logger.debug(f'Trying to create new version for WAF configuration: {onboard_object.waf_config_name}')
+            create_waf_version = utility_waf_object.createWafVersion(wrapper_object, onboard_object, notes=onboard_object.version_notes)
+            wrapper_object.update_waf_config_version_note(onboard_object, notes=onboard_object.version_notes)
+            if create_waf_version is False:
+                sys.exit()
 
-            #Created WAF config version, now can add selected hosts to it
-            print('\nTrying to add property public_hostnames as selected hosts to WAF configuration: ' + str(onboard_object.waf_config_name))
-            add_hostnames = utility_waf_object.addHostnames(session, wrapper_object, \
-                                        onboard_object.public_hostnames, onboard_object.onboard_waf_config_id, onboard_object.onboard_waf_config_version)
+            # Created WAF config version, now can add selected hosts to it
+            logger.debug(f'Trying to add property public_hostnames as selected hosts to WAF configuration: {onboard_object.waf_config_name}')
+            add_hostnames = utility_waf_object.addHostnames(wrapper_object,
+                                        onboard_object.public_hostnames,
+                                        onboard_object.onboard_waf_config_id,
+                                        onboard_object.onboard_waf_config_version)
             if add_hostnames is True:
-                print('Successfully added ' + str(onboard_object.public_hostnames) + ' as selected hosts')
+                logger.info(f'Successfully added {onboard_object.public_hostnames} as selected hosts')
             else:
-                print('ERROR: Unable to add selected hosts to WAF Configuration')
+                logger.error('Unable to add selected hosts to WAF Configuration')
                 exit(-1)
         else:
-            print('\nWAF Add Selected Hosts: SKIPPING')
+            logger.info('WAF Add Selected Hosts: SKIPPING')
 
-        #Update WAF match target
-        if steps_object.doWafUpdateMatchTarget(setup_json_content):
-            print('\nTrying to add property public_hostnames to WAF Match Target Id: ' + str(onboard_object.waf_match_target_id))
-
-            modify_matchtarget = utility_waf_object.updateMatchTarget(session, wrapper_object, \
-                                        onboard_object.public_hostnames, onboard_object.onboard_waf_config_id, onboard_object.onboard_waf_config_version, \
+        # Update WAF match target
+        if onboard_object.update_match_target:
+            modify_matchtarget = utility_waf_object.updateMatchTarget(wrapper_object,
+                                        onboard_object.public_hostnames,
+                                        onboard_object.onboard_waf_config_id,
+                                        onboard_object.onboard_waf_config_version,
                                         onboard_object.waf_match_target_id)
-            if modify_matchtarget is True:
-                print('Successfully added ' + str(onboard_object.public_hostnames) + ' to WAF Configuration Match Target')
+            if modify_matchtarget:
+                logger.info(f'Successfully added {onboard_object.public_hostnames} to WAF Configuration Match Target')
             else:
-                print('ERROR: Unable to update match target in WAF Configuration')
-                exit(-1)
-        else:
-            print('\nWAF Update Match Target: SKIPPING')
+                sys.exit(logger.error('Unable to update match target in WAF Configuration'))
 
-        #Activate WAF configuration to staging
+        else:
+            logger.info('WAF Update Match Target: SKIPPING')
+
+        # Activate WAF configuration to staging
         if steps_object.doWafActivateStaging(setup_json_content):
-            waf_activation_status = utility_waf_object.activateAndPoll(session, wrapper_object, onboard_object, network='STAGING')
+            waf_activation_status = utility_waf_object.activateAndPoll(wrapper_object, onboard_object, network='STAGING')
             if waf_activation_status is False:
-                print('ERROR: Unable to activate WAF configuration to staging network')
-                exit(-1)
+                sys.exit(logger.error('Unable to activate WAF configuration to staging network'))
         else:
-            print('\nActivate WAF Configuration Staging: SKIPPING')
+            logger.info('Activate WAF Configuration Staging: SKIPPING')
 
-        #Activate property to production
+        # Activate property to production
         if steps_object.doPropertyActivateProduction(setup_json_content):
-            activation_status = utility_papi_object.activateAndPoll(session, wrapper_object, onboard_object.property_name, \
-                        onboard_object.contract_id, onboard_object.group_id, onboard_object.onboard_property_id, version=1, \
-                        network='PRODUCTION', emailList=onboard_object.notification_emails, notes='Onboard CLI Activation')
+            activation_status = utility_papi_object.activateAndPoll(wrapper_object,
+                        onboard_object.property_name,
+                        onboard_object.contract_id, onboard_object.group_id,
+                        onboard_object.onboard_property_id, version=1,
+                        network='PRODUCTION',
+                        emailList=onboard_object.notification_emails, notes='Onboard CLI Activation')
             if activation_status is False:
-                print('ERROR: Error activating property to production network')
-                exit(-1)
-        else:
-            print('\nActivate Property Production: SKIPPING')
+                sys.exit(logger.error('Unable to activate property to production network'))
 
-        #Activate WAF configuration to production
-        if steps_object.doWafActivateProduction(setup_json_content):
-            waf_activation_status = utility_waf_object.activateAndPoll(session, wrapper_object, onboard_object, network='PRODUCTION')
-            if waf_activation_status is False:
-                print('ERROR: Unable to activate WAF configuration to production network')
-                exit(-1)
         else:
-            print('\nActivate WAF Configuration Production: SKIPPING')
+            logger.info('Activate Property Production: SKIPPING')
+
+        # Activate WAF configuration to production
+        if steps_object.doWafActivateProduction(setup_json_content):
+            waf_activation_status = utility_waf_object.activateAndPoll(wrapper_object, onboard_object, network='PRODUCTION')
+            if waf_activation_status is False:
+                sys.exit(logger.error('Unable to activate WAF configuration to production network'))
+        else:
+            logger.info('Activate WAF Configuration Production: SKIPPING')
+
+        print()
+        end_time = time.perf_counter()
+        elapse_time = str(strftime('%H:%M:%S', gmtime(end_time - start_time)))
+        logger.info(f'TOTAL DURATION: {elapse_time}, End Akamai CLI onboard')
 
     else:
-        print('\nPlease correct the setup json file settings and try again.')
+        logger.error('Please correct the setup json file settings and try again.')
         return 0
-
-    print('\nEND')
-    end_time = round(time.time())
-    command_time = end_time - start_time
-    print('TOTAL DURATION: ' + str(strftime("%H:%M:%S", gmtime(command_time))) + '\n')
 
     return 0
 
 
 def get_prog_name():
     prog = os.path.basename(sys.argv[0])
-    if os.getenv("AKAMAI_CLI"):
-        prog = "akamai onboard"
+    if os.getenv('AKAMAI_CLI'):
+        prog = 'akamai onboard'
     return prog
 
 
 def get_cache_dir():
-    if os.getenv("AKAMAI_CLI_CACHE_DIR"):
-        return os.getenv("AKAMAI_CLI_CACHE_DIR")
+    if os.getenv('AKAMAI_CLI_CACHE_DIR'):
+        return os.getenv('AKAMAI_CLI_CACHE_DIR')
 
     return os.curdir
 
 
+def load_json(file):
+    try:
+        with open(file) as f:
+            data = json.load(f)
+        logger.info(f'Successfully read {file}')
+    except (ValueError, FileNotFoundError) as e:
+        lg._log_error(e)
+    return data
+
+
 if __name__ == '__main__':
     try:
+        print()
+        logger.info('Start Akamai CLI onboard')
         status = cli(prog_name='akamai onboard')
-        exit(status)
     except KeyboardInterrupt:
         exit(1)

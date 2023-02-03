@@ -36,17 +36,23 @@ access_token = [ACCESS_TOKEN_HERE]
 client_token = [CLIENT_TOKEN_HERE]
 ```
 
+## Onboard Types
+This CLI has 2 command types for onboarding new properties:
+* [create](#create)
+* [single-host](#single-host)
+	
+### create
+
 ### Example Usage
 
-
 ```bash
-akamai onboard create --file /templates/sample_setup.json
+akamai onboard create --file /templates/sample_setup_files/setup.json
 akamai onboard create --file ~/path/to/setup.json
 ```
 
 ### Setup JSON File Documentation
 
-See templates/sample_setup.json file for an initial empty setup file.  Details below
+See templates/sample_setup_files/setup.json file for an initial empty setup file.  Details below
 ```bash
 {
     "property_info": {
@@ -84,8 +90,7 @@ See templates/sample_setup.json file for an initial empty setup file.  Details b
         "new_enhanced_tls_edgehostname": {
             "ssl_cert_info": {
                 "use_existing_enrollment_id": false,
-                "existing_enrollment_id": "",
-                "existing_slot_number": "",
+                "existing_enrollment_id": 0,
                 "create_new_ssl_cert": false,
                 "ssl_cert_template_file": "",
                 "ssl_cert_template_values": "",
@@ -99,7 +104,7 @@ See templates/sample_setup.json file for an initial empty setup file.  Details b
         "add_selected_host": false,
         "waf_config_name": "",
         "update_match_target": false,
-        "waf_match_target_id": ""
+        "waf_match_target_id": 0
     },
     "activate_waf_policy_staging": false,
     "activate_property_production": false,
@@ -151,15 +156,14 @@ See templates/sample_setup.json file for an initial empty setup file.  Details b
 * edge_hostname: Specify the existing edge hostname to use. If using ENHANCED_TLS, this should end with edgekey.net ; otherwise if using STANDARD_TLS, this should end with edgesuite.net
 ----------
 **new_enhanced_tls_edgehostname -- use existing enrollment**
-* use_existing_enrollment_id: Set to true if you want to create a new edge hostname from an existing certificate enrollment. If true, you must also put in values for the existing_enrollment_id and existing_slot_number.
+* use_existing_enrollment_id: Set to true if you want to create a new edge hostname from an existing certificate enrollment. If true, you must also put in values for the existing_enrollment_id.
 * existing_enrollment_id: Enrollment ID of the existing certificate
-* existing_slot_number: Slot number for the existing certificate
 ----------
 **new_enhanced_tls_edgehostname -- create new enrollment**
-* create_new_ssl_cert: Set to true if you want to brand new certificate enrollment. If true, you must also put in values for the ssl_cert_template_file, ssl_cert_template_values, and use_temp_existing_edge_hostname_id
-* ssl_cert_template_file: File path to ssl certificate template json file. This can be for any certificate type (see templates/ssl_certs folder for some examples)
-* ssl_cert_template_values: Values for the ssl certificate template to be used (see templates/ssl_certs folder for some examples)
-* temp_existing_edge_hostname: Due to backend api limitations, a new edge hostname cannot be immediately made that references a newly created certificate enrollment for a brief period of time. Rather than be blocked by this process, specify a temporary edge hostname to use as a placeholder. This value is not really used and just a place holder to proceed with the property manager configuration creation. If using ENHANCED_TLS, use an existing edge hostname ends with edgekey.net ; otherwise if using STANDARD_TLS, use an existing edge hostname that ends with edgesuite.net
+* create_new_ssl_cert: Set to true if you want to brand new certificate enrollment. If true, you must also put in values for the ssl_cert_template_file, ssl_cert_template_values, and use_temp_existing_edge_hostname_id (NOT USED ANYMORE)
+* ssl_cert_template_file: File path to ssl certificate template json file. This can be for any certificate type (NOT USED ANYMORE)
+* ssl_cert_template_values: Values for the ssl certificate template to be used (NOT USED ANYMORE)
+* temp_existing_edge_hostname: Due to backend api limitations, a new edge hostname cannot be immediately made that references a newly created certificate enrollment for a brief period of time. Rather than be blocked by this process, specify a temporary edge hostname to use as a placeholder. This value is not really used and just a place holder to proceed with the property manager configuration creation. If using ENHANCED_TLS, use an existing edge hostname ends with edgekey.net ; otherwise if using STANDARD_TLS, use an existing edge hostname that ends with edgesuite.net (NOT USED ANYMORE)
 ----------
 **update_waf_info**
 * add_selected_host: Set to true if you want to add specified public_hostnames to WAF selected hosts
@@ -175,7 +179,58 @@ See templates/sample_setup.json file for an initial empty setup file.  Details b
 * activate_waf_policy_production: Activate security configuration to production network (must go through staging first)
 * notification_emails: Array of emails to be notified after activations
 
+	
+### single-host
 
+### Example Usage
+
+```bash
+akamai onboard single-host --file /templates/sample_setup_files/setup_single_host.json
+akamai onboard single-host --file ~/path/to/setup_single_host.json
+```
+	
+```bash
+{
+    "property_info": {
+        "contract_id": "ctr_",
+        "product_id": "prd_",
+        "property_hostname": "",
+        "property_origin": ""
+    },
+    "edge_hostname": {
+        "use_existing_edge_hostname": "",
+        "create_from_existing_enrollment_id": 0
+    },
+    "update_waf_info": {
+        "create_new_security_config": true,
+        "waf_config_name": ""
+    },
+    "activate_production": false,
+    "notification_emails": [
+        ""
+    ]
+}	
+```
+
+	
+### Field Descriptions:
+
+* contract_id:         Contract ID (starts with ctr_)
+* product_id:          Product ID: one of prd_SPM, prd_Fresca, prd_API_Accel (case sensitive)
+* property_hostname:   Public facing hostname
+* property_origin:     Origin hostname for property_hostname
+* activate_production: Activate to Akamai production network (will always update to Akamai staging already)
+* notification_emails: Array of emails to be notified after activations
+----------
+**edge_hostname** 
+* use_existing_edge_hostname: specify existing edge hostname to use (must already exist)
+* create_from_existing_enrollment_id: create new edge hostname from existing certificate enrollment id (must already exist)
+----------
+**update_waf_info** 
+* create_new_security_config: true = will create default security configuration in alert mode
+* waf_config_name: name of new security config to be created (if blank, will use default "WAF Security File" as name
+
+	
 # Contribution
 
 By submitting a contribution (the “Contribution”) to this project, and for good and valuable consideration, the receipt and sufficiency of which are hereby acknowledged, you (the “Assignor”) irrevocably convey, transfer, and assign the Contribution to the owner of the repository (the “Assignee”), and the Assignee hereby accepts, all of your right, title, and interest in and to the Contribution along with all associated copyrights, copyright registrations, and/or applications for registration and all issuances, extensions and renewals thereof (collectively, the “Assigned Copyrights”). You also assign all of your rights of any kind whatsoever accruing under the Assigned Copyrights provided by applicable law of any jurisdiction, by international treaties and conventions and otherwise throughout the world. 

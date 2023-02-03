@@ -6,7 +6,7 @@
     {
       "name": "onboard",
       "aliases": ["onboard"],
-      "version": "1.0.5",
+      "version": "2.0.0",
       "description": "Onboard Akamai delivery and WAF configuration"
     }
   ]
