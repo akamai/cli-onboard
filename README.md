@@ -36,8 +36,14 @@ access_token = [ACCESS_TOKEN_HERE]
 client_token = [CLIENT_TOKEN_HERE]
 ```
 
-### Example Usage
+## Onboard Types
+This CLI has 2 command types for onboarding new properties:
+* [create](#create)
+* [single-host](#single-host)
+	
+### create
 
+### Example Usage
 
 ```bash
 akamai onboard create --file /templates/sample_setup_files/setup.json
@@ -173,7 +179,58 @@ See templates/sample_setup_files/setup.json file for an initial empty setup file
 * activate_waf_policy_production: Activate security configuration to production network (must go through staging first)
 * notification_emails: Array of emails to be notified after activations
 
+	
+### single-host
 
+### Example Usage
+
+```bash
+akamai onboard single-host --file /templates/sample_setup_files/setup_single_host.json
+akamai onboard single-host --file ~/path/to/setup_single_host.json
+```
+	
+```bash
+{
+    "property_info": {
+        "contract_id": "ctr_",
+        "product_id": "prd_",
+        "property_hostname": "",
+        "property_origin": ""
+    },
+    "edge_hostname": {
+        "use_existing_edge_hostname": "",
+        "create_from_existing_enrollment_id": 0
+    },
+    "update_waf_info": {
+        "create_new_security_config": true,
+        "waf_config_name": ""
+    },
+    "activate_production": false,
+    "notification_emails": [
+        ""
+    ]
+}	
+```
+
+	
+### Field Descriptions:
+
+* contract_id:         Contract ID (starts with ctr_)
+* product_id:          Product ID: one of prd_SPM, prd_Fresca, prd_API_Accel (case sensitive)
+* property_hostname:   Public facing hostname
+* property_origin:     Origin hostname for property_hostname
+* activate_production: Activate to Akamai production network (will always update to Akamai staging already)
+* notification_emails: Array of emails to be notified after activations
+----------
+**edge_hostname** 
+* use_existing_edge_hostname: specify existing edge hostname to use (must already exist)
+* create_from_existing_enrollment_id: create new edge hostname from existing certificate enrollment id (must already exist)
+----------
+**update_waf_info** 
+* create_new_security_config: true = will create default security configuration in alert mode
+* waf_config_name: name of new security config to be created (if blank, will use default "WAF Security File" as name
+
+	
 # Contribution
 
 By submitting a contribution (the “Contribution”) to this project, and for good and valuable consideration, the receipt and sufficiency of which are hereby acknowledged, you (the “Assignor”) irrevocably convey, transfer, and assign the Contribution to the owner of the repository (the “Assignee”), and the Assignee hereby accepts, all of your right, title, and interest in and to the Contribution along with all associated copyrights, copyright registrations, and/or applications for registration and all issuances, extensions and renewals thereof (collectively, the “Assigned Copyrights”). You also assign all of your rights of any kind whatsoever accruing under the Assigned Copyrights provided by applicable law of any jurisdiction, by international treaties and conventions and otherwise throughout the world. 
