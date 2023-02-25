@@ -149,7 +149,7 @@ def single_host(config, file):
         onboard.use_existing_enrollment_id = True
         onboard.edge_hostname_mode = 'new_enhanced_tls_edgehostname'
         onboard.existing_enrollment_id = setup.existing_enrollment_id
-    if setup.version_notes is not None:
+    if not (setup.version_notes == ''):
         onboard.version_notes = setup.version_notes
     if not setup.activate_production:
         onboard.activate_property_production = False
@@ -157,8 +157,11 @@ def single_host(config, file):
 
     # Validate setup and akamai cli and cli pipeline are installed
     util = utility.utility()
-    util.installedCommandCheck('akamai')
-    util.executeCommand(['akamai', 'pipeline'])
+    cli_installed = util.installedCommandCheck('akamai')
+    pipeline_installed = util.executeCommand(['akamai', 'pipeline'])
+
+    if not (pipeline_installed and (cli_installed or pipeline_installed)):
+        sys.exit()
 
     # Load business rule for delivery and security
     util_papi = utility_papi.papiFunctions()
@@ -259,8 +262,11 @@ def create(config, file):
 
     # Validate setup and akamai cli and cli pipeline are installed
     utility_object = utility.utility()
-    utility_object.installedCommandCheck('akamai')
-    utility_object.executeCommand(['akamai', 'pipeline'])
+    cli_installed = utility_object.installedCommandCheck('akamai')
+    pipeline_installed = utility_object.executeCommand(['akamai', 'pipeline'])
+
+    if not (pipeline_installed and (cli_installed or pipeline_installed)):
+        sys.exit()
 
     # Validate akamai cli and cli pipeline are installed
     utility_papi_object = utility_papi.papiFunctions()
