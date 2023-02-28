@@ -206,7 +206,6 @@ class utility:
             if onboard_object.secure_network != 'ENHANCED_TLS':
                 logger.error('For new_enhanced_tls_edgehostname, secure_network must be ENHANCED_TLS')
                 count += 1
-
             if onboard_object.use_existing_enrollment_id is True:
                 if onboard_object.create_new_ssl_cert is True:
                     logger.error('Both use_existing_enrollment_id and create_new_ssl_cert cannot be set to true')
@@ -227,6 +226,9 @@ class utility:
             ehn_id = 0
             if onboard_object.secure_by_default_use_existing_ehn == '' and (not onboard_object.secure_by_default_new_ehn):
                 logger.error(f'{onboard_object.edge_hostname:<30}{space:>20}missing edge hostname')
+                count += 1
+            if (onboard_object.secure_by_default_use_existing_ehn != '') and (onboard_object.secure_by_default_new_ehn):
+                logger.error('If create_new_edge_hostnames is true, use_existing_edge_hostnames must be empty')
                 count += 1
             if (not onboard_object.secure_by_default_new_ehn) and (onboard_object.secure_by_default_use_existing_ehn != ''):
                 try:
