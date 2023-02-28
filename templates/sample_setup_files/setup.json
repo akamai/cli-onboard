@@ -13,7 +13,7 @@
 
         },
         "file_info": {
-            "use_file": false,
+            "use_file": true,
             "source_template_file": "",
             "source_values_file": ""
         },
@@ -27,7 +27,7 @@
         ""
     ],
     "edge_hostname": {
-        "mode": "use_existing_edgehostname",
+        "mode": "new_enhanced_tls_edgehostname",
         "use_existing_edgehostname": {
             "edge_hostname": ""
         },

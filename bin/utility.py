@@ -10,6 +10,8 @@ from urllib import parse
 
 from distutils.dir_util import copy_tree
 from exceptions import setup_logger
+from pyisemail import is_email
+
 
 logger = setup_logger()
 space = ' '
@@ -79,8 +81,9 @@ class utility:
         Function to validate the input values of setup.json
         """
         count = 0
+        valid_waf = True
         print()
-        logger.warning('Validating setup file information')
+        logger.warning('Validating setup file information. Please wait, may take a few moments')
 
         # check if property name exists
         if wrapper_object.property_exists(onboard_object.property_name):
@@ -166,8 +169,8 @@ class utility:
             logger.info('valid options: use_existing_edgehostname, new_standard_tls_edgehostname, new_enhanced_tls_edgehostname')
         elif onboard_object.edge_hostname_mode == 'use_existing_edgehostname':
             ehn_id = 0
-            if onboard_object.edge_hostname is None:
-                logger.error(f'edge_hostname{space:>20}missing')
+            if onboard_object.edge_hostname == '':
+                logger.error(f'{onboard_object.edge_hostname:<30}{space:>20}missing edge hostname')
                 count += 1
             else:
                 try:
@@ -244,6 +247,7 @@ class utility:
                     else:
                         count += 1
                         logger.error(f'{onboard_object.waf_config_name:<30}{space:>20}invalid waf_config_name, not found')
+                        valid_waf = False
 
                     if onboard_object.onboard_waf_config_id is not None:
                         logger.debug(f'{onboard_object.onboard_waf_config_id} {onboard_object.onboard_waf_prev_version}')
@@ -282,9 +286,35 @@ class utility:
                 else:
                     # valid means this waf name doesn't exists
                     logger.info(f'{onboard_object.waf_config_name:<30}{space:>20}new waf_config_name')
+                    valid_waf = False
 
         else:
             pass
+
+        # valid notify_emails is required
+        emails = onboard_object.notification_emails
+        if len(emails) == 0:
+            logger.error('At least one valid notification email is required')
+            count += 1
+        else:
+            for email in emails:
+                if not is_email(email):
+                    logger.error(f'{email:<30}{space:>20}invalid email address')
+                    count += 1
+
+        # maximum active security config per network is 10
+        '''
+        if onboard_object.activate_waf_policy_staging and valid_waf:
+            stg_active_count, prd_active_count = self.get_active_sec_config(wrapper_object)
+            msg = 'Deactivate another one, or contact support to raise limits.'
+            if stg_active_count >= 10:
+                logger.error(f'You reached your maximum allowed number of security configurations on STAGING. {msg}')
+                count += 1
+
+            if onboard_object.activate_waf_policy_staging and prd_active_count >= 10:
+                logger.error(f'You reached your maximum allowed number of security configurations on PRODUCTION. {msg}')
+                count += 1
+        '''
 
         if count == 0:
             self.valid is True

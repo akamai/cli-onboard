@@ -543,3 +543,10 @@ class apiCallsWrapper:
         resp = self.session.post(url, data=json.dumps(payload), headers=headers)
         logger.debug(resp.url)
         return resp
+
+    def get_waf_sec_detail(self, config_id: int):
+        url = self.formUrl(f'https://{self.access_hostname}/appsec/v1/configs/{config_id}/versions')
+        resp = self.session.get(url, headers=headers)
+        if resp.status_code != 200:
+            logger.info(json.dumps(resp.json(), indent=4))
+        return resp

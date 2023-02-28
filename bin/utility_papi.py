@@ -129,7 +129,7 @@ class papiFunctions:
         elif onboard_object.use_folder:
             # Do Akamai pipeline merge from folder path
             logger.info('Trying to create property rules json from merging files specified in folder_info')
-            if utility_object.doCliPipelineMerge(onboard_object, create_mode=False, merge_type='pm'):
+            if utility_object.doCliPipelineMerge(config, onboard_object, create_mode=False, merge_type='pm'):
                 logger.info('Successfully merged variables and values from folder_info')
 
                 # Update property with value substituted json
@@ -208,7 +208,6 @@ class papiFunctions:
             edgehostname_id = wrapper_object.createEdgehostname(onboard_object.product_id,
                                                                 domain_prefix,
                                                                 onboard_object.secure_network,
-                                                                '',
                                                                 '',
                                                                 onboard_object.contract_id,
                                                                 onboard_object.group_id)

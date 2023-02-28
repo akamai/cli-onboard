@@ -107,18 +107,24 @@ class wafFunctions:
         if match_target_response.status_code == 200:
             # Update the hostnames here
             updated_json_data = match_target_response.json()
-            for every_hostname in hostname_list:
-                updated_json_data['hostnames'].append(every_hostname)
-            logger.debug(json.dumps(updated_json_data, indent=4))
-            # Now update the match target
-            modify_match_target_response = wrapper_object.modifyMatchTarget(config_id,
-                                                          version, target_id,
-                                                          json.dumps(updated_json_data))
-            if modify_match_target_response.status_code == 200:
-                return True
+            if 'hostnames' in updated_json_data.keys():
+
+                for every_hostname in hostname_list:
+                    updated_json_data['hostnames'].append(every_hostname)
+                logger.debug(json.dumps(updated_json_data, indent=4))
+
+                # Now update the match target
+                modify_match_target_response = wrapper_object.modifyMatchTarget(config_id,
+                                                                                version, target_id,
+                                                                                json.dumps(updated_json_data))
+                if modify_match_target_response.status_code == 200:
+                    return True
+                else:
+                    logger.error(json.dumps(modify_match_target_response.json(), indent=4))
+                    return False
             else:
-                logger.error(json.dumps(modify_match_target_response.json(), indent=4))
-                return False
+                logger.info('This WAF policy already uses "ALL HOSTNAMES" as match target.')
+                return True
         else:
             logger.error(json.dumps(match_target_response.json(), indent=4))
             return False
