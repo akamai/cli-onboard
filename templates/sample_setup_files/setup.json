@@ -27,7 +27,7 @@
         ""
     ],
     "edge_hostname": {
-        "mode": "secure_by_default",
+        "mode": "new_enhanced_tls_edgehostname",
         "use_existing_edgehostname": {
             "edge_hostname": ""
         },
@@ -42,10 +42,6 @@
                 "temp_existing_edge_hostname": ""
 
             }
-        },
-        "secure_by_default": {
-            "create_new_edge_hostnames": false,
-            "use_existing_edge_hostname": ""
         }
     },
     "activate_property_staging": false,
