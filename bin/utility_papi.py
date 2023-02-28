@@ -99,8 +99,8 @@ class papiFunctions:
             secure_by_default_create_ehn = False
             if onboard_object.edge_hostname_mode == 'secure_by_default':
                 secure_by_default = True
-            if onboard_object.secure_by_default_use_existing_ehn == '':
-                secure_by_default_create_ehn = True
+                if onboard_object.secure_by_default_use_existing_ehn == '':
+                    secure_by_default_create_ehn = True
             edgehostname_list = wrapper_object.createEdgehostnameArray(onboard_object.public_hostnames,
                                                                        edgeHostname_id,
                                                                        secure_by_default,
