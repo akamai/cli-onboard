@@ -13,7 +13,7 @@
 
         },
         "file_info": {
-            "use_file": false,
+            "use_file": true,
             "source_template_file": "",
             "source_values_file": ""
         },
@@ -27,7 +27,7 @@
         ""
     ],
     "edge_hostname": {
-        "mode": "use_existing_edgehostname",
+        "mode": "secure_by_default",
         "use_existing_edgehostname": {
             "edge_hostname": ""
         },
@@ -42,6 +42,10 @@
                 "temp_existing_edge_hostname": ""
 
             }
+        },
+        "secure_by_default": {
+            "create_new_edge_hostnames": false,
+            "use_existing_edge_hostname": ""
         }
     },
     "activate_property_staging": false,

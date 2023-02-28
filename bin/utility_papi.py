@@ -209,7 +209,6 @@ class papiFunctions:
                                                                 domain_prefix,
                                                                 onboard_object.secure_network,
                                                                 '',
-                                                                '',
                                                                 onboard_object.contract_id,
                                                                 onboard_object.group_id)
             # Response will be either the edgeHostnameId of -1 in case of failure
