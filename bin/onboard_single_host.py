@@ -45,6 +45,12 @@ class onboard:
             self.notification_emails = json_input['notification_emails']
         except KeyError as k:
             sys.exit(logger.error(f'Input file is missing {k}'))
+        
+        try:
+            self.secure_by_default = json_input['edge_hostname']['secure_by_default']
+        except KeyError as k:
+            logger.warn('You are not using the latest template. Please use new setup.json template if you want to use secure by default')
+            self.secure_by_default = False
 
         if isinstance(self.existing_enrollment_id, str):
             if self.existing_enrollment_id == '':

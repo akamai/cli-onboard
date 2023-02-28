@@ -98,16 +98,7 @@ Sample **templates/sample_setup_files/setup.json** for an initial empty setup fi
     "use_existing_edgehostname": {
         "edge_hostname": ""
     },
-    "new_standard_tls_edgehostname": {
-        "ssl_cert_info": {
-        "use_existing_enrollment_id": false,
-        "existing_enrollment_id": 0,
-        "create_new_ssl_cert": false,
-        "ssl_cert_template_file": "",
-        "ssl_cert_template_values": "",
-        "temp_existing_edge_hostname": ""
-
-    }},
+    "new_standard_tls_edgehostname": {},
     "new_enhanced_tls_edgehostname": {
         "ssl_cert_info": {
             "use_existing_enrollment_id": false,
@@ -118,6 +109,10 @@ Sample **templates/sample_setup_files/setup.json** for an initial empty setup fi
             "temp_existing_edge_hostname": ""
 
         }
+    },
+    "secure_by_default": {
+        "create_new_edge_hostnames": false,
+        "use_existing_edge_hostname": ""
     }
 },
 "activate_property_staging": false,
@@ -200,6 +195,10 @@ Sample **templates/sample_setup_files/setup.json** for an initial empty setup fi
 - ssl_cert_template_values: Values for the ssl certificate template to be used (NOT USED ANYMORE)
 - temp_existing_edge_hostname: Due to backend api limitations, a new edge hostname cannot be immediately made that references a newly created certificate enrollment for a brief period of time. Rather than be blocked by this process, specify a temporary edge hostname to use as a placeholder. This value is not really used and just a place holder to proceed with the property manager configuration creation. If using ENHANCED_TLS, use an existing edge hostname ends with edgekey.net ; otherwise if using STANDARD_TLS, use an existing edge hostname that ends with edgesuite.net (NOT USED ANYMORE)
 
+**secure_by_default -- provision secure by default certificates**
+- create_new_edge_hostnames: set to true if you want a new unique edge hostname created for each onboarded hostname. The edge hostnames created will be in the form {hostname}.edgekey.net
+- use_existing_edge_hostname: add an existing edge hostname to use - it must be SNI. All Secure by Default certificates are SNI.
+
 **update_waf_info**
 
 - add_selected_host: Set to true if you want to add specified public_hostnames to WAF selected hosts
@@ -238,6 +237,7 @@ akamai onboard single-host --file ~/path/to/setup_single_host.json
         "property_origin": ""
     },
     "edge_hostname": {
+        "secure_by_default": true,
         "use_existing_edge_hostname": "",
         "create_from_existing_enrollment_id": 0
     },
@@ -268,7 +268,8 @@ akamai onboard single-host --file ~/path/to/setup_single_host.json
 
 **edge_hostname**
 
-- use_existing_edge_hostname: specify existing edge hostname to use (must already exist)
+- secure_by_default: set to true if you want to provision a default certificate for the hostname. This will automatically create a new edge hostname.
+- use_existing_edge_hostname: specify existing edge hostname to use (must already exist). Will not be used if 'secure_by_default' is set to true.
 - create_from_existing_enrollment_id: create new edge hostname from existing certificate enrollment id (must already exist)
 
 ---
@@ -290,7 +291,3 @@ By submitting a contribution (the “Contribution”) to this project, and for g
 Copyright 2020 – Akamai Technologies, Inc.
 
 All works contained in this repository, excepting those explicitly otherwise labeled, are the property of Akamai Technologies, Inc.
-
-```
-
-```

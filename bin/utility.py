@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -159,9 +160,21 @@ class utility:
         if onboard_object.secure_network not in ['STANDARD_TLS', 'ENHANCED_TLS']:
             logger.error(f'{onboard_object.secure_network}{space:>20}invalid secure_network')
             count += 1
+       # ensure hostname doesn't contain special characters and is of valid length
+        reg = re.compile(r'[^\.\-a-zA-Z0-9]')
+        for hostname in onboard_object.public_hostnames:
+            if re.search(reg, hostname):
+                logger.error(f'{hostname} contains invalid character. Only alphanumeric (a-z, A-Z, 0-9) and hyphen (-) characters are supported.')
+                count += 1
+            if len(hostname) > 60 and len(hostname) < 4:
+                logger.error(f'{hostname} is invalid length. Hostname length must be between 4-60 characters')
+                count += 1
+            if (hostname[0] == '-') or (hostname[-1] == '-'):
+                logger.error(f'{hostname} cannot begin or end with a hyphen.')
+                count += 1
 
         # must be one of three valid modes
-        valid_modes = ['use_existing_edgehostname', 'new_standard_tls_edgehostname', 'new_enhanced_tls_edgehostname']
+        valid_modes = ['use_existing_edgehostname', 'new_standard_tls_edgehostname', 'new_enhanced_tls_edgehostname', 'secure_by_default']
         logger.info(f'{onboard_object.edge_hostname_mode:<30}{space:>20}edge hostname mode')
         if onboard_object.edge_hostname_mode not in valid_modes:
             logger.error(f'{onboard_object.edge_hostname_mode:<30}{space:>20}invalid edge_hostname_mode')
@@ -208,6 +221,25 @@ class utility:
             if onboard_object.create_new_ssl_cert is True:
                 logger.error('Unable to create_new_ssl_cert enrollment, please use existing_enrollment_id instead')
                 count += 1
+
+        # check secure by default settings
+        elif onboard_object.edge_hostname_mode == 'secure_by_default':
+            ehn_id = 0
+            if onboard_object.secure_by_default_use_existing_ehn == '' and (not onboard_object.secure_by_default_new_ehn):
+                logger.error(f'{onboard_object.edge_hostname:<30}{space:>20}missing edge hostname')
+                count += 1
+            if (not onboard_object.secure_by_default_new_ehn) and (onboard_object.secure_by_default_use_existing_ehn != ''):
+                try:
+                    # check to see if specified edge hostname exists
+                    ehn_id = self.validateEdgeHostnameExists(wrapper_object, str(onboard_object.secure_by_default_use_existing_ehn))
+                    public_hostname_str = ', '.join(onboard_object.public_hostnames)
+                    logger.info(f'ehn_{ehn_id:<26}{space:>20}valid edge_hostname_id')
+                    logger.info(f'{onboard_object.secure_by_default_use_existing_ehn:<30}{space:>20}valid edge hostname')
+                    logger.info(f'{public_hostname_str:<30}{space:>20}valid public hostname')
+                    onboard_object.edge_hostname_id = ehn_id
+                except:
+                    logger.error(f'{onboard_object.secure_by_default_use_existing_ehn:<30}{space:>20}invalid edge hostname')
+                    count += 1
 
         # validate source and variable file is use_file mode (create only)
         if onboard_object.use_file:

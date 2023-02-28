@@ -6,6 +6,7 @@
         "property_origin": ""
     },
     "edge_hostname": {
+        "secure_by_default": false,
         "use_existing_edge_hostname": "",
         "create_from_existing_enrollment_id": 0
     },
@@ -15,6 +16,6 @@
     },
     "activate_production": false,
     "notification_emails": [
-        ""
+        "noreply@akamai.com"
     ]
 }
