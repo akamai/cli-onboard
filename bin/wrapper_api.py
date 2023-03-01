@@ -125,16 +125,25 @@ class apiCallsWrapper:
         update_property_response = self.session.put(update_property_url, data=ruletree, headers=headers)
         return update_property_response
 
-    def createEdgehostnameArray(self, hostname_list, edge_hostname_id):
+    def createEdgehostnameArray(self, hostname_list, edge_hostname_id, secure_by_default, secure_by_default_ehn):
         """
         Function to create Edgehostname array for existing edgehostnames
         """
         edgehostname_list = []
+        cert_provisioning_type = 'CPS_MANAGED'
+        if secure_by_default:
+            cert_provisioning_type = 'DEFAULT'
+
         for eachHostname in hostname_list:
             edgehostnameDetails = {}
             edgehostnameDetails['cnameType'] = 'EDGE_HOSTNAME'
-            edgehostnameDetails['edgeHostnameId'] = edge_hostname_id
             edgehostnameDetails['cnameFrom'] = eachHostname
+            edgehostnameDetails['certProvisioningType'] = cert_provisioning_type
+            # use ehnid for cps and when new SBD edge hostname mode is off
+            if not secure_by_default_ehn:
+                edgehostnameDetails['edgeHostnameId'] = edge_hostname_id
+            else:
+                edgehostnameDetails['cnameTo'] = f'{eachHostname}.edgekey.net'
             edgehostname_list.append(edgehostnameDetails)
         return edgehostname_list
 
@@ -165,7 +174,7 @@ class apiCallsWrapper:
         update_prop_hostname_url = 'https://' + self.access_hostname + \
                                    '/papi/v1/properties/' + propertyId + \
                                    '/versions/1/hostnames?contractId=' + contractId + \
-                                   '&groupId=' + groupId + '&validateHostnames=true'
+                                   '&groupId=' + groupId + '&validateHostnames=true&includeCertStatus=true'
         update_prop_hostname_url = self.formUrl(update_prop_hostname_url)
         update_prop_hostname_response = self.session.put(update_prop_hostname_url,
                                                     data=edgehostnamedata,

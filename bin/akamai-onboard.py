@@ -131,6 +131,7 @@ def single_host(config, file):
                          setup.contract_id,
                          setup.product_id,
                          setup.public_hostnames,
+                         setup.secure_by_default,
                          setup.edge_hostname,
                          setup.notification_emails
     )
@@ -154,6 +155,8 @@ def single_host(config, file):
     if not setup.activate_production:
         onboard.activate_property_production = False
         onboard.activate_waf_policy_production = False
+    if onboard.secure_by_default:
+        onboard.edge_hostname_mode = 'secure_by_default'
 
     # Validate setup and akamai cli and cli pipeline are installed
     util = utility.utility()

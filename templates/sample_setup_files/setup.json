@@ -42,6 +42,10 @@
                 "temp_existing_edge_hostname": ""
 
             }
+        },
+        "secure_by_default": {
+            "create_new_edge_hostnames": false,
+            "use_existing_edge_hostname": ""
         }
     },
     "activate_property_staging": false,

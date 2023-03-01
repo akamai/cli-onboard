@@ -27,6 +27,7 @@ class SingleHost:
     contract_id: str
     product_id: str
     public_hostnames: list
+    secure_by_default: bool
     edge_hostname: str
     notification_emails: list
 
@@ -54,6 +55,9 @@ class SingleHost:
     folder_path: str = ''
     env_name: str = ''
 
+    # cert
+    secure_by_default_new_ehn: bool = True
+    secure_by_default_use_existing_ehn: str = ''
     use_existing_enrollment_id: bool = False
     existing_enrollment_id: int = 0
     create_new_ssl_cert: bool = False

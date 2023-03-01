@@ -95,7 +95,16 @@ class papiFunctions:
         edgeHostname_id = self.processEdgeHostnameInput(onboard_object,
                                wrapper_object, utility_object)
         if edgeHostname_id != -1:
-            edgehostname_list = wrapper_object.createEdgehostnameArray(onboard_object.public_hostnames, edgeHostname_id)
+            secure_by_default = False
+            secure_by_default_create_ehn = False
+            if onboard_object.edge_hostname_mode == 'secure_by_default':
+                secure_by_default = True
+                if onboard_object.secure_by_default_use_existing_ehn == '':
+                    secure_by_default_create_ehn = True
+            edgehostname_list = wrapper_object.createEdgehostnameArray(onboard_object.public_hostnames,
+                                                                       edgeHostname_id,
+                                                                       secure_by_default,
+                                                                       secure_by_default_create_ehn)
         else:
             sys.exit(logger.error('Unable to proceed beyond edge hostname and/or ssl certificate logic'))
 
@@ -105,9 +114,18 @@ class papiFunctions:
                                                                         onboard_object.onboard_property_id,
                                                                         json.dumps(edgehostname_list))
         if property_update_reponse.status_code == 200:
-            logger.info(f'Updated public hostname {onboard_object.public_hostnames}, '
-                        f"and edge hostname '{onboard_object.edge_hostname}'")
+            if onboard_object.edge_hostname_mode == 'secure_by_default':
+                logger.warning('Secure by default Tokens')
+                property_update_response_json = property_update_reponse.json()
+                for hostname in property_update_response_json['hostnames']['items']:
+                    property_update_response_sbd_token = hostname['certStatus']['validationCname']
+                    logger.info(f'{property_update_response_sbd_token}')
+            else:
+                logger.info(f'Updated public hostname {onboard_object.public_hostnames}, '
+                            f"and edge hostname '{onboard_object.edge_hostname}'")
+            print()
         else:
+            logger.info(onboard_object.edge_hostname_mode)
             logger.error(f'Unable to update public hostname {onboard_object.public_hostnames}, '
                          f"and edge hostname '{onboard_object.edge_hostname}'")
             sys.exit(logger.error(json.dumps(property_update_reponse.json(), indent=4)))
@@ -201,6 +219,9 @@ class papiFunctions:
         By time this method is called, onboard_object should already have edge_hostname_id set by validate steps up front
         """
         if onboard_object.edge_hostname_mode == 'use_existing_edgehostname':
+            edgeHostnameId = f'ehn_{onboard_object.edge_hostname_id}'
+            return edgeHostnameId
+        elif onboard_object.edge_hostname_mode == 'secure_by_default':
             edgeHostnameId = f'ehn_{onboard_object.edge_hostname_id}'
             return edgeHostnameId
         elif onboard_object.edge_hostname_mode == 'new_standard_tls_edgehostname':
@@ -303,6 +324,7 @@ class papiFunctions:
 
                         # Response will be either the edgeHostnameId of -1 in case of failure
                         return edgehostname_id
+        
         else:
             logger.error(f'Unknown edge_hostname_mode: {onboard_object.edge_hostname_mode}')
             return (-1)

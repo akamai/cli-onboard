@@ -110,6 +110,12 @@ class onboard:
             exit(-1)
 
         try:
+            self.secure_by_default_new_ehn = setup_json_content['edge_hostname']['secure_by_default']['create_new_edge_hostnames']
+            self.secure_by_default_use_existing_ehn = setup_json_content['edge_hostname']['secure_by_default']['use_existing_edge_hostname']
+        except KeyError as k:
+            logger.warn('You are not using the latest template. Please use new setup.json template if you want to use secure by default')
+
+        try:
             self.version_notes = setup_json_content['property_info']['version_notes']
         except KeyError as k:
             self.version_notes = 'Created using Onboard CLI'
