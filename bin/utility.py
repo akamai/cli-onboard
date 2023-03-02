@@ -325,17 +325,25 @@ class utility:
         else:
             pass
 
-        # valid notify_emails is required
+         # valid notify_emails is required
         emails = onboard_object.notification_emails
-        if len(emails) == 0:
-            logger.error('At least one valid notification email is required')
-            count += 1
-        else:
-            for email in emails:
-                if not is_email(email):
-                    logger.error(f'{email:<30}{space:>20}invalid email address')
-                    count += 1
 
+        # check if emails are empty and activation is true - can be [""] or []
+        if (onboard_object.activate_property_staging or onboard_object.activate_property_production):
+            if len(emails) == 0:
+                logger.error('At least one valid notification email is required for activations')
+                count += 1
+            if len(emails) == 1:
+                if emails[0] == '':
+                    logger.error('At least one valid notification email is required for activations')
+                    count += 1
+            # check that emails are valid
+            if len(emails) > 0:
+                for email in emails:
+                    if not is_email(email):
+                        logger.error(f'{email:<30}{space:>20}invalid email address')
+                        count += 1
+        
         # maximum active security config per network is 10
         '''
         if onboard_object.activate_waf_policy_staging and valid_waf:
