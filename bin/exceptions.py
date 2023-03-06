@@ -26,8 +26,13 @@ import coloredlogs
 Path('logs').mkdir(parents=True, exist_ok=True)
 Path('config').mkdir(parents=True, exist_ok=True)
 home = str(Path.home())
-origin_config = Path('~/.akamai-cli/src/cli-onboard/config/logging.json')
-origin_config = os.path.expanduser(origin_config)
+try:
+    origin_config = Path('~/.akamai-cli/src/cli-onboard/config/logging.json')
+    origin_config = os.path.expanduser(origin_config)
+except FileNotFoundError as e:
+    # akamai docker/shell
+    origin_config = Path('/cli/.akamai-cli/src/cli-onboard/config/logging.json')
+
 try:
     shutil.copy2(origin_config, 'config/logging.json')
 except FileNotFoundError as e:
