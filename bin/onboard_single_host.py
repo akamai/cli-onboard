@@ -79,6 +79,6 @@ class onboard:
         with open(f'{template_path}/template_variables.json', 'w') as file:
             json.dump(var, file, ensure_ascii=True, indent=4)
         # override when run via python script
-        with open('templates/template_variables.json', 'w') as file:
+        with open('template_variables.json', 'w') as file:
             json.dump(var, file, ensure_ascii=True, indent=4)
         return None
