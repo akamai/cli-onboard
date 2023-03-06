@@ -17,9 +17,11 @@ import json
 import sys
 from pathlib import Path
 
+from exceptions import get_cli_root_directory
 from exceptions import setup_logger
 
 logger = setup_logger()
+root = get_cli_root_directory()
 
 
 class onboard:
@@ -45,7 +47,7 @@ class onboard:
             self.notification_emails = json_input['notification_emails']
         except KeyError as k:
             sys.exit(logger.error(f'Input file is missing {k}'))
-        
+
         try:
             self.secure_by_default = json_input['edge_hostname']['secure_by_default']
         except KeyError as k:
@@ -71,8 +73,8 @@ class onboard:
         """
         var = {}
         var['origin_default'] = self.property_origin
-        home = str(Path.home())
-        template_path = f'{home}/.akamai-cli/src/cli-onboard/templates/akamai_product_templates'
+        # home = str(Path.home())
+        template_path = f'{root}/templates/akamai_product_templates'
         # override when run via CLI
         with open(f'{template_path}/template_variables.json', 'w') as file:
             json.dump(var, file, ensure_ascii=True, indent=4)
