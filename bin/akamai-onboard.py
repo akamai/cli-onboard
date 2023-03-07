@@ -35,6 +35,7 @@ import utility_waf
 import wrapper_api
 from akamai.edgegrid import EdgeGridAuth
 from akamai.edgegrid import EdgeRc
+from exceptions import get_cli_root_directory
 from exceptions import setup_logger
 from model.single_host import SingleHost
 
@@ -46,6 +47,7 @@ Initiators: vbhat@akamai.com and aetsai@akamai.com
 
 PACKAGE_VERSION = '2.0.0'
 logger = setup_logger()
+root = get_cli_root_directory()
 
 
 class Config:
@@ -141,8 +143,8 @@ def single_host(config, file):
     onboard.create_new_security_config = setup.create_new_security_config
     if len(setup.waf_config_name) > 0:
         onboard.waf_config_name = setup.waf_config_name
-    home = str(Path.home())
-    template_path = f'{home}/.akamai-cli/src/cli-onboard/templates/akamai_product_templates'
+    # home = str(Path.home())
+    template_path = f'{root}/templates/akamai_product_templates'
     onboard.source_template_file = f'{template_path}/{setup.product_id}.json'
     onboard.source_values_file = f'{template_path}/template_variables.json'
     logger.info(f'Rule Template Location: {onboard.source_template_file}')
