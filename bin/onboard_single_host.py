@@ -51,7 +51,7 @@ class onboard:
         try:
             self.secure_by_default = json_input['edge_hostname']['secure_by_default']
         except KeyError as k:
-            logger.warn('You are not using the latest template. Please use new setup.json template if you want to use secure by default')
+            logger.warning('You are not using the latest template. Please use new setup.json template if you want to use secure by default')
             self.secure_by_default = False
 
         if isinstance(self.existing_enrollment_id, str):
@@ -69,16 +69,15 @@ class onboard:
 
     def write_variable_json(self) -> None:
         """
-        Override origin server inside templates/variables.json which is hidden from user
+        Override origin server inside templates/single_variables.json which is hidden from user
         """
-        var = {}
-        var['origin_default'] = self.property_origin
-        # home = str(Path.home())
-        template_path = f'{root}/templates/akamai_product_templates'
+        var = {'origin_default': self.property_origin}
+
         # override when run via CLI
-        with open(f'{template_path}/template_variables.json', 'w') as file:
-            json.dump(var, file, ensure_ascii=True, indent=4)
+        variable_file = Path(root, 'templates/akamai_product_templates/single_variable.json')
+        with variable_file.open('w') as file:
+            json.dump(var, file, indent=4)
+
         # override when run via python script
-        with open('template_variables.json', 'w') as file:
-            json.dump(var, file, ensure_ascii=True, indent=4)
-        return None
+        with Path('logs/single_variable.json').absolute().open('w') as file:
+            json.dump(var, file, indent=4)
