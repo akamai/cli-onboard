@@ -374,7 +374,7 @@ www.example.com,origin.example.com,new_property_1,ORIGIN_HOSTNAME,www.example.co
 - **origin**: [required] Origin hostname
 - **propertyName**: Name of property. If empty or column is missing, defaults to hostname.
 - - If 2 rows have the same propertyName, the hostnames will be added to the same property and an origin behavior ruleset will be injected into the inputed template
-- **forwardHostHeader**: Host header used on forward request to origin. Can be either 'INCOMING_HOST_HEADER' or 'ORIGIN_HOSTNAME'. If empty or column is missing, defaults to 'INCOMING_HOST_HEADER'. This setting will override whatever is in the input template default origin behavior.
+- **forwardHostHeader**: Host header used on forward request to origin. Can be either 'REQUEST_HOST_HEADER' or 'ORIGIN_HOSTNAME'. If empty or column is missing, defaults to 'REQUEST_HOST_HEADER'. This setting will override whatever is in the input template default origin behavior.
 - **edgeHostname**: [required unless using secure_by_default] The edge hostname to map the hostname to. The edge hostname must already exist. Batch-create mode does NOT create new edge hostnames unless secure-by-default mode is being used
 
 </details>
