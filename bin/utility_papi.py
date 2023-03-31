@@ -5,16 +5,18 @@ import os
 import shutil
 import sys
 import time
+from pathlib import Path
 from time import gmtime
 from time import strftime
 
 from exceptions import setup_logger
+from poll import pollActivation
 
 logger = setup_logger()
 
 
 class papiFunctions:
-    def activateAndPoll(self, wrapper_object, property_name,
+    def activate_and_poll(self, wrapper_object, property_name,
                         contract_id, group_id, property_id, version,
                         network, emailList: list, notes):
         """
@@ -24,6 +26,7 @@ class papiFunctions:
         start_time = time.perf_counter()
         act_response = wrapper_object.activateConfiguration(contract_id, group_id, property_id,
                                                             version, network, emailList, notes)
+        logger.debug(act_response.json())
         if act_response.status_code == 201:
             activation_status = False
             activation_id = act_response.json()['activationLink'].split('?')[0].split('/')[-1]
@@ -58,8 +61,37 @@ class papiFunctions:
             logger.error(json.dumps(act_response.json(), indent=4))
             return False
 
-    def createNewCpCode(self, onboard_object, wrapper_object,
-                        cpcode_name, contract_id, group_id, product_id):
+    def batch_activate_and_poll(self, wrapper_object, propertyDict,
+                        contract_id, group_id, version,
+                        network, emailList: list, notes):
+        """
+        Function to activate a property to Akamai Staging or Production network.
+        """
+
+        for i, activation in enumerate(propertyDict):
+            logger.warning(f'Preparing to activate property {activation["propertyName"]} on Akamai {network} network')
+            act_response = wrapper_object.activateConfiguration(contract_id, group_id, activation['propertyId'],
+                                                                version, network, emailList, notes)
+            if act_response.status_code == 201:
+                activation_status = False
+                activation_id = act_response.json()['activationLink'].split('?')[0].split('/')[-1]
+                propertyDict[i]['activationId'] = activation_id
+                logger.warning(f'Activation started for {activation["propertyName"]} on Akamai {network} network')
+
+            else:
+                logger.error(json.dumps(act_response.json(), indent=4))
+                propertyDict[i]['activationId'] = 0
+
+        all_properties_active, activationDict = pollActivation(propertyDict, wrapper_object, contract_id, group_id, network)
+        failed_activations = (list(filter(lambda x: x['activationStatus'][network] not in ['ACTIVE'], activationDict)))
+        successful_activations = (list(filter(lambda x: x['activationStatus'][network] in ['ACTIVE'], activationDict)))
+        success_onboarded_hostnames = (list(map(lambda x: x['hostnames'], successful_activations)))
+        success_onboarded_hostnames = [item for sublist in success_onboarded_hostnames for item in sublist]
+
+        return (all_properties_active, success_onboarded_hostnames, failed_activations, activationDict)
+
+    def create_new_cpcode(self, onboard_object, wrapper_object,
+                        cpcode_name, contract_id, group_id, product_id) -> int:
         """
         Function to create new cpcode
         """
@@ -73,8 +105,9 @@ class papiFunctions:
         else:
             logger.error(json.dumps(create_cpcode_response.json(), indent=4))
             sys.exit(logger.error('Unable to create new cpcode'))
+        return int(new_cpcode)
 
-    def createAndUpdateProperty(self, config, onboard_object, wrapper_object, utility_object):
+    def create_update_pm(self, config, onboard_object, wrapper_object, utility_object, cli_mode: str | None = None):
         """
         Function with multiple goals:
             1. Create a property
@@ -92,8 +125,7 @@ class papiFunctions:
             sys.exit(logger.error(json.dumps(create_property_response.json(), indent=4)))
 
         # Do edgehostname logic
-        edgeHostname_id = self.processEdgeHostnameInput(onboard_object,
-                               wrapper_object, utility_object)
+        edgeHostname_id = self.process_ehn(onboard_object, wrapper_object, utility_object, cli_mode)
         if edgeHostname_id != -1:
             secure_by_default = False
             secure_by_default_create_ehn = False
@@ -132,18 +164,19 @@ class papiFunctions:
 
         if onboard_object.use_file:
             # Do Akamai pipeline merge from file
+            logger.debug(f'{onboard_object.onboard_default_cpcode=}')
             if utility_object.doCliPipelineMerge(config, onboard_object, create_mode=True, merge_type='pm'):
                 logger.info('Merged variables and values via CLI pipeline')
 
                 # Update property with value substituted json
                 with open(os.path.join('temp_pm', 'dist', 'test.temp_pm.papi.json')) as updateTemplateFile:
                     updateContent = json.load(updateTemplateFile)
-
             else:
                 sys.exit(logger.error('Unable to merge variables and values '
                                       'Please check temp_pm folder to see '
                                       'if merge output file was created in dist folder '
                                       'and/or devops-log.log for more details'))
+
         elif onboard_object.use_folder:
             # Do Akamai pipeline merge from folder path
             logger.info('Trying to create property rules json from merging files specified in folder_info')
@@ -163,13 +196,14 @@ class papiFunctions:
 
         # Update the json data to include is_secure if its a secure network enabled config
         # Values have already been validated
+        logger.debug(f'{onboard_object.secure_network=}')
         if onboard_object.secure_network == 'ENHANCED_TLS':
-            updateContent['options'] = dict()
-            updateContent['options']['is_secure'] = True
+            updateContent['rules']['options'] = dict()
+            updateContent['rules']['options']['is_secure'] = True
         else:
             # This is a non-secure configuration
-            updateContent['options'] = dict()
-            updateContent['options']['is_secure'] = False
+            updateContent['rules']['options'] = dict()
+            updateContent['rules']['options']['is_secure'] = False
         updateContent['comments'] = onboard_object.version_notes
         updateContent['ruleFormat'] = onboard_object.rule_format
 
@@ -212,7 +246,7 @@ class papiFunctions:
             except:
                 pass
 
-    def processEdgeHostnameInput(self, onboard_object, wrapper_object, utility_object):
+    def process_ehn(self, onboard_object, wrapper_object, utility_object, cli_mode: str | None = None):
         """
         Function to determine steps on edgehostname and return edge hostname id that will be used in the new onboarded property
         Return edge hostname id should start with ehn_ because that's what subsequent apis calls need
@@ -221,11 +255,11 @@ class papiFunctions:
         if onboard_object.edge_hostname_mode == 'use_existing_edgehostname':
             edgeHostnameId = f'ehn_{onboard_object.edge_hostname_id}'
             return edgeHostnameId
-        elif onboard_object.edge_hostname_mode == 'secure_by_default':
-            edgeHostnameId = f'ehn_{onboard_object.edge_hostname_id}'
-            return edgeHostnameId
         elif onboard_object.edge_hostname_mode == 'new_standard_tls_edgehostname':
             domain_prefix = onboard_object.public_hostnames[0]
+            # use property name for all edge hostname when no cpcode is created for all hostnames
+            if cli_mode == 'multi-hosts' and not onboard_object.individual_cpcode:
+                domain_prefix = onboard_object.property_name
             edgehostname_id = wrapper_object.createEdgehostname(onboard_object.product_id,
                                                                 domain_prefix,
                                                                 onboard_object.secure_network,
@@ -235,8 +269,11 @@ class papiFunctions:
             # Response will be either the edgeHostnameId of -1 in case of failure
             return edgehostname_id
         elif onboard_object.edge_hostname_mode == 'new_enhanced_tls_edgehostname':
-            if onboard_object.use_existing_enrollment_id is True:
+            if onboard_object.use_existing_enrollment_id > 0:
                 domain_prefix = onboard_object.public_hostnames[0]
+                if cli_mode == 'multi-hosts':
+                    domain_prefix = onboard_object.property_name
+                logger.debug(f'{cli_mode=} {onboard_object.use_existing_enrollment_id=} {domain_prefix=}')
                 edgehostname_id = wrapper_object.createEdgehostname(onboard_object.product_id,
                                                                     domain_prefix,
                                                                     onboard_object.secure_network,
@@ -245,86 +282,155 @@ class papiFunctions:
                                                                     onboard_object.group_id)
                 # Response will be either the edgeHostnameId of -1 in case of failure
                 return edgehostname_id
-            elif onboard_object.create_new_ssl_cert is True:
 
-                # Invoke merge
-                logger.info('Trying to create ssl cert json from merging files specified in ssl_cert_info')
-                if utility_object.doCliPipelineMerge(onboard_object, create_mode=True, merge_type='cps'):
-                    logger.info('Successfully merged variables and values from ssl_cert_info')
-
-                    # Read the certificate data file, created from merge
-                    with open(os.path.join('temp_cps', 'dist',
-                                           'test.temp_cps.papi.json')) as inputFileHandler:
-                        file_content = inputFileHandler.read()
-                else:
-                    sys.exit(logger.error('Unable to merge variables and values from ssl_cert_info. '
-                                          'Please check temp_cps folder to see '
-                                          'if merge output file was created in dist folder '
-                                          'and/or devops-log.log for more details'))
-
-                json_formatted_content = json.loads(file_content)
-                updated_json_content = json.dumps(json_formatted_content, indent=2)
-
-                logger.info('Trying to create a new certificate enrollment')
-                if onboard_object.contract_id.startswith('ctr_'):
-                    contract_id = onboard_object.contract_id.split('_')[1]
-                else:
-                    contract_id = onboard_object.contract_id
-                create_enrollment_response = wrapper_object.create_enrollment(contract_id,
-                                                            data=updated_json_content,
-                                                            allowDuplicateCn=False)
-                if create_enrollment_response.status_code != 200 and \
-                    create_enrollment_response.status_code != 202:
-                    logger.error(create_enrollment_response.text)
-                    logger.error('Unable to create certificate enrollment')
-                    return -1
-                else:
-                    logger.info('Successfully created certificate enrollment')
-
-                    # Delete the pipeline temporary directory used for cps merge only after certificate enrollment is successfully created.
-                    # If we didn't get here, leave the temp_cps folder the so user can debug
-                    if os.path.exists('temp_cps'):
-                        shutil.rmtree('temp_cps')
-                        try:
-                            os.remove('devops.log')
-                        except:
-                            pass
-
-                        try:
-                            os.remove('devops-logs.log')
-                        except:
-                            pass
-
-                    if onboard_object.temp_existing_edge_hostname != '':
-                        logger.warning('NOTE: New edge hostname cannot be created yet from this new certificate. '
-                                      'Please create edge hostname after certificate has been deployed. '
-                                      'Associating specified temp_edge_hostname to property for now.')
-                        edgehostname_id = 'ehn_' + str(onboard_object.edge_hostname_id)
-                        return edgehostname_id
-                    else:
-                        # This block should never get executed because
-                        #    up front validation requires temp edge_hostname
-                        #    to be used if create_new_ssl_cert
-                        # Akamai APIs do not allow you to create edge hostname right way
-                        #    based of the new enrollment that was created. There is some delay
-                        # But in the future if Akamai APIs allow you to create new edge hostname
-                        #    right away after new enrollment created, hopefully should not need
-                        # temp edge hostname workaround
-                        domain_prefix = onboard_object.public_hostnames[0]
-                        cert_enrollment_id = create_enrollment_response.json()['enrollment'].split('/')[-1]
-
-                        # Create edgehostname
-                        edgehostname_id = wrapper_object.createEdgehostname(onboard_object.product_id,
-                                                                            domain_prefix,
-                                                                            onboard_object.secure_network,
-                                                                            cert_enrollment_id,
-                                                                            '',
-                                                                            onboard_object.contract_id,
-                                                                            onboard_object.group_id)
-
-                        # Response will be either the edgeHostnameId of -1 in case of failure
-                        return edgehostname_id
-        
+        elif onboard_object.edge_hostname_mode == 'secure_by_default':
+            edgeHostnameId = f'ehn_{onboard_object.edge_hostname_id}'
+            return edgeHostnameId
         else:
             logger.error(f'Unknown edge_hostname_mode: {onboard_object.edge_hostname_mode}')
             return (-1)
+
+    def batch_process_ehn(self, onboard_object, wrapper_object, utility_object):
+        """
+        Function to determine steps on edgehostname and return edge hostname list that will be used in the new onboarded property
+        Return edge hostname ids should start with ehn_ because that's what subsequent apis calls need
+        By time this method is called, onboard_object should already have edge_hostname_id set by validate steps up front
+        """
+        if onboard_object.edge_hostname_mode == 'use_existing_edgehostname':
+            edgeHostnameId = f'ehn_{onboard_object.edge_hostname_id}'
+            return edgeHostnameId
+
+        elif onboard_object.edge_hostname_mode == 'secure_by_default':
+            edgeHostnameId = f'ehn_{onboard_object.edge_hostname_id}'
+            return edgeHostnameId
+
+        else:
+            logger.error(f'Unknown edge_hostname_mode: {onboard_object.edge_hostname_mode}')
+            return (-1)
+
+    def batch_create_update_pm(self, config, onboard_object, wrapper_object, utility_object, propertyDict, cpcodeList):
+        """
+        Function with multiple goals:
+            1. Create a property
+            2. Update the property with template rules define
+        """
+        propertyIds = []
+        for propertyName in propertyDict:
+            # set property name and hostnames the dict key value
+            onboard_object.property_name = propertyName
+            onboard_object.public_hostnames = propertyDict[propertyName]['hostnames']
+            create_property_response = wrapper_object.createProperty(onboard_object.contract_id,
+                                                                    onboard_object.group_id,
+                                                                    onboard_object.product_id,
+                                                                    onboard_object.property_name)
+            if create_property_response.status_code == 201:
+                onboard_object.onboard_property_id = create_property_response.json()['propertyLink'].split('?')[0].split('/')[-1]
+                propertyIds.append({
+                    'propertyId': onboard_object.onboard_property_id,
+                    'propertyName': onboard_object.property_name,
+                    'hostnames': onboard_object.public_hostnames
+                })
+
+                logger.info(f"Created property name: '{onboard_object.property_name}', id: {onboard_object.onboard_property_id}")
+            else:
+                logger.error('Unable to create property')
+                sys.exit(logger.error(json.dumps(create_property_response.json(), indent=4)))
+
+            # Do edgehostname logic
+            edgeHostname_id = self.batch_process_ehn(onboard_object, wrapper_object, utility_object)
+
+            secure_by_default = False
+            secure_by_default_create_ehn = False
+            if onboard_object.edge_hostname_mode == 'secure_by_default':
+                secure_by_default = True
+            edgehostname_list = wrapper_object.bulkCreateEdgehostnameArray(onboard_object.public_hostnames,
+                                                                    propertyDict[propertyName]['edgeHostnames'],
+                                                                    secure_by_default,
+                                                                    secure_by_default_create_ehn)
+
+            # Update property hostnames and edgehostnames
+            property_update_reponse = wrapper_object.updatePropertyHostname(onboard_object.contract_id,
+                                                                            onboard_object.group_id,
+                                                                            onboard_object.onboard_property_id,
+                                                                            json.dumps(edgehostname_list))
+            if property_update_reponse.status_code == 200:
+                if onboard_object.edge_hostname_mode == 'secure_by_default':
+                    logger.warning('Secure by default Tokens')
+                    property_update_response_json = property_update_reponse.json()
+                    for hostname in property_update_response_json['hostnames']['items']:
+                        property_update_response_sbd_token = hostname['certStatus']['validationCname']
+                        logger.info(f'{property_update_response_sbd_token}')
+                else:
+                    logger.info(f'Updated public hostname {onboard_object.public_hostnames}, '
+                                f"and edge hostname '{propertyDict[propertyName]['edgeHostnames']}'")
+            else:
+                logger.info(onboard_object.edge_hostname_mode)
+                logger.error(f'Unable to update public hostname {onboard_object.public_hostnames}, '
+                            f"and edge hostname '{propertyDict[propertyName]['edgeHostnames']}'")
+                sys.exit(logger.error(json.dumps(property_update_reponse.json(), indent=4)))
+
+            # Update the json data to include is_secure if its a secure network enabled config
+            # Values have already been validated
+
+            updateContent = propertyDict[propertyName]['ruleTree']
+
+            if onboard_object.secure_network == 'ENHANCED_TLS':
+                updateContent['rules']['options'] = dict()
+                updateContent['rules']['options']['is_secure'] = True
+            else:
+                # This is a non-secure configuration
+                updateContent['rules']['options'] = dict()
+                updateContent['rules']['options']['is_secure'] = False
+            updateContent['comments'] = onboard_object.version_notes
+            updateContent['ruleFormat'] = onboard_object.rule_format
+
+            try:
+                # look for the cpcode and origin behavior in the default rule and update it with origin hostname and custom forwardHostHeader
+                first_hostname = propertyDict[propertyName]['hostnames'][0]
+                first_origin = propertyDict[propertyName]['origins'][0]
+                forward_host_header = propertyDict[propertyName]['forwardHostHeader'][0]
+                for each_behavior in updateContent['rules']['behaviors']:
+                    if each_behavior['name'] == 'cpCode':
+                        each_behavior['options']['value']['id'] = cpcodeList[first_hostname]
+                        logger.info(f'Updated default rule with with cpcode name: {first_hostname} id: {cpcodeList[first_hostname]}')
+                    if each_behavior['name'] == 'origin':
+                        each_behavior['options']['hostname'] = first_origin
+                        each_behavior['options']['forwardHostHeader'] = forward_host_header
+            except:
+                # cp code behavior didn't exist in default rule for some reason so must be error with template and error
+                sys.exit(logger.error('Unable to update default rule cpcode and origin hostname'))
+
+            try:
+                onboard_object.level_0_rules.insert(0, propertyDict[propertyName]['originRule'])
+                updateContent['rules'].update({'children': onboard_object.level_0_rules})
+                self.reset_level_0_rules(onboard_object)
+            except KeyError:
+                updateContent['rules']['children'] = onboard_object.level_0_rules
+                self.reset_level_0_rules(onboard_object)
+
+            # Update Property Rules
+            updateRulesResponse = wrapper_object.updatePropertyRules(onboard_object.contract_id,
+                                                                    onboard_object.group_id,
+                                                                    onboard_object.onboard_property_id,
+                                                                    onboard_object.rule_format,
+                                                                    ruletree=json.dumps(updateContent))
+
+            if updateRulesResponse.status_code == 200:
+                logger.info('Updated property with rules')
+                print()
+            else:
+                logger.error('Unable to update rules for property')
+                sys.exit(logger.error(json.dumps(updateRulesResponse.json(), indent=4)))
+
+        return (propertyIds)
+
+    def reset_level_0_rules(self, onboard_object):
+        home = str(Path.home())
+        cli_path = f'{home}/.akamai-cli/src/cli-onboard/templates/akamai_product_templates/behaviors'
+        templateFile = onboard_object.source_template_file
+        with open(templateFile) as templateHandler:
+            templateData = json.load(templateHandler)
+
+        # update template to include origin and cpCode behaviors in default rule if they don't exist
+        default_behaviors = templateData['rules']['behaviors']
+        onboard_object.level_0_rules = templateData['rules']['children']
