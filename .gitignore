@@ -3,5 +3,7 @@
 *logs*
 .DS_Store
 .venv
-.DS_Store
 .vscode
+.scripts
+.templates
+sample_templates

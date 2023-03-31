@@ -1,0 +1,58 @@
+{
+  "property_info": {
+    "property_name": "",
+    "secure_network": "ENHANCED_TLS",
+    "contract_id": "ctr_",
+    "group_id": "grp_",
+    "product_id": "prd_",
+    "version_notes": "",
+    "rule_format": "latest",
+    "default_cpcode": {
+      "create_new_cpcode": false,
+      "new_cpcode_name": ""
+    },
+    "file_info": {
+      "use_file": true,
+      "source_template_file": "",
+      "source_values_file": ""
+    },
+    "folder_info": {
+      "use_folder": false,
+      "folder_path": "",
+      "env_name": ""
+    }
+  },
+  "public_hostnames": [""],
+  "edge_hostname": {
+    "mode": "new_enhanced_tls_edgehostname",
+    "use_existing_edgehostname": {
+      "edge_hostname": ""
+    },
+    "new_standard_tls_edgehostname": {},
+    "new_enhanced_tls_edgehostname": {
+      "ssl_cert_info": {
+        "use_existing_enrollment_id": false,
+        "existing_enrollment_id": 0,
+        "create_new_ssl_cert": false,
+        "ssl_cert_template_file": "",
+        "ssl_cert_template_values": "",
+        "temp_existing_edge_hostname": ""
+      }
+    },
+    "secure_by_default": {
+      "create_new_edge_hostnames": false,
+      "use_existing_edge_hostname": ""
+    }
+  },
+  "activate_property_staging": true,
+  "update_waf_info": {
+    "add_selected_host": true,
+    "waf_config_name": "",
+    "update_match_target": true,
+    "waf_match_target_id": 0
+  },
+  "activate_waf_policy_staging": true,
+  "activate_property_production": false,
+  "activate_waf_policy_production": false,
+  "notification_emails": ["noreply@akamai.com"]
+}

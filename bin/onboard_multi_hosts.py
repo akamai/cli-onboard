@@ -1,5 +1,5 @@
 """
-Copyright 2022 Akamai Technologies, Inc. All Rights Reserved.
+Copyright 2023 Akamai Technologies, Inc. All Rights Reserved.
 
  Licensed under the Apache License, Version 2.0 (the "License");
  you may not use this file except in compliance with the License.
@@ -27,13 +27,19 @@ root = get_cli_root_directory()
 class onboard:
     def __init__(self, json_input: dict):
         try:
-            self.property_name = json_input['property_info']['property_hostname']
             self.contract_id = json_input['property_info']['contract_id']
             self.product_id = json_input['property_info']['product_id']
-            self.property_origin = json_input['property_info']['property_origin']
-            self.public_hostnames = [json_input['property_info']['property_hostname']]
+            self.property_name = json_input['property_info']['property_name']
+            self.individual_cpcode = json_input['property_info']['individual_cpcode']
+
             self.edge_hostname = json_input['edge_hostname']['use_existing_edge_hostname']
             self.existing_enrollment_id = json_input['edge_hostname']['create_from_existing_enrollment_id']
+
+            try:
+                self.secure_by_default = json_input['edge_hostname']['secure_by_default']
+            except KeyError as k:
+                logger.warning('You are not using the latest template. Please use new setup.json template if you want to use secure by default')
+                self.secure_by_default = False
 
             # The cpcode name contains one or more of these special characters ^ _ , # % ' \" ",
             self.new_cpcode_name = self.property_name.replace('_', ' ')
@@ -48,12 +54,6 @@ class onboard:
         except KeyError as k:
             sys.exit(logger.error(f'Input file is missing {k}'))
 
-        try:
-            self.secure_by_default = json_input['edge_hostname']['secure_by_default']
-        except KeyError as k:
-            logger.warning('You are not using the latest template. Please use new setup.json template if you want to use secure by default')
-            self.secure_by_default = False
-
         if isinstance(self.existing_enrollment_id, str):
             if self.existing_enrollment_id == '':
                 self.existing_enrollment_id = 0
@@ -65,19 +65,37 @@ class onboard:
         except:
             self.version_notes = ''
 
-        self.write_variable_json()
-
-    def write_variable_json(self) -> None:
+    def write_variable_json(self, default_origin: str, cp_code: int) -> None:
         """
-        Override origin server inside templates/single_variables.json which is hidden from user
+        Override origin server inside templates/variables.json which is hidden from user
         """
-        var = {'origin_default': self.property_origin}
+        var = {}
+        var['origin_default'] = default_origin
+        var['cp_code'] = cp_code
 
         # override when run via CLI
-        variable_file = Path(root, 'templates/akamai_product_templates/single_variable.json')
+        variable_file = Path(root, 'templates/akamai_product_templates/multi-hosts/variables.json')
         with variable_file.open('w') as file:
             json.dump(var, file, indent=4)
 
         # override when run via python script
-        with Path('logs/single_variable.json').absolute().open('w') as file:
+        with Path('logs/variables.json').absolute().open('w') as file:
             json.dump(var, file, indent=4)
+
+    def get_product_template(self, src_file: str) -> dict:
+        with open(src_file) as f:
+            rules = json.load(f)
+        logger.debug(json.dumps(rules, indent=4))
+        return rules
+
+    def override_product_template(self, onboard, rules: dict) -> None:
+        # override when run via CLI
+        template_file = Path(root, 'templates/akamai_product_templates/multi-hosts/multiple_hosts.json')
+        with template_file.open('w') as file:
+            json.dump(rules, file, indent=4)
+            onboard.source_template_file = f'{template_file}'
+
+        # override when run via python script
+        with Path('logs/multiple_hosts.json').absolute().open('w') as file:
+            json.dump(rules, file, indent=2)
+        return None

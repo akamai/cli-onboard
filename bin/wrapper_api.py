@@ -14,6 +14,7 @@ from __future__ import annotations
 import json
 import random
 import string
+import sys
 
 import _logging as lg
 from exceptions import setup_logger
@@ -39,6 +40,15 @@ class apiCallsWrapper:
             upd_acct_switch_key = self.account_switch_key.translate(self.account_switch_key.maketrans('&', '?'))
             url = f'{url}{upd_acct_switch_key}'
         return url
+
+    def get_account_name(self, account_id: str) -> str:
+        account_id = account_id.split(':')
+        url = f'https://{self.access_hostname}/identity-management/v3/api-clients/self/account-switch-keys?search={account_id[0]}'
+        resp = self.session.get(url)
+        try:
+            return resp.json()[0]['accountName']
+        except:
+            return sys.exit(logger.error(f'Invalid account key {account_id}'))
 
     def property_exists(self, property_name: str):
         url = f'https://{self.access_hostname}/papi/v1/search/find-by-value'
@@ -147,6 +157,24 @@ class apiCallsWrapper:
             edgehostname_list.append(edgehostnameDetails)
         return edgehostname_list
 
+    def bulkCreateEdgehostnameArray(self, hostname_list, edge_hostnames, secure_by_default, secure_by_default_ehn):
+        """
+        Function to create Edgehostname array for existing edgehostnames
+        """
+        edgehostname_array = []
+        cert_provisioning_type = 'CPS_MANAGED'
+        if secure_by_default:
+            cert_provisioning_type = 'DEFAULT'
+
+        for i, eachHostname in enumerate(hostname_list):
+            edgehostnameDetails = {}
+            edgehostnameDetails['cnameType'] = 'EDGE_HOSTNAME'
+            edgehostnameDetails['cnameFrom'] = eachHostname
+            edgehostnameDetails['certProvisioningType'] = cert_provisioning_type
+            edgehostnameDetails['cnameTo'] = edge_hostnames[i]
+            edgehostname_array.append(edgehostnameDetails)
+        return edgehostname_array
+
     def checkEdgeHostname(self, edge_hostname):
         """
         Function to check the validity of edge_hostname
@@ -200,59 +228,39 @@ class apiCallsWrapper:
         Function to activate a configuration or property
         """
         activationDetails = {}
-        activationDetails['propertyVersion'] = version
+        activationDetails['acknowledgeAllWarnings'] = 'true'
+        activationDetails['activationType'] = 'ACTIVATE'
         activationDetails['network'] = network
         activationDetails['note'] = notes
         activationDetails['notifyEmails'] = emailList
-        complianceRecord = {}
-        complianceRecord['noncomplianceReason'] = 'NO_PRODUCTION_TRAFFIC'
-        activationDetails['complianceRecord'] = complianceRecord
+        activationDetails['propertyVersion'] = version
+        if network == 'PRODUCTION':
+            complianceRecord = {}
+            complianceRecord['noncomplianceReason'] = 'NO_PRODUCTION_TRAFFIC'
+            activationDetails['complianceRecord'] = complianceRecord
+
         logger.debug(json.dumps(activationDetails, indent=4))
-        actUrl = 'https://' + self.access_hostname + '/papi/v0/properties/' + propertyId + \
-                  '/activations/?contractId=' + contractId + \
-                  '&groupId=' + groupId + '&acknowledgeAllWarnings=true'
+        actUrl = f'https://{self.access_hostname}/papi/v1/properties/{propertyId}/activations?contractId={contractId}&groupId={groupId}'
         actUrl = self.formUrl(actUrl)
-        activationResponse = self.session.post(actUrl, data=json.dumps(activationDetails), headers=headers)
-
         try:
-            if activationResponse.status_code == 400 and \
-               activationResponse.json()['detail'].find('following activation warnings must be acknowledged'):
-                acknowledgeWarnings = []
-                for eachWarning in activationResponse.json()['warnings']:
-                    # print("WARNING: " + eachWarning['detail'])
-                    acknowledgeWarnings.append(eachWarning['messageId'])
-                    # acknowledgeWarningsJson = json.dumps(acknowledgeWarnings)
-                logger.info('Automatically acknowledging warnings')
-                # The details has to be within the three double quote or comment format
-                updatedactivationDetails = {}
-                updatedactivationDetails['propertyVersion'] = version
-                updatedactivationDetails['network'] = f'{network}'
-                updatedactivationDetails['note'] = f'{notes}'
-                updatedactivationDetails['notifyEmails'] = emailList
-                updatedactivationDetails['acknowledgeWarnings'] = acknowledgeWarnings
-                complianceRecord = {}
-                complianceRecord['noncomplianceReason'] = 'NO_PRODUCTION_TRAFFIC'
-                updatedactivationDetails['complianceRecord'] = complianceRecord
-                logger.debug(json.dumps(updatedactivationDetails, indent=4))
-
-                updatedactivationResponse = self.session.post(actUrl,
-                                                         data=json.dumps(updatedactivationDetails),
-                                                         headers=headers)
-                if updatedactivationResponse.status_code == 201:
-                    logger.debug('Here is the activation link, that can be used to track')
-                    logger.debug(updatedactivationResponse.json()['activationLink'])
-                    return updatedactivationResponse
-                else:
-                    return updatedactivationResponse
-            elif activationResponse.status_code == 422 and activationResponse.json()['detail'].find('version already activated'):
+            response = self.session.post(actUrl, data=json.dumps(activationDetails), headers=headers)
+            logger.debug(f'{response.text} {response.status_code}')
+            if response.status_code == 201:
+                link = response.json()['activationLink']
+                logger.info(f'Activation link {link}')
+                return response
+            elif response.status_code == 422 and response.json()['detail'].find('version already activated'):
                 logger.info('Property version already activated')
-                return activationResponse
-            elif activationResponse.status_code == 404 and activationResponse.json()['detail'].find('unable to locate'):
+                return response
+            elif response.status_code == 404 and response.json()['detail'].find('unable to locate'):
                 logger.error('The system was unable to locate the requested version of configuration')
-            return activationResponse
+                return response
+            else:
+                logger.error(f'{response.url} {response.status_code}')
+                return response
         except KeyError:
             logger.error('Looks like there is some error in configuration. Unable to activate configuration at this moment')
-            return activationResponse
+            return response
 
     def getProductsByContract(self, contractId):
         """
@@ -384,8 +392,7 @@ class apiCallsWrapper:
         waf_match_target_ids = []
         if resp.status_code == 200:
             web_tgts = resp.json()['matchTargets']['websiteTargets']
-            logger.warning(f'{"Policy Name":<20}waf_target_id')
-            logger.warning('Website Match Target')
+            logger.warning(f'{"Policy Name":<20}waf_target_id (Website Match Target)')
             for tgt in web_tgts:
                 policy_id = tgt['securityPolicy']['policyId']
                 name = policies[policy_id][0]
@@ -393,7 +400,7 @@ class apiCallsWrapper:
                     policies[policy_id].append('WEB')
                     policies[policy_id].append(tgt['targetId'])
                 waf_match_target_ids.append(tgt['targetId'])
-                logger.info(f"{name:20}{tgt['targetId']}")
+                logger.info(f"{name:<20}{tgt['targetId']}")
         else:
             logger.error('The system was unable to locate security match targets.')
 

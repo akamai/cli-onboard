@@ -1,0 +1,19 @@
+{
+  "property_info": {
+    "contract_id": "ctr_",
+    "product_id": "prd_",
+    "property_hostname": "",
+    "property_origin": ""
+  },
+  "edge_hostname": {
+    "secure_by_default": true,
+    "use_existing_edge_hostname": "",
+    "create_from_existing_enrollment_id": 0
+  },
+  "update_waf_info": {
+    "create_new_security_config": true,
+    "waf_config_name": ""
+  },
+  "activate_production": false,
+  "notification_emails": ["noreply@akamai.com"]
+}
