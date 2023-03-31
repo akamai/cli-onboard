@@ -1,0 +1,45 @@
+{
+    "name": "$env.hostname",
+    "children": [],
+    "behaviors": [
+        {
+            "name": "origin",
+            "options": {
+                "originType": "CUSTOMER",
+                "hostname": "$env.origin_name",
+                "cacheKeyHostname": "REQUEST_HOST_HEADER",
+                "compress": true,
+                "enableTrueClientIp": true,
+                "forwardHostHeader": "REQUEST_HOST_HEADER",
+                "httpPort": 80,
+                "httpsPort": 443,
+                "originCertificate": "",
+                "originSni": true,
+                "ports": "",
+                "trueClientIpClientSetting": false,
+                "trueClientIpHeader": "True-Client-IP",
+                "verificationMode": "CUSTOM",
+                "ipVersion": "IPV4",
+                "customValidCnValues": [
+                    "{{Origin Hostname}}",
+                    "{{Forward Host Header}}"
+                ],
+                "originCertsToHonor": "STANDARD_CERTIFICATE_AUTHORITIES",
+                "standardCertificateAuthorities": [
+                    "akamai-permissive"
+                ]
+            }
+        }
+    ],
+    "criteria": [
+        {
+            "name": "hostname",
+            "options": {
+                "matchOperator": "IS_ONE_OF",
+                "values": ["$env.hostname"]
+            }
+        }
+    ],
+    "criteriaMustSatisfy": "all",
+    "comments": ""
+}

@@ -160,15 +160,20 @@ class wafFunctions:
             logger.info(f'Valid hostnames {onboard_obj.public_hostnames} for '
                         f'contract_id {onboard_obj.contract_id} and '
                         f'group_id {onboard_obj.group_id}')
-            if (set(onboard_obj.public_hostnames).issubset(set(hostnames))):
+            public_hostnames = {public_hostnames.lower() for public_hostnames in onboard_obj.public_hostnames}
+            logger.debug(f'{public_hostnames}')
+            logger.debug(set(hostnames))
+            if (public_hostnames.issubset(set(hostnames))):
                 return True
             else:
                 logger.error(f'Invalid {onboard_obj.public_hostnames} for '
                              f'contract_id {onboard_obj.contract_id} and '
                              f'group_id {onboard_obj.group_id}')
                 return False
-        logger.error('API valid_hostnames_waf_config failed')
-        return False
+        else:
+            logger.error(json.dumps(resp.json(), indent=4))
+            logger.error(f'Unable to validate hostnames for WAF Configuration: {onboard_obj.waf_config_name}')
+            return False
 
     def create_waf_config(self, wrap_api, onboard_obj):
         print()

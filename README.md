@@ -8,20 +8,7 @@ Provides a way to onboard a new Akamai Property Manager configuration using any 
 - Include in existing WAF configurations (Add Selected Hosts and/or Match Targets)
 - Flexible activation to staging or production network
 
-## Akamai CLI Install
-
-```bash
-%  akamai install onboard
-%  akamai install property-manager (if not already installed)
-```
-
-## Local Install
-
-- Python 3+
-- pip install edgegrid-python
-- User should also have [cli-property-manager](https://github.com/akamai/cli-property-manager) installed
-
-## Credentials
+## Prerequisites - Setup API Credentials
 
 In order to use this module, you need to:
 
@@ -41,25 +28,56 @@ access_token = [ACCESS_TOKEN_HERE]
 client_token = [CLIENT_TOKEN_HERE]
 ```
 
+## Akamai CLI Install
+
+```bash
+%  akamai install onboard
+%  akamai install property-manager (if not already installed)
+```
+
+## Local Install
+
+- Minimum python 3.10
+- Clone repository
+
+```bash
+git clone https://github.com/akamai/cli-onboard.git
+```
+
+- Create python virtual environment
+
+```bash
+python3 -m venv .venv
+```
+
+- Install required packages
+
+```bash
+pip3 install -r requirements.txt
+```
+
 # Onboard Types
 
 This CLI has 2 command types for onboarding new properties:
 
 - [create](#create)
 - [single-host](#single-host)
+- [multi-hosts](#multi-hosts)
+- [batch-create](#batch-create)
+- [fetch-sample-templates ](#fetch-sample-templates)
 
 # create
 
 ## Example Usage
 
 ```bash
-akamai onboard create --file /templates/sample_setup_files/setup.json
-akamai onboard create --file ~/path/to/setup.json
+akamai onboard create --file /templates/sample_setup_files/create.json
+akamai onboard create --file ~/path/to/create.json
 ```
 
 ## Setup JSON File Documentation
 
-Sample **templates/sample_setup_files/setup.json** for an initial empty setup file.
+Sample **templates/sample_setup_files/create.json** for an initial empty setup file.
 
 <details>
     <summary>Click me</summary>
@@ -139,23 +157,23 @@ Sample **templates/sample_setup_files/setup.json** for an initial empty setup fi
 <details>
     <summary>Show me</summary>
 
-- property_name: Name of the property manager configuration to be created
-- secure_network: Use either ENHANCED_TLS or STANDARD_TLS
-- contract*id: Contract ID (starts with ctr*)
-- group*id: Group ID (starts with grp*)
-- product*id: Product ID (usually starts with prd* and should be one of available products from specified contract_id)
-- rule_format: Rule format (typically latest, but can you frozen rule format if desired)
+- **property_name**: Name of the property manager configuration to be created
+- **secure_network**: Use either ENHANCED_TLS or STANDARD_TLS
+- **contract_id**: Contract ID (starts with ctr\_)
+- **group_id**: Group ID (starts with grp\_)
+- **product_id**: Product ID (usually starts with prd\* and should be one of available products from specified contract_id)
+- **rule_format**: Rule format (typically latest, but can you frozen rule format if desired)
 
 **default_cpcode**
 
-- create_new_cpcode: Specify true if you want a brand new cp code created as part of the new property manager configuration
-- new_cpcode_name: If create_new_cpcode is true, specify name of new cp code
+- **create_new_cpcode**: Specify true if you want a brand new cp code created as part of the new property manager configuration
+- **new_cpcode_name**: If create_new_cpcode is true, specify name of new cp code
 
 **file_info**
 
-- use_file: Specify true if you want to use a single file json template
-- source_template_file: File path to single file json template. This file can have ${env.variable} references to serve place holders that will be substitued from values in source_values_file
-- source_values_file: File path to the single file variable values. This source values file can look like this:
+- **use_file**: Specify true if you want to use a single file json template
+- **source_template_file**: File path to single file json template. This file can have ${env.variable} references to serve place holders that will be substitued from values in source_values_file
+- **source_values_file**: File path to the single file variable values. This source values file can look like this:
 
 ```bash
 {
@@ -166,9 +184,9 @@ Sample **templates/sample_setup_files/setup.json** for an initial empty setup fi
 
 **folder_info**
 
-- use_folder: Specify true if you want to use an existing Akamai pipeline folder structure. This folder should contain the projectInfo.json and environments folder
-- folder_path: File path to the Akamai pipeline folder
-- env_name: Environment name to build. This name should be defined in projectInfo.json and have corrent setting and variable values in environments folder
+- **use_folder**: Specify true if you want to use an existing Akamai pipeline folder structure. This folder should contain the projectInfo.json and environments folder
+- **folder_path**: File path to the Akamai pipeline folder
+- **env_name**: Environment name to build. This name should be defined in projectInfo.json and have corrent setting and variable values in environments folder
 
 **public_hostnames**
 
@@ -177,44 +195,47 @@ Sample **templates/sample_setup_files/setup.json** for an initial empty setup fi
 **edge_hostname**
 
 - For a new property manager configuration, we can use an existing edge hostname, create a new standard_tls edge hostname, or create a new enhanced_tls edge hostname
-- mode: Should be one of: use_existing_edgehostname, new_standard_tls_edgehostname, new_enhanced_tls_edgehostname
+- **mode**: Should be one of: use_existing_edgehostname, new_standard_tls_edgehostname, new_enhanced_tls_edgehostname, secure_by_default
 
 **use_existing_edgehostname**
 
-- edge_hostname: Specify the existing edge hostname to use. If using ENHANCED_TLS, this should end with edgekey.net ; otherwise if using STANDARD_TLS, this should end with edgesuite.net
+- **edge_hostname**: Specify the existing edge hostname to use.
+  - If using ENHANCED_TLS, this should end with **edgekey.net**
+  - If using STANDARD_TLS, this should end with **edgesuite.net**
 
 **new_enhanced_tls_edgehostname -- use existing enrollment**
 
-- use_existing_enrollment_id: Set to true if you want to create a new edge hostname from an existing certificate enrollment. If true, you must also put in values for the existing_enrollment_id.
-- existing_enrollment_id: Enrollment ID of the existing certificate
+- **use_existing_enrollment_id**: Set to true if you want to create a new edge hostname from an existing certificate enrollment. If true, you must also put in values for the existing_enrollment_id.
+- **existing_enrollment_id**: Enrollment ID of the existing certificate
 
 **new_enhanced_tls_edgehostname -- create new enrollment**
 
-- create_new_ssl_cert: Set to true if you want to brand new certificate enrollment. If true, you must also put in values for the ssl_cert_template_file, ssl_cert_template_values, and use_temp_existing_edge_hostname_id (NOT USED ANYMORE)
-- ssl_cert_template_file: File path to ssl certificate template json file. This can be for any certificate type (NOT USED ANYMORE)
-- ssl_cert_template_values: Values for the ssl certificate template to be used (NOT USED ANYMORE)
-- temp_existing_edge_hostname: Due to backend api limitations, a new edge hostname cannot be immediately made that references a newly created certificate enrollment for a brief period of time. Rather than be blocked by this process, specify a temporary edge hostname to use as a placeholder. This value is not really used and just a place holder to proceed with the property manager configuration creation. If using ENHANCED_TLS, use an existing edge hostname ends with edgekey.net ; otherwise if using STANDARD_TLS, use an existing edge hostname that ends with edgesuite.net (NOT USED ANYMORE)
+- **create_new_ssl_cert**: Set to true if you want to brand new certificate enrollment. If true, you must also put in values for the ssl_cert_template_file, ssl_cert_template_values, and use_temp_existing_edge_hostname_id (NOT USED ANYMORE)
+- **ssl_cert_template_file**: File path to ssl certificate template json file. This can be for any certificate type (NOT USED ANYMORE)
+- **ssl_cert_template_values**: Values for the ssl certificate template to be used (NOT USED ANYMORE)
+- **temp_existing_edge_hostname**: Due to backend api limitations, a new edge hostname cannot be immediately made that references a newly created certificate enrollment for a brief period of time. Rather than be blocked by this process, specify a temporary edge hostname to use as a placeholder. This value is not really used and just a place holder to proceed with the property manager configuration creation. If using ENHANCED_TLS, use an existing edge hostname ends with edgekey.net ; otherwise if using STANDARD_TLS, use an existing edge hostname that ends with edgesuite.net (NOT USED ANYMORE)
 
 **secure_by_default -- provision secure by default certificates**
-- create_new_edge_hostnames: set to true if you want a new unique edge hostname created for each onboarded hostname. The edge hostnames created will be in the form {hostname}.edgekey.net
-- use_existing_edge_hostname: add an existing edge hostname to use - it must be SNI. All Secure by Default certificates are SNI.
+
+- **create_new_edge_hostnames**: set to **true** if you want a new unique edge hostname created for each onboarded hostname. The edge hostnames created will be in the form **{hostname}.edgekey.net**
+- **use_existing_edge_hostname**: add an existing edge hostname to use - it must be **SNI**. All Secure by Default certificates are SNI.
 
 **update_waf_info**
 
-- add_selected_host: Set to true if you want to add specified public_hostnames to WAF selected hosts
-- waf_config-name: Name of security configuration
-- update_match_target: Set to true if you wwant to add specified public_hostnames to specifed waf_match_target_id
-- waf_match_target_id: waf match target id to add hostnames to (use numeric waf match target id)
+- **add_selected_host**: Set to **true** if you want to add specified public_hostnames to WAF selected hosts
+- **waf_config-name**: Name of security configuration
+- **update_match_target**: Set to **true** if you want to add specified public_hostnames to specifed waf_match_target_id
+- **waf_match_target_id**: waf match target id to add hostnames to (use numeric waf match target id)
 - NOTE: If you do not know the match target id, leave the value as 0 and execute the onboarding. The validation steps will print out the existing match target IDs for the WAF config selected.
 - NOTE: These settings can only happen if property manager configuration is activated to Akamai staging
 
 **activate settings**
 
-- activate_property_staging: Activate property manager configuration to staging network
-- activate_property_production: Activate property manager configuration to production network (must go through staging first)
-- activate_waf_policy_staging: Activate security configuration to staging network
-- activate_waf_policy_production: Activate security configuration to production network (must go through staging first)
-- notification_emails: Array of emails to be notified after activations
+- **activate_property_staging**: Activate property manager configuration to staging network
+- **activate_property_production**: Activate property manager configuration to production network (must go through staging first)
+- **activate_waf_policy_staging**: Activate security configuration to staging network
+- **activate_waf_policy_production**: Activate security configuration to production network (must go through staging first)
+- **notification_emails**: Array of emails to be notified after activations
 </details>
 
 <br/><br/>
@@ -224,8 +245,8 @@ Sample **templates/sample_setup_files/setup.json** for an initial empty setup fi
 ### Example Usage
 
 ```bash
-akamai onboard single-host --file /templates/sample_setup_files/setup_single_host.json
-akamai onboard single-host --file ~/path/to/setup_single_host.json
+akamai onboard single-host --file /templates/sample_setup_files/single.json
+akamai onboard single-host --file ~/path/to/single.json
 ```
 
 ```bash
@@ -247,7 +268,7 @@ akamai onboard single-host --file ~/path/to/setup_single_host.json
     },
     "activate_production": false,
     "notification_emails": [
-        ""
+        "noreply@akamai.com"
     ]
 }
 ```
@@ -257,30 +278,133 @@ akamai onboard single-host --file ~/path/to/setup_single_host.json
 <details>
     <summary>Show me</summary>
 
-- contract*id: Contract ID (starts with ctr*)
-- product_id: Product ID: one of prd_SPM, prd_Fresca, prd_API_Accel (case sensitive)
-- property_hostname: Public facing hostname
-- property_origin: Origin hostname for property_hostname
-- activate_production: Activate to Akamai production network (will always update to Akamai staging already)
-- notification_emails: Array of emails to be notified after activations
+- **contract_id**: Contract ID (starts with ctr\_)
+- **product_id**: Product ID: one of prd_SPM, prd_Fresca, prd_API_Accel (case sensitive)
+- **property_hostname**: Public facing hostname
+- **property_origin**: Origin hostname for property_hostname
+- **activate_production**: Activate to Akamai production network (will always update to Akamai staging already)
+- **notification_emails**: Array of emails to be notified after activations
 
 ---
 
 **edge_hostname**
 
-- secure_by_default: set to true if you want to provision a default certificate for the hostname. This will automatically create a new edge hostname.
-- use_existing_edge_hostname: specify existing edge hostname to use (must already exist). Will not be used if 'secure_by_default' is set to true.
-- create_from_existing_enrollment_id: create new edge hostname from existing certificate enrollment id (must already exist)
+- **secure_by_default**: set to **true** if you want to provision a default certificate for the hostname. This will automatically create a new edge hostname.
+- **use_existing_edge_hostname**: specify existing edge hostname to use (must already exist). Will not be used if 'secure_by_default' is set to true.
+- **create_from_existing_enrollment_id**: create new edge hostname from existing certificate enrollment id (must already exist)
 
 ---
 
 **update_waf_info**
 
-- create_new_security_config: true = will create default security configuration in alert mode
-- waf_config_name: name of new security config to be created (if blank, will use default "WAF Security File" as name
+- **create_new_security_config**:
+  - set to **true** will create default security configuration in **alert** mode
+  - set to **false** will not create a security configuration
+- **waf_config_name**: name of new security config to be created (if blank, will use default "WAF Security File" as name
 </details>
 
 <br></br>
+
+# multi-hosts
+
+### Example Usage
+
+```bash
+akamai onboard multi-hosts -f path-to/multiple.json --csv path-to/multi-hosts-input.csv
+```
+
+```bash
+{
+  "property_info": {
+    "contract_id": "ctr_",
+    "product_id": "prd_",
+    "property_name": "",
+    "individual_cpcode": false
+  },
+  "edge_hostname": {
+    "secure_by_default": false,
+    "use_existing_edge_hostname": "",
+    "create_from_existing_enrollment_id": 0
+  },
+  "update_waf_info": {
+    "create_new_security_config": true,
+    "waf_config_name": ""
+  },
+  "activate_production": true,
+  "notification_emails": ["noreply@akamai.com"]
+}
+```
+
+### Field Descriptions
+
+- **contract_id**: Contract ID (starts with **ctr\_**) You can get this information from Akamai Technical Project Manager
+- **product_id**: Supported Product ID are **prd_SPM, prd_Fresca, prd_API_Accel** (case sensitive)
+- **property_name**: Name of the property aka delivery configuration
+- **individual_cpcode**: Set to **true** if you want to create cp code for each hostname
+- The rest is the same as **single-host** mode
+
+# batch-create
+
+## Description
+
+batch-create creates and optionally activates multi properties based on a custom json template and csv input file. It can add multiple hostnames and origin behaviors to a single property, or create multiple porperties.
+
+## Example Usage
+
+```bash
+akamai onboard batch-create --template ~/path/to/ruletree.json --csv ~/path/to/csv.csv --product prd_SPM --group grp_1234 --contract ctr_1-2345
+
+akamai onboard batch-create --template ~/path/to/ruletree.json --csv ~/path/to/csv.csv --product prd_SPM --group grp_1234 --contract ctr_1-2345 --secure-by-default
+
+```
+
+## CSV Input File Documentation
+
+Sample **templates/sample_setup_files/batch-activation.csv** for an initial empty setup file.
+
+<details>
+    <summary>Click me</summary>
+
+```CSV
+hostname,origin,propertyName,forwardHostHeader,edgeHostname
+www.example.com,origin.example.com,new_property_1,ORIGIN_HOSTNAME,www.example.com.edgekey.net
+```
+
+- **hostname**: [required] Hostname that you want to onboard
+- **origin**: [required] Origin hostname
+- **propertyName**: Name of property. If empty or column is missing, defaults to hostname.
+- - If 2 rows have the same propertyName, the hostnames will be added to the same property and an origin behavior ruleset will be injected into the inputed template
+- **forwardHostHeader**: Host header used on forward request to origin. Can be either 'INCOMING_HOST_HEADER' or 'ORIGIN_HOSTNAME'. If empty or column is missing, defaults to 'INCOMING_HOST_HEADER'. This setting will override whatever is in the input template default origin behavior.
+- **edgeHostname**: [required unless using secure_by_default] The edge hostname to map the hostname to. The edge hostname must already exist. Batch-create mode does NOT create new edge hostnames unless secure-by-default mode is being used
+
+</details>
+
+## Input Descriptions
+
+<details>
+    <summary>Show me</summary>
+
+- **--template** **-t**: file path to single file json template. [required]
+- **--csv**: csv file with headers hostname,origin,edgeHostname,forwardHostHeader,propertyName [required]
+- **--network** **-n**: use either ENHANCED_TLS or STANDARD_TLS [default:ENHANCED_TLS]
+- **--contract** **-c**: Contract ID (starts with ctr\_) [required]
+- **--group** **-g**: Group ID (starts with grp\_) [required]
+- **--product** **-p**: Product ID (usually starts with prd\* and should be one of available products from specified contract_id) [required]
+- **--rule-format** **-f**: Rule format (typically latest, but can you frozen rule format if desired) [default:latest]
+- **--use-cpcode**: Override creation of newcpcodes and use single cpcode for all properties
+- **--secure-by-default**: Use secure by default certificates
+- **--waf-config**: name of security configuration to update
+- **--waf-match-target**: waf match target id to add hostnames to (use numeric waf match target id)
+- **--activate**: Activation networks. If activating waf on a network, delivery must also be activated. Options: delivery-staging, delivery-production, waf-staging, waf-production
+- **--email**: email(s) for activation notifications
+
+</details>
+
+<br/><br/>
+
+# fetch-sample-templates
+
+This will create a folder called sample_setup_files locally so you will have sample setup in both JSON and CSV format depending on the command you choose the onboard.
 
 # Contribution
 

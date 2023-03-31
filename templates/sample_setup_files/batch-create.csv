@@ -1,0 +1,3 @@
+﻿hostname,origin,propertyName,forwardHostHeader,edgeHostname
+www.example-one.com,origin.example-one.com,new_property_name,REQUEST_HOST_HEADER,www.example.com.edgekey.net
+www.example-two.com,origin.example-two.com,new_property_name,ORIGIN_HOSTNAME,www.example.com.edgekey.net
