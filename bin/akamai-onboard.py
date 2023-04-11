@@ -315,7 +315,8 @@ def single_host(config, file):
 
     # Override default
     util.onboard_override_default(onboard, setup, cli_mode='single-host')
-    util.validate_group_id(onboard, wrap_api.get_groups_without_parent())
+    if not onboard.group_id:
+        util.validate_group_id(onboard, wrap_api.get_groups_without_parent())
     util.validateSetupSteps(onboard, wrap_api, cli_mode='single_host')
     if util.valid:
         # Load business rule for delivery and security
@@ -719,7 +720,8 @@ def batch_create(config, **kwargs):
         return 0
 
     return 0
-    
+
+
 def get_prog_name():
     prog = os.path.basename(sys.argv[0])
     if os.getenv('AKAMAI_CLI'):

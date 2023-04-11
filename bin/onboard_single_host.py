@@ -65,6 +65,11 @@ class onboard:
         except:
             self.version_notes = ''
 
+        try:
+            self.group_id = json_input['property_info']['group_id']
+        except:
+            self.group_id = ''
+
         self.write_variable_json()
 
     def write_variable_json(self) -> None:
