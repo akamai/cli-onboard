@@ -851,6 +851,8 @@ class utility:
     def onboard_override_default(self, onboard, setup, cli_mode: str) -> None:
         if cli_mode == 'single-host':
             onboard.new_cpcode_name = setup.new_cpcode_name
+            onboard.group_id = setup.group_id
+            onboard.secure_network = 'STANDARD_TLS' if setup.edge_hostname.endswith('edgesuite.net') else onboard.secure_network
             template_path = f'{root}/templates/akamai_product_templates'
             onboard.source_values_file = f'{template_path}/single_variable.json'
         elif cli_mode == 'multi-hosts':
