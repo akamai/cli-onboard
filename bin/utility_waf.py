@@ -148,6 +148,26 @@ class wafFunctions:
             logger.error(json.dumps(version_creation_response.json(), indent=4))
             logger.error(f'Unable to create a new version for WAF Configuration: {onboard_obj.waf_config_name}')
             return False
+   
+    def createWafVersion_Update(self, wrapper_object, onboard_obj, notes: str):
+        """
+        Function to create new waf config version
+        """
+        version_creation_response = wrapper_object.createWafConfigVersion(onboard_obj.config_id,
+                                                                          onboard_obj.config_version,
+                                                                          notes)
+        if version_creation_response.status_code == 200 or \
+            version_creation_response.status_code == 201:
+            onboard_obj.onboard_waf_config_version = version_creation_response.json()['version']
+            logger.info(f"'{onboard_obj.waf_config_name}'{dot:>8}"
+                        f'id: {onboard_obj.config_id:<5}{dot:>15}'
+                        f'new version: {onboard_obj.onboard_waf_config_version:<4}{dot:>2}'
+                        f'existing Security Configuration')
+            return True
+        else:
+            logger.error(json.dumps(version_creation_response.json(), indent=4))
+            logger.error(f'Unable to create a new version for WAF Configuration: {onboard_obj.waf_config_name}')
+            return False
 
     def valid_hostnames(self, wrap_api, onboard_obj):
         resp = wrap_api.valid_hostnames_waf_config(onboard_obj)

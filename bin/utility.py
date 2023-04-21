@@ -573,6 +573,114 @@ class utility:
 
         return self.valid
 
+    def validateAppsecSteps(self, onboard_object, wrapper_object, cli_mode='appsec-update'):
+        """
+        Function to validate inputs for appsec-update
+        """
+
+        count = 0
+        valid_waf = True
+        print()
+        logger.warning('Validating inputs. Please wait, may take a few moments')
+
+        # check if csv is valid
+        if not onboard_object.valid_csv:
+            logger.error(f'{onboard_object.csv:<30}{space:>20}invalid csv; check above validation errors')
+            count += 1
+
+        if cli_mode == 'appsec-update':
+        # check if config id exists
+            msg = f'{onboard_object.config_id}{space:>{column_width-len(onboard_object.config_id)}}'
+            appsec_configs = wrapper_object.getWafConfigurations()
+            if appsec_configs.status_code == 200:
+                appsec_configs = appsec_configs.json()
+            else:
+                sys.exit(logger.error(f'unable to get waf configurations....'))
+            try:
+                appsec_config_exists = list(filter(lambda x: int(x['id']) == int(onboard_object.config_id), appsec_configs['configurations']))
+            except KeyError:
+                sys.exit(logger.error(f'unable to get waf configurations....'))
+
+            # return list of valid appsec ids if appsec id invalid
+            if not appsec_config_exists:
+                logger.error(f'{msg}invalid config id')
+                valid_waf = False
+                count += 1
+                # listing valid waf configs and ids
+                logger.warning(f'Showing all available configs...')
+                logger.info(f'Config Name:{space:>38}Config Id:')
+                for waf_config in appsec_configs['configurations']:
+                    logger.info(f"{waf_config['name']}{space:>{column_width-len(waf_config['name'])}}{waf_config['id']}")
+                sys.exit(logger.error(f'Exiting....'))
+            else:
+                onboard_object.waf_config_name = appsec_config_exists[0]['name']
+                msg = f'{onboard_object.config_id}:{onboard_object.waf_config_name}{space:>{column_width-(len(onboard_object.config_id)+len(onboard_object.waf_config_name))}}'
+                logger.info(f'{msg}valid config id')
+        
+            # check if config id base version exists
+            if valid_waf:
+                msg = f'{onboard_object.config_version}{space:>{column_width-len(onboard_object.config_version)}}'
+                if onboard_object.config_version == 'latest':
+                    onboard_object.config_version = appsec_config_exists[0]['latestVersion']
+                    logger.info(f'{msg}using config id version {onboard_object.config_version}')
+                else: 
+                    if int(onboard_object.config_version) > appsec_config_exists[0]['latestVersion']:
+                        logger.error(f'{msg}invalid config version')
+                        count += 1
+                        valid_waf = False
+                    else:
+                        logger.info(f'{msg}valid config id version')
+
+            # check if policy match targets are valid
+            if valid_waf:
+                #first get all policies
+                policies = wrapper_object.get_waf_policy_update(onboard_object.config_id,onboard_object.config_version)
+                if policies:
+                    unique_match_target_list = list(set(list(map(lambda x:x["matchTargetId"],onboard_object.csv_dict))))
+                    resp, waf_match_target_ids = wrapper_object.list_match_targets(onboard_object.config_id,onboard_object.config_version,policies)
+                    for unique_match_target in unique_match_target_list:
+                        msg = f'{unique_match_target}{space:>{column_width-len(unique_match_target)}}'
+                        if int(unique_match_target) in waf_match_target_ids:
+                            logger.info(f'{msg}valid match target id')
+                        else:
+                            logger.error(f'{msg}invlaid match target id')
+                            count +=1
+                    if resp.status_code != 200:
+                        sys.exit(logger.error(f'unable to get waf match targets....'))
+                else:
+                    sys.exit(logger.error(f'unable to get waf policies....'))
+
+        # validate that hostnames are either already selected or selectable
+        available_hostnames = wrapper_object.getWAFSelectableHosts(onboard_object.config_id, onboard_object.config_version)
+        selectable_hosts_list = list(set(list(map(lambda x:x["hostname"],available_hostnames["availableSet"]))))
+        try:
+            selected_host_list = list(set(list(map(lambda x:x["hostname"],available_hostnames["selectedSet"]))))
+        except KeyError:
+            selected_host_list = []
+
+        if available_hostnames:
+            for hostname in onboard_object.hostname_list:
+                msg = f'{hostname}{space:>{column_width-len(hostname)}}'
+                if hostname in selectable_hosts_list:
+                    logger.info(f'{msg} available to add as selcted host...')
+                elif hostname in selected_host_list:
+                    logger.warn(f'{msg} already added as a selcted host...')
+                else:
+                    logger.error(f'{msg} is NOT available to add as a selected host...skipping')
+                    onboard_object.skip_selected_hosts.append(hostname)
+
+        else:
+            sys.exit(logger.error(f'unable to get available hostnames....'))
+
+        if count == 0:
+            self.valid is True
+            print()
+            logger.warning('Updating Appsec Config')
+        else:
+            sys.exit(logger.error(f'Total {count} errors, please review'))
+
+        return self.valid
+
     # Validate file
     def validateFile(self, source: str, file_location: str) -> bool:
         logger.debug(f'{file_location} {type(file_location)} {os.path.exists(file_location)}')
@@ -919,6 +1027,37 @@ class utility:
         onboard_object.csv_dict = csv_dict
         return onboard_object.valid_csv
 
+    def csv_validator_appsec(self, onboard_object, csv_file_loc: str):
+        csv_dict = []
+        schema = {
+            'hostname': {
+                'type': 'string',
+                'required': True,
+                'empty': False
+            },
+            'matchTargetId': {
+                'required': False,
+                'empty': True
+            }
+        }
+
+        v = Validator(schema)
+        logger.warning(f'Reading csv input: {csv_file_loc}')
+
+        with open(csv_file_loc, encoding='utf-8-sig', newline='') as f:
+            for i, row in enumerate(csv.DictReader(f), 1):
+                csv_dict.append(row)
+                valid = v.validate(row)
+                validation_errors = v.errors
+                if validation_errors:
+                    onboard_object.valid_csv = False
+                    logger.warning(f'CSV Validation Error in row: {i}...')
+                    for error in validation_errors:
+                        logger.warning(f'{error} {validation_errors[error]}')
+
+        onboard_object.csv_dict = csv_dict
+        return onboard_object.valid_csv
+    
     def csv_2_property_dict(self, onboard_object) -> dict:
         propertyList = []
         hostnameList = []
@@ -1112,3 +1251,23 @@ class utility:
                 logger.error(f'{hostname} cannot begin or end with a hyphen.')
                 error_count += 1
         return error_count
+
+    def csv_2_appsec_array(self, onboard_object) -> dict:
+        hostname_list = []
+        appsec_json = {}
+        
+        for i, row in enumerate(onboard_object.csv_dict):
+            policyName = row['matchTargetId']
+            # Check if policyName already exists in dictionary and append hostname to list
+            if policyName in appsec_json.keys():
+                appsec_json[policyName]['hostnames'].append(row['hostname'])
+                hostname_list.append(row['hostname'])
+
+            # If policy doesn't already exist in dict, add policy to dictionary and add hostname to list
+            else:
+                appsec_json[policyName] = {}
+                appsec_json[policyName]['hostnames'] = [row['hostname']]
+                hostname_list.append(row['hostname'])
+        
+        onboard_object.hostname_list = hostname_list
+        onboard_object.appsec_json = appsec_json

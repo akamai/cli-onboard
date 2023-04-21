@@ -566,3 +566,27 @@ class apiCallsWrapper:
         if resp.status_code != 200:
             logger.info(json.dumps(resp.json(), indent=4))
         return resp
+
+    def getWAFSelectableHosts(self, config_id, version):
+        url = self.formUrl(f'https://{self.access_hostname}/appsec/v1/configs/{config_id}/versions/{version}/selectable-hostnames')
+        
+        result = self.session.get(url, headers=headers)
+        if result.status_code == 200:
+            jsonResponse = result.json()
+            
+        else:
+            logger.error(f'api error 1 with {url}')
+            jsonResponse = False
+        
+        return jsonResponse
+
+    def get_waf_policy_update(self, config_id, config_version):
+        url = self.formUrl(f'https://{self.access_hostname}/appsec/v1/configs/{config_id}/versions/{config_version}/security-policies')
+        resp = self.session.get(url, headers=headers)
+        policies_name = {}
+        if resp.status_code == 200:
+            pol_list = resp.json()['policies']
+            for p in pol_list:
+                policies_name[f"{p['policyId']}"] = [f"{p['policyName']}"]
+
+        return policies_name

@@ -30,6 +30,7 @@ import onboard
 import onboard_batch_create
 import onboard_multi_hosts
 import onboard_single_host
+import onboard_appsec_update
 import requests
 import steps
 import utility
@@ -720,6 +721,81 @@ def batch_create(config, **kwargs):
         return 0
 
     return 0
+
+@cli.command(short_help='Add hostnames as selected hosts to existing security configuration and optionally add to policy match target')
+@click.option('--config-id', metavar='', help='name of security configuration to update', required=False)
+@click.option('--version-notes', metavar='', help='name of security configuration to update', required=False)
+@click.option('--activate', metavar='', type=click.Choice(['staging','production']), multiple=True, help='Options: staging, production', required=False)
+@click.option('--version', metavar='', help='email(s) for activation notifications', default='latest', required=False)
+@click.option('--csv', metavar='', required=True, help='csv file with headers hostname,origin,edgeHostname,forwardHostHeader,propertyName,')
+@pass_config
+def appsec_update(config, **kwargs):
+    logger.info('Start Akamai CLI onboard')
+    _, wrapper_object = init_config(config)
+    click_args = kwargs
+    start_time = time.perf_counter()
+
+    onboard_object = onboard_appsec_update.onboard(config, click_args)
+
+    # Validate setup and akamai cli and cli pipeline are installed
+    csv = click_args['csv']
+    utility_object = utility.utility()
+
+    # Validate akamai cli and cli pipeline are installed
+    cli_installed = utility_object.installedCommandCheck('akamai')
+    pipeline_installed = utility_object.executeCommand(['akamai', 'pipeline'])
+
+    if not (pipeline_installed and (cli_installed or pipeline_installed)):
+        sys.exit()
+
+    utility_papi_object = utility_papi.papiFunctions()
+    utility_waf_object = utility_waf.wafFunctions()
+
+    # Determine necessary execution steps
+    steps_object = steps.executionSteps()
+
+    # validate setup steps when csv input provided
+    utility_object.csv_validator_appsec(onboard_object, csv)
+    utility_object.csv_2_appsec_array(onboard_object)
+    utility_object.validateAppsecSteps(onboard_object, wrapper_object, cli_mode='appsec-update')
+
+    if utility_object.valid is True:
+        # First create new WAF configuration version
+        logger.debug(f'Trying to create new version for WAF configuration: {onboard_object.waf_config_name}')
+        create_waf_version = utility_waf_object.createWafVersion_Update(wrapper_object, onboard_object, notes=onboard_object.version_notes)
+        # wrapper_object.update_waf_config_version_note(onboard_object, notes=onboard_object.version_notes)
+        if create_waf_version is False:
+            sys.exit()
+
+        # Created WAF config version, now can add selected hosts to it
+        logger.debug(f'Trying to add property public_hostnames as selected hosts to WAF configuration: {onboard_object.waf_config_name}')
+        hostnames_to_add = list(filter(lambda x: x not in onboard_object.skip_selected_hosts,onboard_object.hostname_list))
+        add_hostnames = utility_waf_object.addHostnames(wrapper_object,
+                                    hostnames_to_add,
+                                    onboard_object.config_id,
+                                    onboard_object.onboard_waf_config_version)
+        if add_hostnames is True:
+            logger.info(f'Successfully added {hostnames_to_add} as selected hosts')
+        else:
+            logger.error('Unable to add selected hosts to WAF Configuration')
+            exit(-1)
+
+        # Update WAF match target
+        for policy in onboard_object.appsec_json:
+            policy_hostnames_to_add = list(filter(lambda x: x not in onboard_object.skip_selected_hosts,onboard_object.appsec_json[policy]['hostnames']))
+            modify_matchtarget = utility_waf_object.updateMatchTarget(wrapper_object,
+                                        policy_hostnames_to_add,
+                                        onboard_object.config_id,
+                                        onboard_object.onboard_waf_config_version,
+                                        policy)
+            if modify_matchtarget:
+                logger.info(f'Successfully added {policy_hostnames_to_add} to WAF Configuration Match Target {policy}')
+            else:
+                logger.error(f'Failed to add {policy_hostnames_to_add} to match target {policy}')
+
+        # Activate WAF configuration to staging
+
+    
 
 
 def get_prog_name():
