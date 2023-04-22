@@ -17,7 +17,10 @@ import string
 import sys
 
 import _logging as lg
+import pandas as pd
 from exceptions import setup_logger
+from rich import print_json
+from tabulate import tabulate
 
 
 logger = setup_logger()
@@ -390,20 +393,45 @@ class apiCallsWrapper:
         resp = self.session.get(url)
         logger.debug(json.dumps(resp.json()['matchTargets'], indent=3))
         waf_match_target_ids = []
+        waf_targets = {}
         if resp.status_code == 200:
             web_tgts = resp.json()['matchTargets']['websiteTargets']
-            logger.warning(f'{"Policy Name":<20}waf_target_id (Website Match Target)')
+            # logger.warning(f'{"Policy Name":<50}waf_target_id (Website Match Target)')
             for tgt in web_tgts:
                 policy_id = tgt['securityPolicy']['policyId']
                 name = policies[policy_id][0]
                 if policy_id in policies.keys():
                     policies[policy_id].append('WEB')
                     policies[policy_id].append(tgt['targetId'])
+                    waf_targets[name] = tgt['targetId']
                 waf_match_target_ids.append(tgt['targetId'])
-                logger.info(f"{name:<20}{tgt['targetId']}")
+                # logger.info(f"{name:<50}{tgt['targetId']}")
+
+            df = pd.DataFrame.from_dict(waf_targets, orient='index')
+            df.index.name = 'Policy Name'
+            df.columns = ['Website Match Target']
+            df['Website Match Target'] = df['Website Match Target'].astype(str)
+            df.sort_values(by='Policy Name', inplace=True)
+            print(tabulate(df, headers='keys', tablefmt='psql', showindex=True))
         else:
             logger.error('The system was unable to locate security match targets.')
+        return resp, waf_match_target_ids
 
+    def list_policy_match_targets(self, config_id: int, version: int, policy_id: str, policy_name: str):
+        url = f'https://{self.access_hostname}/appsec/v1/configs/{config_id}/versions/{version}/match-targets'
+        url = self.formUrl(url)
+        resp = self.session.get(url)
+        logger.debug(json.dumps(resp.json()['matchTargets'], indent=3))
+        waf_match_target_ids = []
+        if resp.status_code == 200:
+            web_tgts = resp.json()['matchTargets']['websiteTargets']
+            logger.warning(f'{"Policy Name":<50}waf_target_id (Website Match Target)')
+            for tgt in web_tgts:
+                if tgt['securityPolicy']['policyId'] == policy_id:
+                    logger.info(f"{policy_name:<50}{tgt['targetId']}")
+                    waf_match_target_ids.append(tgt['targetId'])
+        else:
+            logger.error('The system was unable to locate security match targets.')
         return resp, waf_match_target_ids
 
     def modifyMatchTarget(self, config_id, version, target_id, data):
@@ -529,6 +557,18 @@ class apiCallsWrapper:
 
             for p in pol_list:
                 logger.debug(f"{p['policyName']:<20}{p['policyId']}")
+                policies_name[f"{p['policyId']}"] = [f"{p['policyName']}"]
+        return resp, policies_name
+
+    def get_waf_policy_from_config(self, config_id: int, version: int):
+        url = self.formUrl(f'https://{self.access_hostname}/appsec/v1/configs/{config_id}/versions/{version}/security-policies')
+        resp = self.session.get(url, headers=headers)
+        policies_name = {}
+        if resp.status_code == 200:
+            pol_list = resp.json()['policies']
+            logger.debug(f'{"Policy Name":<40}Policy ID')
+            for p in pol_list:
+                logger.debug(f"{p['policyName']:<40}{p['policyId']}")
                 policies_name[f"{p['policyId']}"] = [f"{p['policyName']}"]
         return resp, policies_name
 

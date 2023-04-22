@@ -14,11 +14,13 @@ from time import gmtime
 from time import strftime
 from urllib import parse
 
+import pandas as pd
 from cerberus import Validator
 from distutils.dir_util import copy_tree
 from exceptions import get_cli_root_directory
 from exceptions import setup_logger
 from pyisemail import is_email
+from tabulate import tabulate
 
 logger = setup_logger()
 root = get_cli_root_directory()
@@ -1112,3 +1114,40 @@ class utility:
                 logger.error(f'{hostname} cannot begin or end with a hyphen.')
                 error_count += 1
         return error_count
+
+    def validate_waf_config_name(self, wrapper_object, config_name: str | None = None) -> int:
+        if config_name:
+            config_detail = self.getWafConfigIdByName(wrapper_object, config_name)
+            if config_detail['Found']:
+                onboard_waf_config_id = config_detail['details']['id']
+                onboard_waf_prev_version = config_detail['details']['latestVersion']
+                logger.info(f'{config_name}{space:>{column_width - len(config_name)}}valid waf_config_name')
+                logger.info(f'{onboard_waf_config_id}{space:>{column_width - len(str(onboard_waf_config_id))}}found existing onboard_waf_config_id')
+                logger.info(f'{onboard_waf_prev_version}{space:>{column_width - len(str(onboard_waf_prev_version))}}found latest onboard_waf_prev_version')
+            else:
+                logger.error(f'{config_name}{space:>{column_width - len(config_name)}}invalid waf_config_name, not found')
+        else:
+            onboard_waf_config_id = 0
+            onboard_waf_prev_version = 0
+            response = wrapper_object.getWafConfigurations()
+            df = pd.DataFrame(response.json()['configurations'])
+            df.fillna('', inplace=True)
+            logger.warning('WAF Security Configuration')
+            print(tabulate(df[['name', 'id', 'description']], headers='keys', tablefmt='psql', showindex=False))
+        return onboard_waf_config_id, onboard_waf_prev_version
+
+    def list_waf_policy(self, wrapper_object, config_id, version, policy_name: str | None = None) -> str:
+        _, policies = wrapper_object.get_waf_policy_from_config(config_id, version)
+        df = pd.DataFrame.from_dict(policies, orient='index')
+        df.index.name = 'Policy ID'
+        df.columns = ['Policy Name']
+        df.sort_values(by='Policy Name', inplace=True)
+        if not policy_name:
+            policy_str_id = ''
+            # logger.warning('Security Policy')
+            # print(tabulate(df, headers='keys', tablefmt='psql', showindex=True))
+        else:
+            policy_str_id = list(filter(lambda x: policies[x] == [policy_name], policies))[0]
+            logger.info(f'{policy_name}{space:>{column_width - len(policy_name)}}valid policy name')
+            logger.info(f'{policy_str_id}{space:>{column_width - len(policy_str_id)}}found policy id')
+        return policy_str_id, policies

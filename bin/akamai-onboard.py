@@ -42,7 +42,7 @@ from exceptions import get_cli_root_directory
 from exceptions import setup_logger
 from model.multi_hosts import MultiHosts
 from model.single_host import SingleHost
-
+from rich import print_json
 
 PACKAGE_VERSION = '2.2.0'
 logger = setup_logger()
@@ -720,6 +720,26 @@ def batch_create(config, **kwargs):
         return 0
 
     return 0
+
+
+@cli.command(short_help='List available security configuration policy')
+@click.option('--waf-config-name', metavar='', help='Security config name', required=False)
+@click.option('--policy-name', metavar='', help='Security policy name', required=False)
+@pass_config
+def appsec_policy(config, waf_config_name, policy_name):
+    logger.info('Start Akamai CLI onboard')
+    _, wrap_api = init_config(config)
+    util = utility.utility()
+    config_id, version = util.validate_waf_config_name(wrap_api, waf_config_name)
+    if not waf_config_name:
+        logger.warning('Add --waf-config-name to list Policy and Website Match Target')
+    else:
+        policy_str_id, policies = util.list_waf_policy(wrap_api, config_id, version, policy_name)
+        if policy_str_id:
+            wrap_api.list_policy_match_targets(config_id, version, policy_str_id, policy_name)
+        else:
+            wrap_api.list_match_targets(config_id, version, policies)
+    util.log_cli_timing()
 
 
 def get_prog_name():
