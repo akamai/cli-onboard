@@ -65,6 +65,24 @@ class apiCallsWrapper:
                 return True
         return False
 
+    def get_property_id(self, property_name: str):
+        url = f'https://{self.access_hostname}/papi/v1/search/find-by-value'
+        url = self.formUrl(url)
+        payload = {'propertyName': property_name}
+        resp = self.session.post(url, headers=headers, json=payload)
+        if resp.status_code == 200:
+            if len(resp.json()['versions']['items']) > 0:
+                return resp.json()['versions']['items']
+
+    def list_property_hostname(self, property_id: str, contract_id: str, group_id: str):
+        url = f'https://{self.access_hostname}/papi/v1/properties/{property_id}/hostnames'
+        query_parm = f'?contractId={contract_id}&groupId={group_id}'
+        url = self.formUrl(f'{url}{query_parm}')
+        resp = self.session.get(url, headers=headers)
+        if resp.status_code == 200:
+            if len(resp.json()['hostnames']['items']) > 0:
+                return resp.json()['hostnames']['items']
+
     def get_groups_without_parent(self) -> list:
         url = f'https://{self.access_hostname}/papi/v1/groups/'
         url = self.formUrl(url)
@@ -459,7 +477,7 @@ class apiCallsWrapper:
         modify_hosts_url = f'https://{self.access_hostname}/appsec/v1/configs/{config_id}/versions/{version}/selected-hostnames'
         modify_hosts_url = self.formUrl(modify_hosts_url)
 
-        modify_hosts_response = self.session.put(modify_hosts_url, data=data, headers=headers)
+        modify_hosts_response = self.session.put(modify_hosts_url, json=data, headers=headers)
         logger.debug(f'{modify_hosts_response.status_code}: {modify_hosts_response.url}')
         logger.debug(data)
         return modify_hosts_response
@@ -606,3 +624,30 @@ class apiCallsWrapper:
         if resp.status_code != 200:
             logger.info(json.dumps(resp.json(), indent=4))
         return resp
+
+    def get_selectable_hostnames(self, contract_id: int, group_id: int, network: str | None = 'staging'):
+        url = f'https://{self.access_hostname}/appsec/v1/contracts/{contract_id}/groups/{group_id}/selectable-hostnames'
+        url = self.formUrl(url)
+        response = self.session.get(url)
+        if response.status_code == 200:
+            if len(response.json()['availableSet']) > 0:
+                df = pd.json_normalize(response.json()['availableSet'])
+                if network == 'staging':
+                    selectable_df = df[(df['activeInStaging']) & (df['configNameInProduction'].isnull())]
+                else:
+                    selectable_df = df[df['activeInProduction']]
+            hostnames = sorted(selectable_df['hostname'].unique().tolist())
+        return response, hostnames
+
+    def get_property_hostnames(self, property_id: str, contract_id: str, group_id: str, network: str | None = 'staging'):
+        response = self.list_property_hostname(property_id, contract_id, group_id)
+        hostnames = []
+        if isinstance(response, list):
+            hostname_df = pd.DataFrame(response)
+            if network == 'staging':
+                new_df = hostname_df[~hostname_df['stagingCnameTo'].isnull()]
+            else:
+                new_df = hostname_df[~hostname_df['productionCnameTo'].isnull()]
+            hostnames = new_df['cnameFrom'].unique().tolist()
+            logger.debug(hostnames)
+        return hostnames

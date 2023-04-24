@@ -20,6 +20,7 @@ from distutils.dir_util import copy_tree
 from exceptions import get_cli_root_directory
 from exceptions import setup_logger
 from pyisemail import is_email
+from rich import print_json
 from tabulate import tabulate
 
 logger = setup_logger()
@@ -575,7 +576,6 @@ class utility:
 
         return self.valid
 
-    # Validate file
     def validateFile(self, source: str, file_location: str) -> bool:
         logger.debug(f'{file_location} {type(file_location)} {os.path.exists(file_location)}')
         logger.debug(os.path.abspath(file_location))
@@ -1151,3 +1151,89 @@ class utility:
             logger.info(f'{policy_name}{space:>{column_width - len(policy_name)}}valid policy name')
             logger.info(f'{policy_str_id}{space:>{column_width - len(policy_str_id)}}found policy id')
         return policy_str_id, policies
+
+    def csv_2_appsec_create_by_hostname(self, csv_file_loc: str):
+        schema = {'waf_config_name': {'type': 'string',
+                                      'required': True,
+                                      'empty': False},
+                  'waf_policy_name': {'type': 'string',
+                                      'nullable': True,
+                                      'required': False},
+                  'hostname': {'type': 'string',
+                               'required': False,
+                               'empty': False},
+                 }
+
+        v = Validator(schema)
+        logger.warning(f'Reading customer security configuration input: {csv_file_loc}')
+        with open(csv_file_loc, encoding='utf-8-sig', newline='') as f:
+            data = []
+            for i, row in enumerate(csv.DictReader(f), 1):
+                data.append(row)
+                valid = v.validate(row)
+                if v.errors:
+                    valid = False
+                    for error in v.errors:
+                        logger.warning(f'CSV Validation Error in row: {i} {error}')
+        return valid, data
+
+    def csv_2_appsec_create_by_propertyname(self, csv_file_loc: str):
+        schema = {'property_name': {'type': 'string',
+                                    'required': True},
+                  'waf_config_name': {'type': 'string',
+                                       'required': True},
+                  'waf_policy_name': {'type': 'string',
+                                       'nullable': False,
+                                       'required': True},
+                  'hostname': {'type': 'string',
+                                'nullable': True,
+                                'required': False}
+                 }
+
+        v = Validator(schema)
+        logger.warning(f'Reading customer security configuration input: {csv_file_loc}')
+        with open(csv_file_loc, encoding='utf-8-sig', newline='') as f:
+            data = []
+            count = 0
+            for i, row in enumerate(csv.DictReader(f), 1):
+                data.append(row)
+                valid = v.validate(row)
+                if v.errors:
+                    count += 1
+                    for error in v.errors:
+                        logger.error(f'CSV Validation Error in row: {i} {error}')
+        if count > 0:
+            return False, data
+        return True, data
+
+    def populate_waf_data(self, by: str, input: dict) -> dict:
+        waf = []
+
+        for i in input['waf_config_name'].unique():
+            config = {}
+            waf_policy_name = sorted(list({input['waf_policy_name'][j] for j in input[input['waf_config_name'] == i].index}))
+            config['waf_config_name'] = i
+            for policy in waf_policy_name:
+                new_df = input[(input['waf_config_name'] == i) & (input['waf_policy_name'] == policy)]
+                if by == 'propertyname':
+                    combined_hostnames = new_df['hostname'].values
+                    hostnames = [item for sublist in combined_hostnames for item in sublist]
+                if by == 'hostname':
+                    hostnames = new_df['hostname'].unique().tolist()
+                config[policy] = hostnames
+            waf.append(config)
+        logger.debug(waf)
+        return waf
+
+    def stringToList(self, input):
+        try:
+            if isinstance(input, list):
+                newList = input
+            elif isinstance(input, str) and len(input) != 0:
+                tempList = input.split(', ')
+                newList = list(map(lambda x: x, tempList))
+            else:
+                newList = []
+        except:
+            newList = None
+        return (newList)

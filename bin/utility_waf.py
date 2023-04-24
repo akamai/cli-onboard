@@ -157,7 +157,7 @@ class wafFunctions:
                 for key in dic:
                     if key == 'hostname':
                         hostnames.append(dic[key])
-            logger.info(f'Valid hostnames {onboard_obj.public_hostnames} for '
+            logger.debug(f'Valid hostnames {onboard_obj.public_hostnames} for '
                         f'contract_id {onboard_obj.contract_id} and '
                         f'group_id {onboard_obj.group_id}')
             public_hostnames = {public_hostnames.lower() for public_hostnames in onboard_obj.public_hostnames}
@@ -182,7 +182,6 @@ class wafFunctions:
             sys.exit()
 
         resp = wrap_api.create_waf_configurations(onboard_obj)
-        logger.debug(json.dumps(resp.json(), indent=4))
         if resp.status_code == 200 or \
             resp.status_code == 201:
             logger.info(f"'{onboard_obj.waf_config_name}'{dot:>8}"
@@ -190,6 +189,7 @@ class wafFunctions:
                         f'version: {onboard_obj.onboard_waf_config_version:<5}{dot:>5}'
                         f'valid Security Configuration')
             return True
+        logger.error(json.dumps(resp.json(), indent=4))
         logger.error(f'Unable to create a new version for WAF Configuration: '
                      f'{onboard_obj.waf_config_name}')
         return False
@@ -219,7 +219,16 @@ class wafFunctions:
             extra = (len(onboard_obj.waf_config_name) - len('sequence: 1')) + 10
             logger.info(f'sequence: {onboard_obj.target_seq}{dot:>{extra}}'
                         f'id: {onboard_obj.target_id:<5}{dot:>32}'
-                        'valid match target sequence')
+                         'valid match target sequence')
+            original_extra = extra + 56
+            logger.debug(f'{original_extra}')
+            extra = original_extra - len(str(onboard_obj.public_hostnames)) - 2
+            if extra <= 0:
+                extra = original_extra + 7
+                logger.info(f'{onboard_obj.public_hostnames}\n{dot:>{extra}}valid public hostnames')
+            else:
+                logger.info(f'{onboard_obj.public_hostnames}{dot:>{extra}}'
+                            f'valid public hostnames')
             return True
         logger.error('Unable to create a match target')
         return False
