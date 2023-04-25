@@ -17,7 +17,10 @@ import string
 import sys
 
 import _logging as lg
+import pandas as pd
 from exceptions import setup_logger
+from rich import print_json
+from tabulate import tabulate
 
 
 logger = setup_logger()
@@ -61,6 +64,24 @@ class apiCallsWrapper:
             else:
                 return True
         return False
+
+    def get_property_id(self, property_name: str):
+        url = f'https://{self.access_hostname}/papi/v1/search/find-by-value'
+        url = self.formUrl(url)
+        payload = {'propertyName': property_name}
+        resp = self.session.post(url, headers=headers, json=payload)
+        if resp.status_code == 200:
+            if len(resp.json()['versions']['items']) > 0:
+                return resp.json()['versions']['items']
+
+    def list_property_hostname(self, property_id: str, contract_id: str, group_id: str):
+        url = f'https://{self.access_hostname}/papi/v1/properties/{property_id}/hostnames'
+        query_parm = f'?contractId={contract_id}&groupId={group_id}'
+        url = self.formUrl(f'{url}{query_parm}')
+        resp = self.session.get(url, headers=headers)
+        if resp.status_code == 200:
+            if len(resp.json()['hostnames']['items']) > 0:
+                return resp.json()['hostnames']['items']
 
     def get_groups_without_parent(self) -> list:
         url = f'https://{self.access_hostname}/papi/v1/groups/'
@@ -390,20 +411,45 @@ class apiCallsWrapper:
         resp = self.session.get(url)
         logger.debug(json.dumps(resp.json()['matchTargets'], indent=3))
         waf_match_target_ids = []
+        waf_targets = {}
         if resp.status_code == 200:
             web_tgts = resp.json()['matchTargets']['websiteTargets']
-            logger.warning(f'{"Policy Name":<20}waf_target_id (Website Match Target)')
+            # logger.warning(f'{"Policy Name":<50}waf_target_id (Website Match Target)')
             for tgt in web_tgts:
                 policy_id = tgt['securityPolicy']['policyId']
                 name = policies[policy_id][0]
                 if policy_id in policies.keys():
                     policies[policy_id].append('WEB')
                     policies[policy_id].append(tgt['targetId'])
+                    waf_targets[name] = tgt['targetId']
                 waf_match_target_ids.append(tgt['targetId'])
-                logger.info(f"{name:<20}{tgt['targetId']}")
+                # logger.info(f"{name:<50}{tgt['targetId']}")
+
+            df = pd.DataFrame.from_dict(waf_targets, orient='index')
+            df.index.name = 'Policy Name'
+            df.columns = ['Website Match Target']
+            df['Website Match Target'] = df['Website Match Target'].astype(str)
+            df.sort_values(by='Policy Name', inplace=True)
+            print(tabulate(df, headers='keys', tablefmt='psql', showindex=True))
         else:
             logger.error('The system was unable to locate security match targets.')
+        return resp, waf_match_target_ids
 
+    def list_policy_match_targets(self, config_id: int, version: int, policy_id: str, policy_name: str):
+        url = f'https://{self.access_hostname}/appsec/v1/configs/{config_id}/versions/{version}/match-targets'
+        url = self.formUrl(url)
+        resp = self.session.get(url)
+        logger.debug(json.dumps(resp.json()['matchTargets'], indent=3))
+        waf_match_target_ids = []
+        if resp.status_code == 200:
+            web_tgts = resp.json()['matchTargets']['websiteTargets']
+            logger.warning(f'{"Policy Name":<50}waf_target_id (Website Match Target)')
+            for tgt in web_tgts:
+                if tgt['securityPolicy']['policyId'] == policy_id:
+                    logger.info(f"{policy_name:<50}{tgt['targetId']}")
+                    waf_match_target_ids.append(tgt['targetId'])
+        else:
+            logger.error('The system was unable to locate security match targets.')
         return resp, waf_match_target_ids
 
     def modifyMatchTarget(self, config_id, version, target_id, data):
@@ -431,7 +477,7 @@ class apiCallsWrapper:
         modify_hosts_url = f'https://{self.access_hostname}/appsec/v1/configs/{config_id}/versions/{version}/selected-hostnames'
         modify_hosts_url = self.formUrl(modify_hosts_url)
 
-        modify_hosts_response = self.session.put(modify_hosts_url, data=data, headers=headers)
+        modify_hosts_response = self.session.put(modify_hosts_url, json=data, headers=headers)
         logger.debug(f'{modify_hosts_response.status_code}: {modify_hosts_response.url}')
         logger.debug(data)
         return modify_hosts_response
@@ -532,6 +578,18 @@ class apiCallsWrapper:
                 policies_name[f"{p['policyId']}"] = [f"{p['policyName']}"]
         return resp, policies_name
 
+    def get_waf_policy_from_config(self, config_id: int, version: int):
+        url = self.formUrl(f'https://{self.access_hostname}/appsec/v1/configs/{config_id}/versions/{version}/security-policies')
+        resp = self.session.get(url, headers=headers)
+        policies_name = {}
+        if resp.status_code == 200:
+            pol_list = resp.json()['policies']
+            logger.debug(f'{"Policy Name":<40}Policy ID')
+            for p in pol_list:
+                logger.debug(f"{p['policyName']:<40}{p['policyId']}")
+                policies_name[f"{p['policyId']}"] = [f"{p['policyName']}"]
+        return resp, policies_name
+
     def create_waf_match_target(self, ion):
         url = self.formUrl(f'https://{self.access_hostname}/appsec/v1/configs/{ion.onboard_waf_config_id}/versions/{ion.onboard_waf_config_version}/match-targets')
         payload = {}
@@ -569,15 +627,15 @@ class apiCallsWrapper:
 
     def getWAFSelectableHosts(self, config_id, version):
         url = self.formUrl(f'https://{self.access_hostname}/appsec/v1/configs/{config_id}/versions/{version}/selectable-hostnames')
-        
+
         result = self.session.get(url, headers=headers)
         if result.status_code == 200:
             jsonResponse = result.json()
-            
+
         else:
             logger.error(f'api error 1 with {url}')
             jsonResponse = False
-        
+
         return jsonResponse
 
     def get_waf_policy_update(self, config_id, config_version):
@@ -590,3 +648,30 @@ class apiCallsWrapper:
                 policies_name[f"{p['policyId']}"] = [f"{p['policyName']}"]
 
         return policies_name
+
+    def get_selectable_hostnames(self, contract_id: int, group_id: int, network: str | None = 'staging'):
+        url = f'https://{self.access_hostname}/appsec/v1/contracts/{contract_id}/groups/{group_id}/selectable-hostnames'
+        url = self.formUrl(url)
+        response = self.session.get(url)
+        if response.status_code == 200:
+            if len(response.json()['availableSet']) > 0:
+                df = pd.json_normalize(response.json()['availableSet'])
+                if network == 'staging':
+                    selectable_df = df[(df['activeInStaging']) & (df['configNameInProduction'].isnull())]
+                else:
+                    selectable_df = df[df['activeInProduction']]
+            hostnames = sorted(selectable_df['hostname'].unique().tolist())
+        return response, hostnames
+
+    def get_property_hostnames(self, property_id: str, contract_id: str, group_id: str, network: str | None = 'staging'):
+        response = self.list_property_hostname(property_id, contract_id, group_id)
+        hostnames = []
+        if isinstance(response, list):
+            hostname_df = pd.DataFrame(response)
+            if network == 'staging':
+                new_df = hostname_df[~hostname_df['stagingCnameTo'].isnull()]
+            else:
+                new_df = hostname_df[~hostname_df['productionCnameTo'].isnull()]
+            hostnames = new_df['cnameFrom'].unique().tolist()
+            logger.debug(hostnames)
+        return hostnames

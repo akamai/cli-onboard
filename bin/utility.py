@@ -14,11 +14,14 @@ from time import gmtime
 from time import strftime
 from urllib import parse
 
+import pandas as pd
 from cerberus import Validator
 from distutils.dir_util import copy_tree
 from exceptions import get_cli_root_directory
 from exceptions import setup_logger
 from pyisemail import is_email
+from rich import print_json
+from tabulate import tabulate
 
 logger = setup_logger()
 root = get_cli_root_directory()
@@ -589,17 +592,17 @@ class utility:
             count += 1
 
         if cli_mode == 'appsec-update':
-        # check if config id exists
+            # check if config id exists
             msg = f'{onboard_object.config_id}{space:>{column_width-len(onboard_object.config_id)}}'
             appsec_configs = wrapper_object.getWafConfigurations()
             if appsec_configs.status_code == 200:
                 appsec_configs = appsec_configs.json()
             else:
-                sys.exit(logger.error(f'unable to get waf configurations....'))
+                sys.exit(logger.error('unable to get waf configurations....'))
             try:
                 appsec_config_exists = list(filter(lambda x: int(x['id']) == int(onboard_object.config_id), appsec_configs['configurations']))
             except KeyError:
-                sys.exit(logger.error(f'unable to get waf configurations....'))
+                sys.exit(logger.error('unable to get waf configurations....'))
 
             # return list of valid appsec ids if appsec id invalid
             if not appsec_config_exists:
@@ -607,23 +610,23 @@ class utility:
                 valid_waf = False
                 count += 1
                 # listing valid waf configs and ids
-                logger.warning(f'Showing all available configs...')
+                logger.warning('Showing all available configs...')
                 logger.info(f'Config Name:{space:>38}Config Id:')
                 for waf_config in appsec_configs['configurations']:
                     logger.info(f"{waf_config['name']}{space:>{column_width-len(waf_config['name'])}}{waf_config['id']}")
-                sys.exit(logger.error(f'Exiting....'))
+                sys.exit(logger.error('Exiting....'))
             else:
                 onboard_object.waf_config_name = appsec_config_exists[0]['name']
                 msg = f'{onboard_object.config_id}:{onboard_object.waf_config_name}{space:>{column_width-(len(onboard_object.config_id)+len(onboard_object.waf_config_name))}}'
                 logger.info(f'{msg}valid config id')
-        
+
             # check if config id base version exists
             if valid_waf:
                 msg = f'{onboard_object.config_version}{space:>{column_width-len(onboard_object.config_version)}}'
                 if onboard_object.config_version == 'latest':
                     onboard_object.config_version = appsec_config_exists[0]['latestVersion']
                     logger.info(f'{msg}using config id version {onboard_object.config_version}')
-                else: 
+                else:
                     if int(onboard_object.config_version) > appsec_config_exists[0]['latestVersion']:
                         logger.error(f'{msg}invalid config version')
                         count += 1
@@ -633,28 +636,28 @@ class utility:
 
             # check if policy match targets are valid
             if valid_waf:
-                #first get all policies
-                policies = wrapper_object.get_waf_policy_update(onboard_object.config_id,onboard_object.config_version)
+                # first get all policies
+                policies = wrapper_object.get_waf_policy_update(onboard_object.config_id, onboard_object.config_version)
                 if policies:
-                    unique_match_target_list = list(set(list(map(lambda x:x["matchTargetId"],onboard_object.csv_dict))))
-                    resp, waf_match_target_ids = wrapper_object.list_match_targets(onboard_object.config_id,onboard_object.config_version,policies)
+                    unique_match_target_list = list(set(list(map(lambda x: x['matchTargetId'], onboard_object.csv_dict))))
+                    resp, waf_match_target_ids = wrapper_object.list_match_targets(onboard_object.config_id, onboard_object.config_version, policies)
                     for unique_match_target in unique_match_target_list:
                         msg = f'{unique_match_target}{space:>{column_width-len(unique_match_target)}}'
                         if int(unique_match_target) in waf_match_target_ids:
-                            logger.info(f'{msg}valid match target id')
+                            logger.info(f'{msg} valid match target id')
                         else:
-                            logger.error(f'{msg}invlaid match target id')
-                            count +=1
+                            logger.error(f'{msg} invalid match target id')
+                            count += 1
                     if resp.status_code != 200:
-                        sys.exit(logger.error(f'unable to get waf match targets....'))
+                        sys.exit(logger.error('unable to get waf match targets....'))
                 else:
-                    sys.exit(logger.error(f'unable to get waf policies....'))
+                    sys.exit(logger.error('unable to get waf policies....'))
 
         # validate that hostnames are either already selected or selectable
         available_hostnames = wrapper_object.getWAFSelectableHosts(onboard_object.config_id, onboard_object.config_version)
-        selectable_hosts_list = list(set(list(map(lambda x:x["hostname"],available_hostnames["availableSet"]))))
+        selectable_hosts_list = list(set(list(map(lambda x: x['hostname'], available_hostnames['availableSet']))))
         try:
-            selected_host_list = list(set(list(map(lambda x:x["hostname"],available_hostnames["selectedSet"]))))
+            selected_host_list = list(set(list(map(lambda x: x['hostname'], available_hostnames['selectedSet']))))
         except KeyError:
             selected_host_list = []
 
@@ -670,7 +673,7 @@ class utility:
                     onboard_object.skip_selected_hosts.append(hostname)
 
         else:
-            sys.exit(logger.error(f'unable to get available hostnames....'))
+            sys.exit(logger.error('unable to get available hostnames....'))
 
         if count == 0:
             self.valid is True
@@ -681,7 +684,6 @@ class utility:
 
         return self.valid
 
-    # Validate file
     def validateFile(self, source: str, file_location: str) -> bool:
         logger.debug(f'{file_location} {type(file_location)} {os.path.exists(file_location)}')
         logger.debug(os.path.abspath(file_location))
@@ -1057,7 +1059,7 @@ class utility:
 
         onboard_object.csv_dict = csv_dict
         return onboard_object.valid_csv
-    
+
     def csv_2_property_dict(self, onboard_object) -> dict:
         propertyList = []
         hostnameList = []
@@ -1255,7 +1257,7 @@ class utility:
     def csv_2_appsec_array(self, onboard_object) -> dict:
         hostname_list = []
         appsec_json = {}
-        
+
         for i, row in enumerate(onboard_object.csv_dict):
             policyName = row['matchTargetId']
             # Check if policyName already exists in dictionary and append hostname to list
@@ -1268,6 +1270,129 @@ class utility:
                 appsec_json[policyName] = {}
                 appsec_json[policyName]['hostnames'] = [row['hostname']]
                 hostname_list.append(row['hostname'])
-        
+
         onboard_object.hostname_list = hostname_list
         onboard_object.appsec_json = appsec_json
+
+    def validate_waf_config_name(self, wrapper_object, config_name: str | None = None) -> int:
+        if config_name:
+            config_detail = self.getWafConfigIdByName(wrapper_object, config_name)
+            if config_detail['Found']:
+                onboard_waf_config_id = config_detail['details']['id']
+                onboard_waf_prev_version = config_detail['details']['latestVersion']
+                logger.info(f'{config_name}{space:>{column_width - len(config_name)}}valid waf_config_name')
+                logger.info(f'{onboard_waf_config_id}{space:>{column_width - len(str(onboard_waf_config_id))}}found existing onboard_waf_config_id')
+                logger.info(f'{onboard_waf_prev_version}{space:>{column_width - len(str(onboard_waf_prev_version))}}found latest onboard_waf_prev_version')
+            else:
+                logger.error(f'{config_name}{space:>{column_width - len(config_name)}}invalid waf_config_name, not found')
+        else:
+            onboard_waf_config_id = 0
+            onboard_waf_prev_version = 0
+            response = wrapper_object.getWafConfigurations()
+            df = pd.DataFrame(response.json()['configurations'])
+            df.fillna('', inplace=True)
+            logger.warning('WAF Security Configuration')
+            print(tabulate(df[['name', 'id', 'description']], headers='keys', tablefmt='psql', showindex=False))
+        return onboard_waf_config_id, onboard_waf_prev_version
+
+    def list_waf_policy(self, wrapper_object, config_id, version, policy_name: str | None = None) -> str:
+        _, policies = wrapper_object.get_waf_policy_from_config(config_id, version)
+        df = pd.DataFrame.from_dict(policies, orient='index')
+        df.index.name = 'Policy ID'
+        df.columns = ['Policy Name']
+        df.sort_values(by='Policy Name', inplace=True)
+        if not policy_name:
+            policy_str_id = ''
+            # logger.warning('Security Policy')
+            # print(tabulate(df, headers='keys', tablefmt='psql', showindex=True))
+        else:
+            policy_str_id = list(filter(lambda x: policies[x] == [policy_name], policies))[0]
+            logger.info(f'{policy_name}{space:>{column_width - len(policy_name)}}valid policy name')
+            logger.info(f'{policy_str_id}{space:>{column_width - len(policy_str_id)}}found policy id')
+        return policy_str_id, policies
+
+    def csv_2_appsec_create_by_hostname(self, csv_file_loc: str):
+        schema = {'waf_config_name': {'type': 'string',
+                                      'required': True,
+                                      'empty': False},
+                  'waf_policy_name': {'type': 'string',
+                                      'nullable': True,
+                                      'required': False},
+                  'hostname': {'type': 'string',
+                               'required': False,
+                               'empty': False},
+                 }
+
+        v = Validator(schema)
+        logger.warning(f'Reading customer security configuration input: {csv_file_loc}')
+        with open(csv_file_loc, encoding='utf-8-sig', newline='') as f:
+            data = []
+            for i, row in enumerate(csv.DictReader(f), 1):
+                data.append(row)
+                valid = v.validate(row)
+                if v.errors:
+                    valid = False
+                    for error in v.errors:
+                        logger.warning(f'CSV Validation Error in row: {i} {error}')
+        return valid, data
+
+    def csv_2_appsec_create_by_propertyname(self, csv_file_loc: str):
+        schema = {'property_name': {'type': 'string',
+                                    'required': True},
+                  'waf_config_name': {'type': 'string',
+                                       'required': True},
+                  'waf_policy_name': {'type': 'string',
+                                       'nullable': False,
+                                       'required': True},
+                  'hostname': {'type': 'string',
+                                'nullable': True,
+                                'required': False}
+                 }
+
+        v = Validator(schema)
+        logger.warning(f'Reading customer security configuration input: {csv_file_loc}')
+        with open(csv_file_loc, encoding='utf-8-sig', newline='') as f:
+            data = []
+            count = 0
+            for i, row in enumerate(csv.DictReader(f), 1):
+                data.append(row)
+                valid = v.validate(row)
+                if v.errors:
+                    count += 1
+                    for error in v.errors:
+                        logger.error(f'CSV Validation Error in row: {i} {error}')
+        if count > 0:
+            return False, data
+        return True, data
+
+    def populate_waf_data(self, by: str, input: dict) -> dict:
+        waf = []
+
+        for i in input['waf_config_name'].unique():
+            config = {}
+            waf_policy_name = sorted(list({input['waf_policy_name'][j] for j in input[input['waf_config_name'] == i].index}))
+            config['waf_config_name'] = i
+            for policy in waf_policy_name:
+                new_df = input[(input['waf_config_name'] == i) & (input['waf_policy_name'] == policy)]
+                if by == 'propertyname':
+                    combined_hostnames = new_df['hostname'].values
+                    hostnames = [item for sublist in combined_hostnames for item in sublist]
+                if by == 'hostname':
+                    hostnames = new_df['hostname'].unique().tolist()
+                config[policy] = hostnames
+            waf.append(config)
+        logger.debug(waf)
+        return waf
+
+    def stringToList(self, input):
+        try:
+            if isinstance(input, list):
+                newList = input
+            elif isinstance(input, str) and len(input) != 0:
+                tempList = input.split(', ')
+                newList = list(map(lambda x: x, tempList))
+            else:
+                newList = []
+        except:
+            newList = None
+        return (newList)

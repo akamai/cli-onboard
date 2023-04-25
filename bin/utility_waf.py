@@ -65,55 +65,55 @@ class wafFunctions:
         return False
 
     def updateActivateAndPoll(self, wrap_api, onboard_object, network):
-            """
-            Function to activate WAF configuration to Akamai Staging or Production network when in appsec-update mode.
-            """
-            print()
-            logger.warning(f'Preparing to activate WAF to Akamai {network} network')
-            start_time = time.perf_counter()
-            act_response = wrap_api.activateWafPolicy(onboard_object.config_id,
-                                                    onboard_object.onboard_waf_config_version,
-                                                    network,
-                                                    onboard_object.notification_emails,
-                                                    note='Onboard CLI Activation')
+        """
+        Function to activate WAF configuration to Akamai Staging or Production network when in appsec-update mode.
+        """
+        print()
+        logger.warning(f'Preparing to activate WAF to Akamai {network} network')
+        start_time = time.perf_counter()
+        act_response = wrap_api.activateWafPolicy(onboard_object.config_id,
+                                                onboard_object.onboard_waf_config_version,
+                                                network,
+                                                onboard_object.notification_emails,
+                                                note='Onboard CLI Activation')
 
-            if act_response.status_code == 200:
-                activation_status = False
-                activation_id = act_response.json()['activationId']
-                while activation_status is False:
-                    print('Polling 30s...')
-                    polling_status_response = wrap_api.pollWafActivationStatus(activation_id)
+        if act_response.status_code == 200:
+            activation_status = False
+            activation_id = act_response.json()['activationId']
+            while activation_status is False:
+                print('Polling 30s...')
+                polling_status_response = wrap_api.pollWafActivationStatus(activation_id)
 
-                    logger.debug(json.dumps(polling_status_response.json(), indent=4))
-                    logger.debug(polling_status_response.url)
-                    if polling_status_response.status_code == 200:
-                        if network in polling_status_response.json()['network']:
-                            if 'status' not in polling_status_response.json():
-                                time.sleep(30)
-                            elif polling_status_response.json()['status'] != 'ACTIVATED':
-                                time.sleep(30)
-                            elif polling_status_response.json()['status'] == 'ACTIVATED':
-                                end_time = time.perf_counter()
-                                elapse_time = str(strftime('%H:%M:%S', gmtime(end_time - start_time)))
-                                msg = f'Successfully activated WAF configuration to Akamai {network} network'
-                                logger.info(f'Activation Duration: {elapse_time} {msg}')
-                                print()
-                                activation_status = True
-                                return activation_status
-                            else:
-                                logger.error(json.dumps(polling_status_response.json(), indent=4))
-                                logger.error('Unable to parse activation status')
-                                activation_status = False
-                                return activation_status
-                    else:
-                        logger.error(json.dumps(act_response.json(), indent=4))
-                        logger.error('Unable to get activation status')
-                        return False
+                logger.debug(json.dumps(polling_status_response.json(), indent=4))
+                logger.debug(polling_status_response.url)
+                if polling_status_response.status_code == 200:
+                    if network in polling_status_response.json()['network']:
+                        if 'status' not in polling_status_response.json():
+                            time.sleep(30)
+                        elif polling_status_response.json()['status'] != 'ACTIVATED':
+                            time.sleep(30)
+                        elif polling_status_response.json()['status'] == 'ACTIVATED':
+                            end_time = time.perf_counter()
+                            elapse_time = str(strftime('%H:%M:%S', gmtime(end_time - start_time)))
+                            msg = f'Successfully activated WAF configuration to Akamai {network} network'
+                            logger.info(f'Activation Duration: {elapse_time} {msg}')
+                            print()
+                            activation_status = True
+                            return activation_status
+                        else:
+                            logger.error(json.dumps(polling_status_response.json(), indent=4))
+                            logger.error('Unable to parse activation status')
+                            activation_status = False
+                            return activation_status
+                else:
+                    logger.error(json.dumps(act_response.json(), indent=4))
+                    logger.error('Unable to get activation status')
+                    return False
 
-            logger.error(json.dumps(act_response.json(), indent=4))
-            logger.error('Unable to get activation status')
-            logger.debug(act_response.url)
-            return False
+        logger.error(json.dumps(act_response.json(), indent=4))
+        logger.error('Unable to get activation status')
+        logger.debug(act_response.url)
+        return False
 
     def addHostnames(self, wrapper_object, hostname_list, config_id, version):
         """
@@ -199,7 +199,7 @@ class wafFunctions:
             logger.error(json.dumps(version_creation_response.json(), indent=4))
             logger.error(f'Unable to create a new version for WAF Configuration: {onboard_obj.waf_config_name}')
             return False
-   
+
     def createWafVersion_Update(self, wrapper_object, onboard_obj, notes: str):
         """
         Function to create new waf config version
@@ -228,7 +228,7 @@ class wafFunctions:
                 for key in dic:
                     if key == 'hostname':
                         hostnames.append(dic[key])
-            logger.info(f'Valid hostnames {onboard_obj.public_hostnames} for '
+            logger.debug(f'Valid hostnames {onboard_obj.public_hostnames} for '
                         f'contract_id {onboard_obj.contract_id} and '
                         f'group_id {onboard_obj.group_id}')
             public_hostnames = {public_hostnames.lower() for public_hostnames in onboard_obj.public_hostnames}
@@ -253,7 +253,6 @@ class wafFunctions:
             sys.exit()
 
         resp = wrap_api.create_waf_configurations(onboard_obj)
-        logger.debug(json.dumps(resp.json(), indent=4))
         if resp.status_code == 200 or \
             resp.status_code == 201:
             logger.info(f"'{onboard_obj.waf_config_name}'{dot:>8}"
@@ -261,6 +260,7 @@ class wafFunctions:
                         f'version: {onboard_obj.onboard_waf_config_version:<5}{dot:>5}'
                         f'valid Security Configuration')
             return True
+        logger.error(json.dumps(resp.json(), indent=4))
         logger.error(f'Unable to create a new version for WAF Configuration: '
                      f'{onboard_obj.waf_config_name}')
         return False
@@ -290,7 +290,16 @@ class wafFunctions:
             extra = (len(onboard_obj.waf_config_name) - len('sequence: 1')) + 10
             logger.info(f'sequence: {onboard_obj.target_seq}{dot:>{extra}}'
                         f'id: {onboard_obj.target_id:<5}{dot:>32}'
-                        'valid match target sequence')
+                         'valid match target sequence')
+            original_extra = extra + 56
+            logger.debug(f'{original_extra}')
+            extra = original_extra - len(str(onboard_obj.public_hostnames)) - 2
+            if extra <= 0:
+                extra = original_extra + 7
+                logger.info(f'{onboard_obj.public_hostnames}\n{dot:>{extra}}valid public hostnames')
+            else:
+                logger.info(f'{onboard_obj.public_hostnames}{dot:>{extra}}'
+                            f'valid public hostnames')
             return True
         logger.error('Unable to create a match target')
         return False

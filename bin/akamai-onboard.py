@@ -27,10 +27,11 @@ from time import strftime
 import _logging as lg
 import click
 import onboard
+import onboard_appsec_update
 import onboard_batch_create
 import onboard_multi_hosts
 import onboard_single_host
-import onboard_appsec_update
+import pandas as pd
 import requests
 import steps
 import utility
@@ -41,9 +42,11 @@ from akamai.edgegrid import EdgeGridAuth
 from akamai.edgegrid import EdgeRc
 from exceptions import get_cli_root_directory
 from exceptions import setup_logger
+from model.appsec import AppSec
 from model.multi_hosts import MultiHosts
 from model.single_host import SingleHost
-
+from rich import print_json
+from tabulate import tabulate
 
 PACKAGE_VERSION = '2.2.0'
 logger = setup_logger()
@@ -722,10 +725,11 @@ def batch_create(config, **kwargs):
 
     return 0
 
+
 @cli.command(short_help='Add hostnames as selected hosts to existing security configuration and optionally add to policy match target')
 @click.option('--config-id', metavar='', help='name of security configuration to update', required=False)
 @click.option('--version-notes', metavar='', help='name of security configuration to update', required=False)
-@click.option('--activate', metavar='', type=click.Choice(['staging','production']), multiple=True, help='Options: staging, production', required=False, default='')
+@click.option('--activate', metavar='', type=click.Choice(['staging', 'production']), multiple=True, help='Options: staging, production', required=False, default='')
 @click.option('--version', metavar='', help='email(s) for activation notifications', default='latest', required=False)
 @click.option('--csv', metavar='', required=True, help='csv file with headers hostname,origin,edgeHostname,forwardHostHeader,propertyName,')
 @click.option('--email', metavar='', required=False, help='email for activation notifications')
@@ -770,7 +774,7 @@ def appsec_update(config, **kwargs):
 
         # Created WAF config version, now can add selected hosts to it
         logger.debug(f'Trying to add property public_hostnames as selected hosts to WAF configuration: {onboard_object.waf_config_name}')
-        hostnames_to_add = list(filter(lambda x: x not in onboard_object.skip_selected_hosts,onboard_object.hostname_list))
+        hostnames_to_add = list(filter(lambda x: x not in onboard_object.skip_selected_hosts, onboard_object.hostname_list))
         add_hostnames = utility_waf_object.addHostnames(wrapper_object,
                                     hostnames_to_add,
                                     onboard_object.config_id,
@@ -783,7 +787,7 @@ def appsec_update(config, **kwargs):
 
         # Update WAF match target
         for policy in onboard_object.appsec_json:
-            policy_hostnames_to_add = list(filter(lambda x: x not in onboard_object.skip_selected_hosts,onboard_object.appsec_json[policy]['hostnames']))
+            policy_hostnames_to_add = list(filter(lambda x: x not in onboard_object.skip_selected_hosts, onboard_object.appsec_json[policy]['hostnames']))
             modify_matchtarget = utility_waf_object.updateMatchTarget(wrapper_object,
                                         policy_hostnames_to_add,
                                         onboard_object.config_id,
@@ -802,11 +806,201 @@ def appsec_update(config, **kwargs):
                     sys.exit(logger.error('Unable to activate WAF configuration to production network'))
         else:
             logger.info('Activate WAF Configuration Production: SKIPPING')
-        
+
         print()
         end_time = time.perf_counter()
         elapse_time = str(strftime('%H:%M:%S', gmtime(end_time - start_time)))
         logger.info(f'TOTAL DURATION: {elapse_time}, End Akamai CLI onboard')
+
+
+@cli.command(short_help='List available security configuration policy')
+@click.option('--waf-config-name', metavar='', help='Security config name', required=False)
+@click.option('--policy-name', metavar='', help='Security policy name', required=False)
+@pass_config
+def appsec_policy(config, waf_config_name, policy_name):
+    """
+    List available security configuration policy
+    """
+    logger.info('Start Akamai CLI onboard')
+    _, wrap_api = init_config(config)
+    util = utility.utility()
+    config_id, version = util.validate_waf_config_name(wrap_api, waf_config_name)
+    if not waf_config_name:
+        logger.warning('Add --waf-config-name to list Policy and Website Match Target')
+    else:
+        policy_str_id, policies = util.list_waf_policy(wrap_api, config_id, version, policy_name)
+        if policy_str_id:
+            wrap_api.list_policy_match_targets(config_id, version, policy_str_id, policy_name)
+        else:
+            wrap_api.list_match_targets(config_id, version, policies)
+    util.log_cli_timing()
+
+
+class Fake:
+    def __init__(self, li_obj):
+        self.obj = li_obj
+
+
+@cli.command(short_help='Create new security configuration, optionally policy, and optionally add to policy match target')
+@click.option('-c', '--contract-id', metavar='', help='Contract ID (starts with ctr_)', required=True)
+@click.option('-g', '--group-id', metavar='', help='Group ID (starts with grp_)', required=True)
+@click.option('--waf-config-name', metavar='', help='name of security configuration', required=False)
+@click.option('--by', metavar='', type=click.Choice(['propertyname', 'hostname']),
+              help='name of security configuration', required=True)
+@click.option('--csv', metavar='', required=True, help='csv file with headers property_name,hostname,waf_config,waf_policy')
+@click.option('--activate', metavar='', type=click.Choice(['staging', 'production', 'both']),
+              multiple=False, required=False,
+              help='Akamai network to activate security configuration. Options: staging, production, or both')
+@click.option('--version-notes', metavar='', help='description of security configuration', required=False)
+@click.option('--dryrun', metavar='', is_flag=True, default=False, help='validatation', required=False)
+@pass_config
+def appsec_create(config, contract_id, group_id, by, waf_config_name, version_notes, activate, csv, dryrun):
+    """
+    Create new security configuration, optionally policy, and optionally add to policy match target
+    """
+    logger.info('Start Akamai CLI onboard')
+    _, wrap_api = init_config(config)
+    util = utility.utility()
+
+    if not activate:
+        activate = 'staging'
+    else:
+        if activate == 'both':
+            activate = 'production'
+
+    if by == 'propertyname':
+        valid_csv, data = util.csv_2_appsec_create_by_propertyname(csv)
+    else:
+        valid_csv, data = util.csv_2_appsec_create_by_hostname(csv)
+
+    if valid_csv is False:
+        sys.exit(-1)
+    else:
+        df = pd.DataFrame(data)
+        logger.debug(f'\nIncoming data\n{df}')
+
+        if by == 'hostname':
+            waf = util.populate_waf_data(by, df)
+        else:
+            df.insert(0, 'property_version', '')
+            df.insert(0, 'property_id', '')
+            all_property = df.property_name.unique()
+
+            # validate property
+            invalid_property = []
+            for property in all_property:
+                if wrap_api.property_exists(property) is False:
+                    invalid_property.append(property)
+                else:
+                    property_df = pd.DataFrame(wrap_api.get_property_id(property))
+                    if activate == 'staging':
+                        new_df = property_df[property_df['stagingStatus'] == 'ACTIVE']
+                    else:
+                        new_df = property_df[property_df['productionStatus'] == 'ACTIVE']
+
+                    if new_df.empty:
+                        sys.exit(logger.error(f'property {property} must be activated on the {activate.upper()} network first'))
+                    property_id = new_df['propertyId'].values[0]
+                    df.loc[df['property_name'] == property, 'property_id'] = property_id
+                    df.loc[df['property_name'] == property, 'property_version'] = new_df['propertyVersion'].values[0]
+
+            # only process valid properties
+            logger.error(f'invalid property name {invalid_property}')
+            valid_property = list(set(all_property) - set(invalid_property))
+            logger.debug(f'{valid_property=}')
+            df = df[df['property_name'].isin(valid_property)]
+            columns = ['property_name', 'waf_config_name', 'waf_policy_name', 'hostname', 'property_id', 'property_version']
+            df.sort_values(by=['waf_config_name', 'property_name'], inplace=True)
+            df.reset_index(drop=True, inplace=True)
+            logger.debug(f'\nCleanup Round 1\n{df[columns]}')
+
+            # populate remaining empty hostname
+            if 'hostname' in df.columns:
+                df['hostname'] = df[['property_id', 'hostname']].apply(lambda x: wrap_api.get_property_hostnames(x.property_id, contract_id, group_id, network=activate) if x.hostname is None else x.hostname, axis=1)
+                df['hostname'] = df['hostname'].apply(lambda x: util.stringToList(x))
+                logger.debug(f'\nCleanup Round 2\n{df[columns]}')
+            else:
+                df.insert(0, 'hostname', '')
+                hostnames = wrap_api.get_property_hostnames(property_id, contract_id, group_id, network=activate)
+                df.loc[df['property_name'] == property, 'hostname'] = df['hostname'].apply(lambda x: hostnames)
+
+        # processing by name of WAF Security Configuration
+        waf = util.populate_waf_data(by, df)
+        df = pd.DataFrame(waf)
+        waf_df = df.set_index('waf_config_name')
+        waf_df.fillna('', inplace=True)
+        logger.debug(f'\nPivot\n{waf_df}')
+
+        # display data on terminal
+        indexes = waf_df.index.to_list()
+        columns = waf_df.columns.to_list()
+        df = pd.DataFrame(waf, index=indexes, columns=columns)
+        show_df = df.stack()
+        logger.info(f'\n{show_df}')
+
+        # start onboarding security config
+        prev_waf_config = 0
+        util_waf = utility_waf.wafFunctions()
+        for waf_config in list(waf_df.index.values):
+            policys = list(waf_df.columns.values)
+            for policy in policys:
+                public_hostnames = waf_df.at[waf_config, policy]
+                if public_hostnames != '':
+                    onboard = AppSec(contract_id, group_id, waf_config, policy)
+                    onboard.public_hostnames = public_hostnames
+
+                    _, selectable_hostnames = wrap_api.get_selectable_hostnames(contract_id[4:], group_id[4:], network=activate)
+                    invalid_hostnames = list({x for x in onboard.public_hostnames if x not in selectable_hostnames})
+
+                    if not invalid_hostnames:
+                        print()
+                    else:
+                        print()
+                        onboard.public_hostnames = list(filter(lambda x: x not in invalid_hostnames, onboard.public_hostnames))
+                        if len(onboard.public_hostnames) == 0:
+                            logger.warning(f'Web security configuration {waf_config} - SKIPPING')
+                            logger.info(f'{invalid_hostnames} are not selectable hostnames')
+                            break
+                        if invalid_hostnames and len(onboard.public_hostnames) > 0:
+                            logger.warning(f'{invalid_hostnames} are not selectable hostnames for {waf_config}')
+
+                    # start onboarding security config
+                    if not dryrun:
+                        if waf_config != prev_waf_config:
+                            if util_waf.create_waf_config(wrap_api, onboard):
+                                logger.debug(onboard.public_hostnames)
+                                prev_waf_config = waf_config
+                                waf_config_id = onboard.onboard_waf_config_id
+                                waf_config_version = onboard.onboard_waf_config_version
+                            else:
+                                sys.exit()
+                        else:
+
+                            onboard.onboard_waf_config_id = waf_config_id
+                            onboard.onboard_waf_config_version = waf_config_version
+
+                            output = []
+                            for hostname in onboard.public_hostnames:
+                                member = {}
+                                member['hostname'] = hostname
+                                output.append(member)
+                            payload = {}
+                            payload['hostnameList'] = output
+                            payload['mode'] = 'append'
+                            logger.debug(output)
+                            resp = wrap_api.modifyWafHosts(onboard.onboard_waf_config_id, onboard.onboard_waf_config_version, data=payload)
+                            if resp.status_code != 200:
+                                sys.exit(logger.error(resp.json()))
+                            else:
+                                logger.debug(onboard.public_hostnames)
+
+                        if not util_waf.create_waf_policy(wrap_api, onboard):
+                            sys.exit()
+                        if not util_waf.create_waf_match_target(wrap_api, onboard):
+                            sys.exit()
+
+    util.log_cli_timing()
+
 
 def get_prog_name():
     prog = os.path.basename(sys.argv[0])

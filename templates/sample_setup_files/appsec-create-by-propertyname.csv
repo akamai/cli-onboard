@@ -1,0 +1,9 @@
+﻿property_name,waf_config_name,waf_policy_name,hostname
+blanche_pm,a_onboard_appsec_a1,policy_1
+blanche_pm,a_onboard_appsec_a1,policy_2,joe.blanche-cloud.com
+blanche_pm,a_onboard_appsec_a1,policy_2,katie.blanche-cloud.com
+blanhe_pm,a_onboard_appsec_b1,policy_3
+lillian-cloud.com,a_onboard_appsec_b2,policy_2
+lillian-cloud.com,ah_onboard_3,policy_2,www.lillian-cloud.com
+onboard-2b.com,a_onboard_appsec_a3,policy_4
+onboard-3.com,a_onboard_appsec_a4,policy_1
