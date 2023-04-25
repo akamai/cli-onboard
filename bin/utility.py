@@ -1292,7 +1292,8 @@ class utility:
             df = pd.DataFrame(response.json()['configurations'])
             df.fillna('', inplace=True)
             logger.warning('WAF Security Configuration')
-            print(tabulate(df[['name', 'id', 'description']], headers='keys', tablefmt='psql', showindex=False))
+            # if none of the WAF has description, json will not have description key
+            print(tabulate(df[['name', 'id']], headers='keys', tablefmt='psql', showindex=False))
         return onboard_waf_config_id, onboard_waf_prev_version
 
     def list_waf_policy(self, wrapper_object, config_id, version, policy_name: str | None = None) -> str:
