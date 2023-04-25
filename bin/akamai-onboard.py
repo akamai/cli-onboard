@@ -725,9 +725,10 @@ def batch_create(config, **kwargs):
 @cli.command(short_help='Add hostnames as selected hosts to existing security configuration and optionally add to policy match target')
 @click.option('--config-id', metavar='', help='name of security configuration to update', required=False)
 @click.option('--version-notes', metavar='', help='name of security configuration to update', required=False)
-@click.option('--activate', metavar='', type=click.Choice(['staging','production']), multiple=True, help='Options: staging, production', required=False)
+@click.option('--activate', metavar='', type=click.Choice(['staging','production']), multiple=True, help='Options: staging, production', required=False, default='')
 @click.option('--version', metavar='', help='email(s) for activation notifications', default='latest', required=False)
 @click.option('--csv', metavar='', required=True, help='csv file with headers hostname,origin,edgeHostname,forwardHostHeader,propertyName,')
+@click.option('--email', metavar='', required=False, help='email for activation notifications')
 @pass_config
 def appsec_update(config, **kwargs):
     logger.info('Start Akamai CLI onboard')
@@ -794,9 +795,18 @@ def appsec_update(config, **kwargs):
                 logger.error(f'Failed to add {policy_hostnames_to_add} to match target {policy}')
 
         # Activate WAF configuration to staging
-
-    
-
+        if click_args['activate']:
+            for network in click_args['activate']:
+                waf_activation_status = utility_waf_object.updateActivateAndPoll(wrapper_object, onboard_object, network=network.upper())
+                if waf_activation_status is False:
+                    sys.exit(logger.error('Unable to activate WAF configuration to production network'))
+        else:
+            logger.info('Activate WAF Configuration Production: SKIPPING')
+        
+        print()
+        end_time = time.perf_counter()
+        elapse_time = str(strftime('%H:%M:%S', gmtime(end_time - start_time)))
+        logger.info(f'TOTAL DURATION: {elapse_time}, End Akamai CLI onboard')
 
 def get_prog_name():
     prog = os.path.basename(sys.argv[0])

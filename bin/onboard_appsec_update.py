@@ -43,6 +43,11 @@ class onboard:
                 self.activate_staging = True
             if 'production' in click_args['activate']:
                 self.activate_production = True
+            if click_args['email']:
+                self.notification_emails = click_args['email']
+            else:
+                self.notification_emails = ['noreply@akamai.com']
+            self.version_notes = 'Created using Onboard CLI'
         except KeyError as k:
             print('\nMissing ' + str(k))
             exit(-1)
@@ -50,5 +55,5 @@ class onboard:
         try:
             self.version_notes = click_args['version_notes']
         except:
-            self.version_notes = ''
+            self.version_notes = 'Created using Onboard CLI'
         

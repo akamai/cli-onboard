@@ -64,6 +64,57 @@ class wafFunctions:
         logger.debug(act_response.url)
         return False
 
+    def updateActivateAndPoll(self, wrap_api, onboard_object, network):
+            """
+            Function to activate WAF configuration to Akamai Staging or Production network when in appsec-update mode.
+            """
+            print()
+            logger.warning(f'Preparing to activate WAF to Akamai {network} network')
+            start_time = time.perf_counter()
+            act_response = wrap_api.activateWafPolicy(onboard_object.config_id,
+                                                    onboard_object.onboard_waf_config_version,
+                                                    network,
+                                                    onboard_object.notification_emails,
+                                                    note='Onboard CLI Activation')
+
+            if act_response.status_code == 200:
+                activation_status = False
+                activation_id = act_response.json()['activationId']
+                while activation_status is False:
+                    print('Polling 30s...')
+                    polling_status_response = wrap_api.pollWafActivationStatus(activation_id)
+
+                    logger.debug(json.dumps(polling_status_response.json(), indent=4))
+                    logger.debug(polling_status_response.url)
+                    if polling_status_response.status_code == 200:
+                        if network in polling_status_response.json()['network']:
+                            if 'status' not in polling_status_response.json():
+                                time.sleep(30)
+                            elif polling_status_response.json()['status'] != 'ACTIVATED':
+                                time.sleep(30)
+                            elif polling_status_response.json()['status'] == 'ACTIVATED':
+                                end_time = time.perf_counter()
+                                elapse_time = str(strftime('%H:%M:%S', gmtime(end_time - start_time)))
+                                msg = f'Successfully activated WAF configuration to Akamai {network} network'
+                                logger.info(f'Activation Duration: {elapse_time} {msg}')
+                                print()
+                                activation_status = True
+                                return activation_status
+                            else:
+                                logger.error(json.dumps(polling_status_response.json(), indent=4))
+                                logger.error('Unable to parse activation status')
+                                activation_status = False
+                                return activation_status
+                    else:
+                        logger.error(json.dumps(act_response.json(), indent=4))
+                        logger.error('Unable to get activation status')
+                        return False
+
+            logger.error(json.dumps(act_response.json(), indent=4))
+            logger.error('Unable to get activation status')
+            logger.debug(act_response.url)
+            return False
+
     def addHostnames(self, wrapper_object, hostname_list, config_id, version):
         """
         Function to fetch and update Match Target
