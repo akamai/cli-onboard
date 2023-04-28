@@ -983,7 +983,6 @@ def appsec_create(config, contract_id, group_id, by, version_notes, activate, cs
                 # validate hostnames and remove invalid hostnames
                 invalid_hostnames = list({x for x in onboard.public_hostnames if x not in selectable_hostnames})
                 if len(invalid_hostnames) > 1:
-                    logger.error(invalid_hostnames)
                     onboard.public_hostnames = list(filter(lambda x: x not in invalid_hostnames, onboard.public_hostnames))
                     if len(onboard.public_hostnames) == 0:
                         logger.warning(f'Web security configuration {waf_config} - SKIPPING')
@@ -993,42 +992,41 @@ def appsec_create(config, contract_id, group_id, by, version_notes, activate, cs
                         logger.warning(f'{invalid_hostnames} are not selectable hostnames for {waf_config}')
 
                 # start onboarding security config
-                if not activate:
-                    if waf_config != prev_waf_config:
-                        if util_waf.create_waf_config(wrap_api, onboard):
-                            logger.debug(onboard.public_hostnames)
-                            prev_waf_config_id = onboard.onboard_waf_config_id
-                            prev_waf_config_version = onboard.onboard_waf_config_version
-                            prev_waf_config = waf_config
+                if waf_config != prev_waf_config:
+                    if util_waf.create_waf_config(wrap_api, onboard):
+                        logger.debug(onboard.public_hostnames)
+                        prev_waf_config_id = onboard.onboard_waf_config_id
+                        prev_waf_config_version = onboard.onboard_waf_config_version
+                        prev_waf_config = waf_config
 
-                            if activate:
-                                # popolate AppSec data
-                                appsec = AppSec(onboard.onboard_waf_config_id, onboard.onboard_waf_config_version, [email])
-                                appsec_onboard.append(appsec)
-                    else:
-                        # add hostnames to new policy
-                        onboard.onboard_waf_config_id = prev_waf_config_id
-                        onboard.onboard_waf_config_version = prev_waf_config_version
-                        output = []
-                        for hostname in onboard.public_hostnames:
-                            member = {}
-                            member['hostname'] = hostname
-                            output.append(member)
-                        payload = {}
-                        payload['hostnameList'] = output
-                        payload['mode'] = 'append'
-                        logger.debug(output)
-                        resp = wrap_api.modifyWafHosts(onboard.onboard_waf_config_id, onboard.onboard_waf_config_version, json.dumps(payload))
-                        if resp.status_code != 200:
-                            logger.error(resp.json())
+                        if activate:
+                            # popolate AppSec data
+                            appsec = AppSec(onboard.onboard_waf_config_id, onboard.onboard_waf_config_version, [email])
+                            appsec_onboard.append(appsec)
+                else:
+                    # add hostnames to new policy
+                    onboard.onboard_waf_config_id = prev_waf_config_id
+                    onboard.onboard_waf_config_version = prev_waf_config_version
+                    output = []
+                    for hostname in onboard.public_hostnames:
+                        member = {}
+                        member['hostname'] = hostname
+                        output.append(member)
+                    payload = {}
+                    payload['hostnameList'] = output
+                    payload['mode'] = 'append'
+                    logger.debug(output)
+                    resp = wrap_api.modifyWafHosts(onboard.onboard_waf_config_id, onboard.onboard_waf_config_version, json.dumps(payload))
+                    if resp.status_code != 200:
+                        logger.error(resp.json())
 
-                    if util_waf.create_waf_policy(wrap_api, onboard):
-                        if util_waf.create_waf_match_target(wrap_api, onboard):
-                            pass
-                        else:
-                            sys.exit()
+                if util_waf.create_waf_policy(wrap_api, onboard):
+                    if util_waf.create_waf_match_target(wrap_api, onboard):
+                        pass
                     else:
                         sys.exit()
+                else:
+                    sys.exit()
 
     # activating
     if activate and activate == 'production':
