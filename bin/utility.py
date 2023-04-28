@@ -588,7 +588,7 @@ class utility:
 
         # check if csv is valid
         if not onboard_object.valid_csv:
-            logger.error(f'{onboard_object.csv:<30}{space:>20}invalid csv; check above validation errors')
+            logger.error(f'{onboard_object.csv:<30}{space:>20}invalid CSV file; check above validation errors')
             count += 1
 
         if cli_mode == 'appsec-update':
@@ -662,18 +662,21 @@ class utility:
             selected_host_list = []
 
         if available_hostnames:
+            logger.debug(f'{onboard_object.hostname_list=}')
+            logger.debug(f'{selectable_hosts_list=}')
+            logger.info(f'{selected_host_list=}')
             for hostname in onboard_object.hostname_list:
                 msg = f'{hostname}{space:>{column_width-len(hostname)}}'
                 if hostname in selectable_hosts_list:
-                    logger.info(f'{msg} available to add as selcted host...')
+                    logger.info(f'{msg} valid selectable hostnames')
                 elif hostname in selected_host_list:
-                    logger.warn(f'{msg} already added as a selcted host...')
+                    logger.warn(f'{msg} existing hostname, hostnames not added')
                 else:
-                    logger.error(f'{msg} is NOT available to add as a selected host...skipping')
+                    count += 1
+                    logger.error(f'{msg} invalid selectable hostnames')
                     onboard_object.skip_selected_hosts.append(hostname)
-
         else:
-            sys.exit(logger.error('unable to get available hostnames....'))
+            sys.exit(logger.error('unable to get available hostnames'))
 
         if count == 0:
             self.valid is True

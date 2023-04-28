@@ -56,4 +56,3 @@ class onboard:
             self.version_notes = click_args['version_notes']
         except:
             self.version_notes = 'Created using Onboard CLI'
-        

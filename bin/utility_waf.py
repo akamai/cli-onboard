@@ -119,7 +119,7 @@ class wafFunctions:
         """
         Function to fetch and update Match Target
         """
-        logger.info(f'{hostname_list}, config_id: {config_id}, version: {version}')
+        logger.debug(f'{hostname_list}, config_id: {config_id}, version: {version}')
         selected_hosts_response = wrapper_object.getWafSelectedHosts(config_id, version)
         logger.debug(selected_hosts_response.url)
         logger.debug(selected_hosts_response.status_code)
