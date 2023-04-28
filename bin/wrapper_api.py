@@ -477,7 +477,7 @@ class apiCallsWrapper:
         modify_hosts_url = f'https://{self.access_hostname}/appsec/v1/configs/{config_id}/versions/{version}/selected-hostnames'
         modify_hosts_url = self.formUrl(modify_hosts_url)
 
-        modify_hosts_response = self.session.put(modify_hosts_url, json=data, headers=headers)
+        modify_hosts_response = self.session.put(modify_hosts_url, data=data, headers=headers)
         logger.debug(f'{modify_hosts_response.status_code}: {modify_hosts_response.url}')
         logger.debug(data)
         return modify_hosts_response
