@@ -119,6 +119,7 @@ def cli(config, edgerc, section, account_key):
     config.account_key = account_key
 
 
+"""
 @cli.command()
 @click.pass_context
 def help(ctx):
@@ -126,11 +127,14 @@ def help(ctx):
     Show help information
     '''
     print(ctx.parent.get_help())
+"""
 
 
 @cli.command(short_help='Pull sample templates')
-@pass_config
-def fetch_sample_templates(config):
+def fetch_sample_templates():
+    """
+    Retrieve sample templates for available commands
+    """
     source_folder = Path(root, 'templates', 'sample_setup_files')
     Path('sample_templates').mkdir(parents=True, exist_ok=True)
     target_folder = Path().resolve()
@@ -142,11 +146,17 @@ def fetch_sample_templates(config):
 
 @cli.command(short_help='Create a delivery configuration with mutltiple hostnames and security configuration with one WAF policy')
 @click.option('--csv', metavar='', required=True,
-              help='File containing hostname and origin servername i.e. testwebsite.com,origin-testwebsite.com')
+              help='File containing hostname and origin servername values in format testwebsite.com,origin-testwebsite.com')
 @click.option('-f', '--file', metavar='', required=True,
               help='File containing setup/onboard config key-value pairs in JSON')
 @pass_config
 def multi_hosts(config, csv, file):
+    """
+    Simplify onboarding ONE property with multiple hostnames and optionally multiple CPCodes
+
+    \b
+    CSV input file without headers.  Just data in format hostname,origin-hostname
+    """
     logger.info('Start Akamai CLI onboard')
     _, wrap_api = init_config(config)
     util = utility.utility()
@@ -307,6 +317,10 @@ def multi_hosts(config, csv, file):
               help='File containing setup/onboard config key-value pairs in JSON')
 @pass_config
 def single_host(config, file):
+    """
+    Simplify onboarding ONE property.  By default, delivery config will be activating on STAGING network.
+    Security config will also be activating on STAGING network if create_new_security_config is True.
+    """
     logger.info('Start Akamai CLI onboard')
     _, wrap_api = init_config(config)
     util = utility.utility()
@@ -546,9 +560,12 @@ def create(config, file):
 @click.option('--waf-match-target', metavar='', help='waf match target id to add hostnames to (use numeric waf match target id)', required=False)
 @click.option('--activate', metavar='', type=click.Choice(['delivery-staging', 'waf-staging', 'delivery-production', 'waf-production']), multiple=True, help='Options: delivery-staging, delivery-production, waf-staging, waf-production', required=False)
 @click.option('--email', metavar='', multiple=True, help='email(s) for activation notifications', required=False)
-@click.option('--csv', metavar='', required=True, help='csv file with headers hostname,origin,edgeHostname,forwardHostHeader,propertyName,')
+@click.option('--csv', metavar='', required=True, help='csv file with headers hostname,origin,propertyName,forwardHostHeader,edgeHostname')
 @pass_config
 def batch_create(config, **kwargs):
+    """
+    Create a 1 or more delivery configurations using a csv input and optionally update WAF policy
+    """
     logger.info('Start Akamai CLI onboard')
     _, wrapper_object = init_config(config)
     click_args = kwargs
@@ -732,10 +749,16 @@ def batch_create(config, **kwargs):
 @click.option('--version-notes', metavar='', help='name of security configuration to update', required=False)
 @click.option('--activate', metavar='', type=click.Choice(['staging', 'production']), multiple=True, help='Options: staging, production', required=False, default='')
 @click.option('--version', metavar='', help='email(s) for activation notifications', default='latest', required=False)
-@click.option('--csv', metavar='', required=True, help='csv file with headers hostname,origin,edgeHostname,forwardHostHeader,propertyName,')
+@click.option('--csv', metavar='', required=True, help='csv file with headers hostname,matchTargetId')
 @click.option('--email', metavar='', required=False, help='email for activation notifications')
 @pass_config
 def appsec_update(config, **kwargs):
+    """
+    Update existing security configuration
+
+    \b
+    Add additional hostnames and optionally add to policy match target')
+    """
     logger.info('Start Akamai CLI onboard')
     _, wrapper_object = init_config(config)
     util = utility.utility()
@@ -833,28 +856,37 @@ class Fake:
         self.obj = li_obj
 
 
-@cli.command(short_help='Create new security configuration, optionally policy, and optionally add to policy match target')
+@cli.command(short_help='Create new security configuration, security policy, and policy match target')
 @click.option('-c', '--contract-id', metavar='', help='Contract ID (starts with ctr_)', required=True)
 @click.option('-g', '--group-id', metavar='', help='Group ID (starts with grp_)', required=True)
-@click.option('--by', metavar='', type=click.Choice(['propertyname', 'hostname']),
-              help='name of security configuration', required=True)
-@click.option('--csv', metavar='', required=True, help='csv file with headers property_name,hostname,waf_config,waf_policy')
 @click.option('--activate', metavar='', type=click.Choice(['staging', 'production']), multiple=False, required=False,
-              help='Akamai network to activate security configuration. Options: staging, production, or both')
+              help='Akamai network to activate security configuration Options: staging, production')
+@click.option('--csv', metavar='', required=True, help='CSV input file')
+@click.option('--by', metavar='', type=click.Choice(['hostname', 'propertyname']), default='hostname', required=False,
+              help='by command depends on data in CSV input file.     Options: hostname, propertyname')
 @click.option('--version-notes', metavar='', help='activation notes', required=False)
 @click.option('--email', metavar='', required=False, help='email for activation notifications')
-@click.option('--dryrun', metavar='', is_flag=True, default=False, help='validatation', required=False)
 @pass_config
-def appsec_create(config, contract_id, group_id, by, version_notes, activate, csv, email, dryrun):
+def appsec_create(config, contract_id, group_id, by, version_notes, activate, csv, email):
     """
-    Create new security configuration, optionally policy, and optionally add to policy match target
+    \b
+    Batch create new security configuration, security policy, and policy match target
+
+    Security config will not be activated, unless --activate is specificed.
+
+    CSV input file options
+
+      \b
+      Option 1 by hostname [defaut]: Headers contain waf_config_name,waf_policy_name,hostname
+      \b
+      Option 2 by propertyname:      Headers contain propertyname,waf_config_name,waf_policy_name,hostname
     """
     logger.info('Start Akamai CLI onboard')
     _, wrap_api = init_config(config)
     util = utility.utility()
 
     network = activate if activate else 'staging'
-    if network and not email:
+    if activate and not email:
         sys.exit(logger.error('--email is required when activating to network'))
 
     valid_csv, data = util.csv_2_appsec_create_by_propertyname(csv) if by == 'propertyname' else util.csv_2_appsec_create_by_hostname(csv)
@@ -951,7 +983,7 @@ def appsec_create(config, contract_id, group_id, by, version_notes, activate, cs
                         logger.warning(f'{invalid_hostnames} are not selectable hostnames for {waf_config}')
 
                 # start onboarding security config
-                if not dryrun:
+                if not activate:
                     if waf_config != prev_waf_config:
                         if util_waf.create_waf_config(wrap_api, onboard):
                             logger.debug(onboard.public_hostnames)
@@ -1012,7 +1044,6 @@ def get_prog_name():
 def get_cache_dir():
     if os.getenv('AKAMAI_CLI_CACHE_DIR'):
         return os.getenv('AKAMAI_CLI_CACHE_DIR')
-
     return os.curdir
 
 
