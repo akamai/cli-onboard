@@ -24,6 +24,13 @@ logger = setup_logger()
 
 @dataclass
 class AppSec:
+    onboard_waf_config_id: int
+    onboard_waf_config_version: int
+    notification_emails: list[str] = field(default_factory=list)
+
+
+@dataclass
+class Property:
     contract_id: str
     group_id: str
     waf_config_name: str
@@ -35,3 +42,5 @@ class AppSec:
     version_notes = ''
     onboard_waf_config_id: int = 0
     onboard_waf_config_version: int = 0
+
+    notification_emails: list[str] = field(default_factory=list)
