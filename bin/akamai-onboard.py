@@ -890,7 +890,6 @@ def appsec_create(config, contract_id, group_id, by, version_notes, activate, cs
         sys.exit(logger.error('--email is required when activating to network'))
 
     valid_csv, data = util.csv_2_appsec_create_by_propertyname(csv) if by == 'propertyname' else util.csv_2_appsec_create_by_hostname(csv)
-
     if valid_csv is False:
         sys.exit(logger.error('CSV input needs to be corrected first'))
 
@@ -903,6 +902,7 @@ def appsec_create(config, contract_id, group_id, by, version_notes, activate, cs
         df.insert(0, 'property_version', '')
         df.insert(0, 'property_id', '')
         all_property = df.property_name.unique()
+        logger.debug(all_property)
 
         # validate property
         invalid_property = []
@@ -911,10 +911,13 @@ def appsec_create(config, contract_id, group_id, by, version_notes, activate, cs
                 invalid_property.append(property)
             else:
                 property_df = pd.DataFrame(wrap_api.get_property_id(property))
-                if activate == 'staging':
+                if not activate:
                     new_df = property_df[property_df['stagingStatus'] == 'ACTIVE']
                 else:
-                    new_df = property_df[property_df['productionStatus'] == 'ACTIVE']
+                    if activate == 'staging':
+                        new_df = property_df[property_df['stagingStatus'] == 'ACTIVE']
+                    else:
+                        new_df = property_df[property_df['productionStatus'] == 'ACTIVE']
 
                 if new_df.empty:
                     sys.exit(logger.error(f'property {property} must be activated on the {activate.upper()} network first'))
@@ -923,9 +926,12 @@ def appsec_create(config, contract_id, group_id, by, version_notes, activate, cs
                 df.loc[df['property_name'] == property, 'property_version'] = new_df['propertyVersion'].values[0]
 
         # only process valid properties
-        logger.error(f'invalid property name {invalid_property}')
-        valid_property = list(set(all_property) - set(invalid_property))
-        logger.debug(f'{valid_property=}')
+        if len(invalid_property) == 0:
+            valid_property = all_property
+        else:
+            logger.error(f'invalid property name {invalid_property}')
+            valid_property = list(set(all_property) - set(invalid_property))
+            logger.debug(f'{valid_property=}')
         df = df[df['property_name'].isin(valid_property)]
         columns = ['property_name', 'waf_config_name', 'waf_policy_name', 'hostname', 'property_id', 'property_version']
         df.sort_values(by=['waf_config_name', 'property_name'], inplace=True)
@@ -934,7 +940,11 @@ def appsec_create(config, contract_id, group_id, by, version_notes, activate, cs
 
         # populate remaining empty hostname
         if 'hostname' in df.columns:
-            df['hostname'] = df[['property_id', 'hostname']].apply(lambda x: wrap_api.get_property_hostnames(x.property_id, contract_id, group_id, network=activate) if x.hostname is None else x.hostname, axis=1)
+            if not activate:
+                network = 'staging'
+            df['hostname'] = df[['property_id', 'hostname']].apply(
+                lambda x: wrap_api.get_property_hostnames(x.property_id, contract_id, group_id, network) if x.hostname is None
+                else x.hostname, axis=1)
             df['hostname'] = df['hostname'].apply(lambda x: util.stringToList(x))
             logger.debug(f'\nCleanup Round 2\n{df[columns]}')
         else:
@@ -954,7 +964,7 @@ def appsec_create(config, contract_id, group_id, by, version_notes, activate, cs
     columns = waf_df.columns.to_list()
     df = pd.DataFrame(waf, index=indexes, columns=columns)
     show_df = df.stack()
-    logger.info(f'\n{show_df}')
+    logger.info(f'\n{show_df.to_markdown(headers=["hostname"], tablefmt="psql")}')
 
     # start onboarding security config
     prev_waf_config = 0

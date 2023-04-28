@@ -1317,57 +1317,58 @@ class utility:
 
     def csv_2_appsec_create_by_hostname(self, csv_file_loc: str):
         schema = {'waf_config_name': {'type': 'string',
-                                      'required': True,
-                                      'empty': False},
+                                      'empty': False,
+                                      'required': False},
                   'waf_policy_name': {'type': 'string',
-                                      'nullable': True,
+                                      'empty': False,
                                       'required': False},
                   'hostname': {'type': 'string',
-                               'required': False,
-                               'empty': False},
+                               'empty': False,
+                               'required': False},
                  }
 
         v = Validator(schema)
         logger.warning(f'Reading customer security configuration input: {csv_file_loc}')
+        valid = True
         with open(csv_file_loc, encoding='utf-8-sig', newline='') as f:
             data = []
             for i, row in enumerate(csv.DictReader(f), 1):
                 data.append(row)
-                valid = v.validate(row)
+                v.validate(row)
                 if v.errors:
                     valid = False
                     for error in v.errors:
-                        logger.warning(f'CSV Validation Error in row: {i} {error}')
+                        logger.error(f'CSV Validation Error in row: {i} {error}')
         return valid, data
 
     def csv_2_appsec_create_by_propertyname(self, csv_file_loc: str):
         schema = {'property_name': {'type': 'string',
+                                    'empty': False,
                                     'required': True},
                   'waf_config_name': {'type': 'string',
-                                       'required': True},
+                                      'empty': False,
+                                      'required': True},
                   'waf_policy_name': {'type': 'string',
-                                       'nullable': False,
+                                       'empty': False,
                                        'required': True},
                   'hostname': {'type': 'string',
-                                'nullable': True,
-                                'required': False}
+                               'nullable': True,
+                               'required': False}
                  }
 
         v = Validator(schema)
         logger.warning(f'Reading customer security configuration input: {csv_file_loc}')
+        valid = True
         with open(csv_file_loc, encoding='utf-8-sig', newline='') as f:
             data = []
-            count = 0
             for i, row in enumerate(csv.DictReader(f), 1):
                 data.append(row)
-                valid = v.validate(row)
+                v.validate(row)
                 if v.errors:
-                    count += 1
+                    valid = False
                     for error in v.errors:
                         logger.error(f'CSV Validation Error in row: {i} {error}')
-        if count > 0:
-            return False, data
-        return True, data
+        return valid, data
 
     def populate_waf_data(self, by: str, input: dict) -> dict:
         waf = []
