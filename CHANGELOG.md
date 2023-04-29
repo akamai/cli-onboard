@@ -1,18 +1,10 @@
 # RELEASE NOTES
 
-## 2.2.0
+## 2.3.0
 
 #### FEATURES/ENHANCEMENTS:
 
-- Support multi-hosts command to add multiple hostnames and respective origins to a single delivery/property configuration and include all of those hostnames into the new security configuration
-  - The command requires a new input file in a CSV format
-  - Support three standard akamai product: prd_SPM, prd_Fresca, prd_API_Accel
-- Support batch-create command to add multiple hostnames and respective origins to one or more delivery/property configurations and optionally add all of those hostnames to an existing security configuration and policy match target
-  - The command requires a new input file in a CSV format
-  - Support three standard akamai product: prd_SPM, prd_Fresca, prd_API_Accel
-
-#### MISC:
-
-- Allow short arguments i.e. both --file and -f will work
-- Rename sample setup files that are easier to identify for each command
-- Display proper version for --version and -h command
+- Add 3 new command to onboard security configuration independently
+  1. `appsec-create` command allows bulk onboarding security configuration independently of onboarding delivery configuration
+  2. `appsec-update` command helps adding more hostname to each security configuration and optionally add to security policy/match target
+  3. `appsec-policy` command facilitates lookup security configuration name, securify policy and match target per account

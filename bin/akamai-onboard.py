@@ -49,7 +49,7 @@ from model.single_host import SingleHost
 from rich import print_json
 from tabulate import tabulate
 
-PACKAGE_VERSION = '2.2.0'
+PACKAGE_VERSION = '2.3.0'
 logger = setup_logger()
 root = get_cli_root_directory()
 
