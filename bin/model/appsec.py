@@ -13,6 +13,7 @@ Copyright 2022 Akamai Technologies, Inc. All Rights Reserved.
 """
 from __future__ import annotations
 
+import time
 from dataclasses import dataclass
 from dataclasses import field
 
@@ -24,9 +25,15 @@ logger = setup_logger()
 
 @dataclass
 class AppSec:
+    waf_config_name: str
     onboard_waf_config_id: int
     onboard_waf_config_version: int
     notification_emails: list[str] = field(default_factory=list)
+
+    activation_id: int = 0
+    activation_status: str = ''
+    activation_create: str = ''
+    activation_end: str = ''
 
 
 @dataclass

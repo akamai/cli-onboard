@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import datetime
 import json
 import sys
 import time
@@ -7,6 +8,8 @@ from time import gmtime
 from time import strftime
 
 from exceptions import setup_logger
+from rich.live import Live
+from rich.table import Table
 
 logger = setup_logger()
 dot = ' '
@@ -303,3 +306,104 @@ class wafFunctions:
             return True
         logger.error('Unable to create a match target')
         return False
+
+    def activate_and_poll(self, wrap_api, onboard_object, activate):
+        print()
+        if activate == 'staging':
+            logger.warning(f'Activating Security Config on {activate} network')
+            for i, appsec in enumerate(onboard_object):
+                while onboard_object[i].activation_id == 0:
+                    response = wrap_api.activateWafPolicy(onboard_object[i].onboard_waf_config_id,
+                                                        onboard_object[i].onboard_waf_config_version,
+                                                        network='STAGING',
+                                                        emails=onboard_object[i].notification_emails,
+                                                        note='Onboard CLI Activation')
+                    if response.status_code == 200:
+                        onboard_object[i].activation_id = response.json()['activationId']
+                        onboard_object[i].activation_create = response.json()['createDate']
+                        onboard_object[i].activation_status = response.json()['status']
+                        logger.debug(onboard_object[i])
+            time.sleep(1.5)
+            self.waf_poll_activation(wrap_api, onboard_object, network='STAGING')
+
+        if activate == 'production':
+            logger.warning('Activating Security Config on STAGING network')
+            for i, appsec in enumerate(onboard_object):
+                response = wrap_api.activateWafPolicy(onboard_object[i].onboard_waf_config_id,
+                                                      onboard_object[i].onboard_waf_config_version,
+                                                      network='STAGING',
+                                                      emails=onboard_object[i].notification_emails,
+                                                      note='Onboard CLI Activation')
+                if response.status_code == 200:
+                    onboard_object[i].activation_id = response.json()['activationId']
+                    onboard_object[i].activation_create = response.json()['createDate']
+                    onboard_object[i].activation_status = response.json()['status']
+                    logger.debug(onboard_object[i])
+            time.sleep(1.5)
+            self.waf_poll_activation(wrap_api, onboard_object, network='STAGING')
+
+            print()
+            logger.warning(f'Activating Security Config on {activate} network, please be patient')
+            for i, appsec in enumerate(onboard_object):
+                response = wrap_api.activateWafPolicy(onboard_object[i].onboard_waf_config_id,
+                                                      onboard_object[i].onboard_waf_config_version,
+                                                      network='PRODUCTION',
+                                                      emails=onboard_object[i].notification_emails,
+                                                      note='Onboard CLI Activation')
+                if response.status_code == 200:
+                    onboard_object[i].activation_id = response.json()['activationId']
+                    onboard_object[i].activation_create = response.json()['createDate']
+                    onboard_object[i].activation_status = response.json()['status']
+                    logger.debug(onboard_object[i])
+            time.sleep(1.5)
+            self.waf_poll_activation(wrap_api, onboard_object, network='PRODUCTION')
+        else:
+            pass  # ok not to provide activate
+
+    def waf_poll_activation(self, wrapper_api, appsec_onboard, network):
+        all_waf_configs_active = False
+        with Live(self.waf_activation_table(appsec_onboard, network), refresh_per_second=1) as live:
+            while (not all_waf_configs_active):
+                for i, appsec in enumerate(appsec_onboard):
+                    response = wrapper_api.pollWafActivationStatus(appsec_onboard[i].activation_id)
+                    if response.status_code == 200:
+                        try:
+                            if response.json()['status'] == 'ACTIVATED':
+                                appsec_onboard[i].activation_end = datetime.datetime.utcnow().isoformat().replace('+00:00', 'Z')
+                                appsec_onboard[i].activation_status = response.json()['status']
+                        except:
+                            'no change to previous status'
+                live.update(self.waf_activation_table(appsec_onboard, network))
+                total_status = [appsec_onboard[i].activation_status for i, appsec in enumerate(appsec_onboard)]
+                pending = list(filter(lambda x: x not in ['ACTIVATED'], total_status))
+                if len(pending) == 0:
+                    all_waf_configs_active = True
+                    break
+                logger.info('Polling 1m...')
+                time.sleep(60)
+        return all_waf_configs_active, appsec_onboard
+
+    def waf_activation_table(self, appsec_onboard, network) -> Table:
+        table = Table()
+        table.add_column('waf config name')
+        table.add_column('config id')
+        table.add_column('version')
+        table.add_column('network', width=12)
+        table.add_column('activation id')
+        table.add_column('activation started (UTC)')
+        table.add_column('activation ended (UTC)')
+        table.add_column('status')
+
+        for i, appsec in enumerate(appsec_onboard):
+            if appsec_onboard[i].activation_status == '':
+                status = '....Checking Status....'
+            else:
+                status = appsec_onboard[i].activation_status
+            table.add_row(f'{appsec_onboard[i].waf_config_name}', f'{appsec_onboard[i].onboard_waf_config_id}', f'{appsec_onboard[i].onboard_waf_config_version}',
+                        f'{network}',
+                        f'{appsec_onboard[i].activation_id}',
+                        f'{appsec_onboard[i].activation_create}',
+                        '' if status != 'ACTIVATED' else f'{appsec_onboard[i].activation_end}',
+                        f'[red]{status}' if status != 'ACTIVATED' else '[green]ACTIVATED',
+                        )
+        return table

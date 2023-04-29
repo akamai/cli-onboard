@@ -1,15 +1,10 @@
 from __future__ import annotations
 
 import json
-import os
-import random
-import shutil
-import sys
 import time
 from time import gmtime
 from time import strftime
 
-import poll
 from exceptions import setup_logger
 from rich.live import Live
 from rich.table import Table
@@ -89,6 +84,6 @@ def pollActivation(activationDict, wrapper_object, contract_id, group_id, networ
             if len(pending_activations) == 0:
                 all_properties_active = True
                 break
-            print('Waiting 30 seconds....')
+            logger.info('Polling 30s...')
             time.sleep(30)
         return (all_properties_active, activationDict)

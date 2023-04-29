@@ -1001,8 +1001,10 @@ def appsec_create(config, contract_id, group_id, by, version_notes, activate, cs
 
                         if activate:
                             # popolate AppSec data
-                            appsec = AppSec(onboard.onboard_waf_config_id, onboard.onboard_waf_config_version, [email])
+                            appsec = AppSec(waf_config, onboard.onboard_waf_config_id, onboard.onboard_waf_config_version, [email])
                             appsec_onboard.append(appsec)
+                    else:
+                        sys.exit(-1)
                 else:
                     # add hostnames to new policy
                     onboard.onboard_waf_config_id = prev_waf_config_id
@@ -1029,16 +1031,8 @@ def appsec_create(config, contract_id, group_id, by, version_notes, activate, cs
                     sys.exit()
 
     # activating
-    if activate and activate == 'production':
-        for appsec in appsec_onboard:
-            status = util_waf.activateAndPoll(wrap_api, appsec, network='STAGING')
-            status = util_waf.activateAndPoll(wrap_api, appsec, network='PRODUCTION')
-    elif activate == 'staging':
-        for appsec in appsec_onboard:
-            status = util_waf.activateAndPoll(wrap_api, appsec, network=network.upper())
-    else:
-        pass  # ok not to provide --activate
-
+    if activate:
+        util_waf.activate_and_poll(wrap_api, appsec_onboard, activate)
     util.log_cli_timing()
 
 
