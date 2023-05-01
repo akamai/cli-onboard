@@ -1287,7 +1287,7 @@ class utility:
                 logger.info(f'{onboard_waf_config_id}{space:>{column_width - len(str(onboard_waf_config_id))}}found existing onboard_waf_config_id')
                 logger.info(f'{onboard_waf_prev_version}{space:>{column_width - len(str(onboard_waf_prev_version))}}found latest onboard_waf_prev_version')
             else:
-                logger.error(f'{config_name}{space:>{column_width - len(config_name)}}invalid waf_config_name, not found')
+                sys.exit(logger.error(f'{config_name}{space:>{column_width - len(config_name)}}invalid waf_config_name, not found'))
         else:
             onboard_waf_config_id = 0
             onboard_waf_prev_version = 0
@@ -1301,18 +1301,21 @@ class utility:
 
     def list_waf_policy(self, wrapper_object, config_id, version, policy_name: str | None = None) -> str:
         _, policies = wrapper_object.get_waf_policy_from_config(config_id, version)
-        df = pd.DataFrame.from_dict(policies, orient='index')
-        df.index.name = 'Policy ID'
-        df.columns = ['Policy Name']
-        df.sort_values(by='Policy Name', inplace=True)
-        if not policy_name:
-            policy_str_id = ''
-            # logger.warning('Security Policy')
-            # print(tabulate(df, headers='keys', tablefmt='psql', showindex=True))
+        if not policies:
+            sys.exit(logger.error('This configuration does not have any policy'))
         else:
-            policy_str_id = list(filter(lambda x: policies[x] == [policy_name], policies))[0]
-            logger.info(f'{policy_name}{space:>{column_width - len(policy_name)}}valid policy name')
-            logger.info(f'{policy_str_id}{space:>{column_width - len(policy_str_id)}}found policy id')
+            df = pd.DataFrame.from_dict(policies, orient='index')
+            df.index.name = 'Policy ID'
+            df.columns = ['Policy Name']
+            df.sort_values(by='Policy Name', inplace=True)
+            if not policy_name:
+                policy_str_id = ''
+                # logger.warning('Security Policy')
+                # print(tabulate(df, headers='keys', tablefmt='psql', showindex=True))
+            else:
+                policy_str_id = list(filter(lambda x: policies[x] == [policy_name], policies))[0]
+                logger.info(f'{policy_name}{space:>{column_width - len(policy_name)}}valid policy name')
+                logger.info(f'{policy_str_id}{space:>{column_width - len(policy_str_id)}}found policy id')
         return policy_str_id, policies
 
     def csv_2_appsec_create_by_hostname(self, csv_file_loc: str):
