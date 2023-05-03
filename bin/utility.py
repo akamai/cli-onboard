@@ -1288,16 +1288,14 @@ class utility:
                 logger.info(f'{onboard_waf_prev_version}{space:>{column_width - len(str(onboard_waf_prev_version))}}found latest onboard_waf_prev_version')
             else:
                 sys.exit(logger.error(f'{config_name}{space:>{column_width - len(config_name)}}invalid waf_config_name, not found'))
+            return onboard_waf_config_id, onboard_waf_prev_version, pd.DataFrame()
         else:
             onboard_waf_config_id = 0
             onboard_waf_prev_version = 0
             response = wrapper_object.getWafConfigurations()
             df = pd.DataFrame(response.json()['configurations'])
             df.fillna('', inplace=True)
-            logger.warning('WAF Security Configuration')
-            # if none of the WAF has description, json will not have description key
-            print(tabulate(df[['name', 'id']], headers='keys', tablefmt='psql', showindex=False))
-        return onboard_waf_config_id, onboard_waf_prev_version
+            return onboard_waf_config_id, onboard_waf_prev_version, df
 
     def list_waf_policy(self, wrapper_object, config_id, version, policy_name: str | None = None) -> str:
         _, policies = wrapper_object.get_waf_policy_from_config(config_id, version)

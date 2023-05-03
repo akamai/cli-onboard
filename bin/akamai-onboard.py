@@ -830,18 +830,26 @@ def appsec_update(config, **kwargs):
 
 @cli.command(short_help='List available security configuration policy')
 @click.option('--waf-config-name', metavar='', help='Security config name', required=False)
-@click.option('--policy-name', metavar='', help='Security policy name', required=False)
+@click.option('--policy-name', metavar='', help='Security policy name, exact match', required=False)
+@click.option('--name-contains', metavar='', help='Keyword search security config by name', required=False)
 @pass_config
-def appsec_policy(config, waf_config_name, policy_name):
+def appsec_policy(config, waf_config_name, policy_name, name_contains):
     """
     List available security configuration policy
     """
     logger.info('Start Akamai CLI onboard')
     _, wrap_api = init_config(config)
     util = utility.utility()
-    config_id, version = util.validate_waf_config_name(wrap_api, waf_config_name)
+    config_id, version, df = util.validate_waf_config_name(wrap_api, waf_config_name)
     if not waf_config_name:
-        logger.warning('Add --waf-config-name to list Policy and Website Match Target')
+        logger.warning('WAF Security Configuration')
+        if name_contains:
+            df = df[df['name'].str.contains(name_contains)]
+        if not df.empty:
+            print(tabulate(df[['name', 'id']], headers='keys', tablefmt='psql', showindex=False))
+            logger.warning('Add --waf-config-name to list Policy and Website Match Target')
+        else:
+            logger.info('No result found')
     else:
         policy_str_id, policies = util.list_waf_policy(wrap_api, config_id, version, policy_name)
         if policy_str_id:
