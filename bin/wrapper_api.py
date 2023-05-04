@@ -590,7 +590,7 @@ class apiCallsWrapper:
                 policies_name[f"{p['policyId']}"] = [f"{p['policyName']}"]
         return resp, policies_name
 
-    def create_waf_match_target(self, ion):
+    def create_waf_match_target(self, ion, wag_target_hostname: list | None = None):
         url = self.formUrl(f'https://{self.access_hostname}/appsec/v1/configs/{ion.onboard_waf_config_id}/versions/{ion.onboard_waf_config_version}/match-targets')
         payload = {}
         payload['type'] = 'website'
@@ -605,7 +605,10 @@ class apiCallsWrapper:
         control['applySlowPostControls'] = True
         payload['effectiveSecurityControls'] = control
         payload['filePaths'] = ['/*']
-        payload['hostnames'] = ion.public_hostnames
+        if wag_target_hostname == []:
+            payload['hostnames'] = []
+        else:
+            payload['hostnames'] = ion.public_hostnames
         payload['isNegativeFileExtensionMatch'] = False
         payload['isNegativePathMatch'] = True
 
@@ -656,11 +659,17 @@ class apiCallsWrapper:
         if response.status_code == 200:
             if len(response.json()['availableSet']) > 0:
                 df = pd.json_normalize(response.json()['availableSet'])
+                logger.debug(f'\n{df}')
                 if network == 'staging':
                     selectable_df = df[(df['activeInStaging']) & (df['configNameInProduction'].isnull())]
                 else:
                     selectable_df = df[df['activeInProduction']]
-            hostnames = sorted(selectable_df['hostname'].unique().tolist())
+            if selectable_df.empty:
+                hostnames = []
+            else:
+                hostnames = sorted(selectable_df['hostname'].unique().tolist())
+        else:
+            logger.error(response.text)
         return response, hostnames
 
     def get_property_hostnames(self, property_id: str, contract_id: str, group_id: str, network: str | None = 'staging'):
