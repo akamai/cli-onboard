@@ -298,10 +298,8 @@ class wafFunctions:
                         f'id: {onboard_obj.target_id:<5}{dot:>32}'
                          'valid match target sequence')
             original_extra = extra + 56
-            try:
-                if len(wag_target_hostnames) == 0:
-                    logger.info(f'ALL Hostnames{dot:>{54}}valid public hostnames')
-            except:
+
+            if not wag_target_hostnames:
                 extra = original_extra - len(str(onboard_obj.public_hostnames)) - 2
                 if extra <= 0:
                     extra = original_extra + 7
@@ -309,6 +307,10 @@ class wafFunctions:
                 else:
                     logger.info(f'{onboard_obj.public_hostnames}{dot:>{extra}}'
                                 f'valid public hostnames')
+            else:
+                if len(wag_target_hostnames) == 0:
+                    logger.info(f'ALL Hostnames{dot:>{54}}valid public hostnames')
+
             return True
         logger.error('Unable to create a match target')
         return False
@@ -317,24 +319,33 @@ class wafFunctions:
         print()
         if activate == 'staging':
             logger.warning(f'Activating Security Config on {activate} network')
+            count = 0
             for i, appsec in enumerate(onboard_object):
-                while onboard_object[i].activation_id == 0:
-                    response = wrap_api.activateWafPolicy(onboard_object[i].onboard_waf_config_id,
-                                                        onboard_object[i].onboard_waf_config_version,
-                                                        network='STAGING',
-                                                        emails=onboard_object[i].notification_emails,
-                                                        note='Onboard CLI Activation')
-                    if response.status_code == 200:
-                        onboard_object[i].activation_id = response.json()['activationId']
-                        onboard_object[i].activation_create = response.json()['createDate']
-                        onboard_object[i].activation_status = response.json()['status']
-                        logger.debug(onboard_object[i])
-            time.sleep(1.5)
+                logger.info(f'{onboard_object[i]}')
+                response = wrap_api.activateWafPolicy(onboard_object[i].onboard_waf_config_id,
+                                                onboard_object[i].onboard_waf_config_version,
+                                                network='STAGING',
+                                                emails=onboard_object[i].notification_emails,
+                                                note='Onboard CLI Activation')
+                if response.status_code == 200:
+                    onboard_object[i].activation_id = response.json()['activationId']
+                    onboard_object[i].activation_create = response.json()['createDate']
+                    onboard_object[i].activation_status = response.json()['status']
+                    logger.info(onboard_object[i])
+                else:
+                    count += 1
+                    logger.info(response.json())
+                    logger.error(f'Error activating wag_config_id {onboard_object[i].onboard_waf_config_id}')
+                    x = wrap_api.get_activation_status(onboard_object[i].onboard_waf_config_id, onboard_object[i].waf_config_name)
+                    logger.warning(x)
+                time.sleep(1)
             self.waf_poll_activation(wrap_api, onboard_object, network='STAGING')
 
         if activate == 'production':
             logger.warning('Activating Security Config on STAGING network')
+            count = 0
             for i, appsec in enumerate(onboard_object):
+                logger.info(f'{onboard_object[i]}')
                 response = wrap_api.activateWafPolicy(onboard_object[i].onboard_waf_config_id,
                                                       onboard_object[i].onboard_waf_config_version,
                                                       network='STAGING',
@@ -345,12 +356,19 @@ class wafFunctions:
                     onboard_object[i].activation_create = response.json()['createDate']
                     onboard_object[i].activation_status = response.json()['status']
                     logger.debug(onboard_object[i])
+                else:
+                    count += 1
+                    logger.info(response.json())
+                    logger.error(f'Error activating wag_config_id {onboard_object[i].onboard_waf_config_id}')
+                    x = wrap_api.get_activation_status(onboard_object[i].onboard_waf_config_id, onboard_object[i].waf_config_name)
+                    logger.warning(x)
             time.sleep(1.5)
-            self.waf_poll_activation(wrap_api, onboard_object, network='STAGING')
+            self.waf_poll_activation(wrap_api, onboard_object, network='STAGING') if count == 0 else None
 
             print()
             logger.warning(f'Activating Security Config on {activate} network, please be patient')
             for i, appsec in enumerate(onboard_object):
+                logger.info(f'{onboard_object[i]}')
                 response = wrap_api.activateWafPolicy(onboard_object[i].onboard_waf_config_id,
                                                       onboard_object[i].onboard_waf_config_version,
                                                       network='PRODUCTION',
@@ -361,8 +379,14 @@ class wafFunctions:
                     onboard_object[i].activation_create = response.json()['createDate']
                     onboard_object[i].activation_status = response.json()['status']
                     logger.debug(onboard_object[i])
+                else:
+                    count += 1
+                    logger.error(response.json())
+                    logger.error(f'Error activating wag_config_id {onboard_object[i].onboard_waf_config_id}')
+                    x = wrap_api.get_activation_status(onboard_object[i].onboard_waf_config_id, onboard_object[i].waf_config_name)
+                    logger.warning(x)
             time.sleep(1.5)
-            self.waf_poll_activation(wrap_api, onboard_object, network='PRODUCTION')
+            self.waf_poll_activation(wrap_api, onboard_object, network='PRODUCTION') if count == 0 else None
         else:
             pass  # ok not to provide activate
 

@@ -514,6 +514,19 @@ class apiCallsWrapper:
         poll_activation_response = self.session.get(poll_activation_url)
         return poll_activation_response
 
+    def get_activation_status(self, config_id: int, name: str):
+        url = f'https://{self.access_hostname}/appsec/v1/configs/{config_id}/activations'
+        response = self.session.get(self.formUrl(url))
+        if response.status_code == 200:
+            detail = response.json()
+            try:
+                detail = detail['activationHistory']
+            except:
+                logger.error(f'not found activation history for {name}')
+        else:
+            detail = response.text
+        return detail
+
     def valid_hostnames_waf_config(self, ion):
         cid = ion.contract_id[4:]
         gid = ion.group_id[4:]

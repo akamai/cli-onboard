@@ -1059,6 +1059,7 @@ def appsec_create(config, contract_id, group_id, by, version_notes, activate, cs
 
     # activating
     if activate:
+        time.sleep(5)
         util_waf.activate_and_poll(wrap_api, appsec_onboard, activate)
     util.log_cli_timing()
 
