@@ -950,6 +950,10 @@ def appsec_create(config, contract_id, group_id, by, version_notes, activate, cs
         if 'hostname' in df.columns:
             if not activate:
                 network = 'staging'
+            df['waf_target_hostname'] = df[['property_id', 'hostname']].apply(lambda x: [] if x.hostname is None else x.hostname, axis=1)
+            if 'waf_target_hostname' in df.columns:
+                columns.append('waf_target_hostname')
+                df['waf_target_hostname'] = df['waf_target_hostname'].apply(lambda x: util.stringToList(x))
             df['hostname'] = df[['property_id', 'hostname']].apply(
                 lambda x: wrap_api.get_property_hostnames(x.property_id, contract_id, group_id, network) if x.hostname is None
                 else x.hostname, axis=1)
@@ -961,6 +965,8 @@ def appsec_create(config, contract_id, group_id, by, version_notes, activate, cs
             df.loc[df['property_name'] == property, 'hostname'] = df['hostname'].apply(lambda x: hostnames)
 
     # processing by name of WAF Security Configuration
+    # logger.info('Main data')
+    # print(tabulate(df[['property_id', 'waf_config_name', 'waf_policy_name', 'waf_target_hostname']], headers='keys', tablefmt='psql', showindex=True))
     waf = util.populate_waf_data(by, df)
     df = pd.DataFrame(waf)
     waf_df = df.set_index('waf_config_name')
@@ -972,71 +978,84 @@ def appsec_create(config, contract_id, group_id, by, version_notes, activate, cs
     columns = waf_df.columns.to_list()
     df = pd.DataFrame(waf, index=indexes, columns=columns)
     show_df = df.stack()
-    logger.info(f'\n{show_df.to_markdown(headers=["hostname"], tablefmt="psql")}')
+    show_df = pd.DataFrame(df.stack()).reset_index()
+    logger.debug(f'\n{show_df}')
+    show_df.columns = ['waf_config_name', 'policy', 'hostname']
+    show_df[['hostname', 'waf_target_hostname']] = pd.DataFrame(show_df['hostname'].tolist(), index=show_df.index)
+    logger.debug(f'\n{show_df}')
+    if by == 'propertyname':
+        columns = ['waf_config_name', 'policy', 'waf_target_hostname']
+    else:
+        columns = ['waf_config_name', 'policy', 'hostname']
+    logger.info(f'\n{show_df[columns].to_markdown(headers=columns, tablefmt="psql")}')
 
     # start onboarding security config
     prev_waf_config = 0
     util_waf = utility_waf.wafFunctions()
     _, selectable_hostnames = wrap_api.get_selectable_hostnames(contract_id[4:], group_id[4:], network)
     appsec_onboard = []
-    for waf_config in list(waf_df.index.values):
-        policys = list(waf_df.columns.values)
-        for i, policy in enumerate(policys):
-            # popolate property onboard data
-            public_hostnames = waf_df.at[waf_config, policy]
-            if public_hostnames != '':
-                onboard = Property(contract_id, group_id, waf_config, policy)
-                onboard.public_hostnames = public_hostnames
 
-                # validate hostnames and remove invalid hostnames
-                invalid_hostnames = list({x for x in onboard.public_hostnames if x not in selectable_hostnames})
-                if len(invalid_hostnames) > 1:
-                    onboard.public_hostnames = list(filter(lambda x: x not in invalid_hostnames, onboard.public_hostnames))
-                    if len(onboard.public_hostnames) == 0:
-                        logger.warning(f'Web security configuration {waf_config} - SKIPPING')
-                        logger.info(f'{invalid_hostnames} are not selectable hostnames')
-                        break
-                    if invalid_hostnames and len(onboard.public_hostnames) > 0:
-                        logger.warning(f'{invalid_hostnames} are not selectable hostnames for {waf_config}')
+    for i in show_df.index:
+        # popolate property onboard data
+        waf_config = show_df['waf_config_name'][i]
+        policy = show_df['policy'][i]
+        public_hostnames = show_df['hostname'][i]
+        logger.debug(f'{waf_config} {policy} {public_hostnames}')
+        onboard = Property(contract_id, group_id, waf_config, policy)
+        if len(public_hostnames) > 0:
+            onboard.public_hostnames = public_hostnames
+            if by == 'propertyname':
+                onboard.waf_target_hostnames = show_df['waf_target_hostname'][i]
 
-                # start onboarding security config
-                if waf_config != prev_waf_config:
-                    if util_waf.create_waf_config(wrap_api, onboard):
-                        logger.debug(onboard.public_hostnames)
-                        prev_waf_config_id = onboard.onboard_waf_config_id
-                        prev_waf_config_version = onboard.onboard_waf_config_version
-                        prev_waf_config = waf_config
+        # validate hostnames and remove invalid hostnames
+        invalid_hostnames = list({x for x in onboard.public_hostnames if x not in selectable_hostnames})
+        if len(invalid_hostnames) > 1:
+            onboard.public_hostnames = list(filter(lambda x: x not in invalid_hostnames, onboard.public_hostnames))
+            if len(onboard.public_hostnames) == 0:
+                logger.warning(f'Web security configuration {waf_config} - SKIPPING')
+                logger.info(f'{invalid_hostnames} are not selectable hostnames')
+                break
+            if invalid_hostnames and len(onboard.public_hostnames) > 0:
+                logger.warning(f'{invalid_hostnames} are not selectable hostnames for {waf_config}')
 
-                        if activate:
-                            # popolate AppSec data
-                            appsec = AppSec(waf_config, onboard.onboard_waf_config_id, onboard.onboard_waf_config_version, [email])
-                            appsec_onboard.append(appsec)
-                    else:
-                        sys.exit(-1)
-                else:
-                    # add hostnames to new policy
-                    onboard.onboard_waf_config_id = prev_waf_config_id
-                    onboard.onboard_waf_config_version = prev_waf_config_version
-                    output = []
-                    for hostname in onboard.public_hostnames:
-                        member = {}
-                        member['hostname'] = hostname
-                        output.append(member)
-                    payload = {}
-                    payload['hostnameList'] = output
-                    payload['mode'] = 'append'
-                    logger.debug(output)
-                    resp = wrap_api.modifyWafHosts(onboard.onboard_waf_config_id, onboard.onboard_waf_config_version, json.dumps(payload))
-                    if resp.status_code != 200:
-                        logger.error(resp.json())
+        # start onboarding security config
+        if waf_config != prev_waf_config:
+            if util_waf.create_waf_config(wrap_api, onboard):
+                prev_waf_config_id = onboard.onboard_waf_config_id
+                prev_waf_config_version = onboard.onboard_waf_config_version
+                prev_waf_config = waf_config
+                if activate:
+                    # popolate AppSec data
+                    appsec = AppSec(waf_config, onboard.onboard_waf_config_id, onboard.onboard_waf_config_version, [email])
+                    appsec_onboard.append(appsec)
+            else:
+                sys.exit(logger.error('Fail to create waf config'))
+        else:
+            # add hostnames to new policy
+            onboard.onboard_waf_config_id = prev_waf_config_id
+            onboard.onboard_waf_config_version = prev_waf_config_version
+            output = []
+            for hostname in onboard.public_hostnames:
+                member = {}
+                member['hostname'] = hostname
+                output.append(member)
+            payload = {}
+            payload['hostnameList'] = output
+            payload['mode'] = 'append'
+            logger.debug(output)
+            resp = wrap_api.modifyWafHosts(onboard.onboard_waf_config_id, onboard.onboard_waf_config_version, json.dumps(payload))
+            if resp.status_code != 200:
+                logger.error(resp.json())
 
-                if util_waf.create_waf_policy(wrap_api, onboard):
-                    if util_waf.create_waf_match_target(wrap_api, onboard):
-                        pass
-                    else:
-                        sys.exit()
-                else:
-                    sys.exit()
+        if util_waf.create_waf_policy(wrap_api, onboard):
+            if by == 'propertyname':
+                if util_waf.create_waf_match_target(wrap_api, onboard, onboard.waf_target_hostnames):
+                    pass
+            else:
+                if util_waf.create_waf_match_target(wrap_api, onboard):
+                    pass
+        else:
+            sys.exit(logger.error('Fail to create waf policy'))
 
     # activating
     if activate:

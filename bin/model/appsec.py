@@ -44,6 +44,7 @@ class Property:
     policy_name: list
 
     public_hostnames: list[str] = field(default_factory=list)
+    waf_target_hostnames: list[str] = field(default_factory=list)
     property_name: str = ''
     target_id: int = 0
     version_notes = ''

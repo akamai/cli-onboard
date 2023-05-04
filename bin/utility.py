@@ -1383,11 +1383,13 @@ class utility:
                 if by == 'propertyname':
                     combined_hostnames = new_df['hostname'].values
                     hostnames = [item for sublist in combined_hostnames for item in sublist]
+                    combined_waf_target_hostnames = new_df['waf_target_hostname'].values
+                    waf_target_hostnames = [item for sublist in combined_waf_target_hostnames for item in sublist]
                 if by == 'hostname':
                     hostnames = new_df['hostname'].unique().tolist()
-                config[policy] = hostnames
+                    waf_target_hostnames = []
+                config[policy] = (hostnames, waf_target_hostnames)
             waf.append(config)
-        logger.debug(waf)
         return waf
 
     def stringToList(self, input):
