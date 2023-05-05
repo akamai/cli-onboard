@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import datetime
 import json
+import re
 import sys
 import time
 from time import gmtime
@@ -325,79 +326,49 @@ class wafFunctions:
         logger.error('Unable to create a match target')
         return False
 
+    def activation_detail(self, wrap_api, onboard_object, activate):
+        logger.warning(f'Activating Security Config on {activate} network')
+        count = 0
+        for i, appsec in enumerate(onboard_object):
+            config_id = onboard_object[i].onboard_waf_config_id
+            response = wrap_api.activateWafPolicy(config_id,
+                                            onboard_object[i].onboard_waf_config_version,
+                                            network='STAGING',
+                                            emails=onboard_object[i].notification_emails,
+                                            note='Onboard CLI Activation')
+            if response.status_code in (200, 201):
+                onboard_object[i].activation_id = response.json()['activationId']
+                onboard_object[i].activation_create = response.json()['createDate']
+                onboard_object[i].activation_status = response.json()['status']
+                logger.debug(onboard_object[i])
+                logger.debug(f'wag_config_id {config_id} {onboard_object[i].activation_id}')
+            else:
+                count += 1
+                activation_status = 'ACTIVATION_ERROR'
+                err_msg = response.json()['detail']
+                if 'MultipleConfigs' in err_msg:
+                    try:
+                        old_config_id = re.findall(r'\d+', err_msg)
+                        old_config_id = int(old_config_id[0])
+                        old_config_name = wrap_api.getWafConfigVersions(old_config_id).json()['configName']
+                        activation_status = f'{activation_status} - conflict with config {old_config_name}'
+                    except:
+                        logger.error(f'wag_config_id {config_id} {err_msg}')
+                        activation_status = f'{activation_status} - conflict with multiple configs'
+                else:
+                    logger.error(f'wag_config_id {config_id} {err_msg}')
+                onboard_object[i].activation_status = activation_status
+        time.sleep(1)
+
     def activate_and_poll(self, wrap_api, onboard_object, activate):
         print()
-        if activate == 'staging':
-            logger.warning(f'Activating Security Config on {activate} network')
-            count = 0
-            for i, appsec in enumerate(onboard_object):
-                response = wrap_api.activateWafPolicy(onboard_object[i].onboard_waf_config_id,
-                                                onboard_object[i].onboard_waf_config_version,
-                                                network='STAGING',
-                                                emails=onboard_object[i].notification_emails,
-                                                note='Onboard CLI Activation')
-                if response.status_code in (200, 201):
-                    onboard_object[i].activation_id = response.json()['activationId']
-                    onboard_object[i].activation_create = response.json()['createDate']
-                    onboard_object[i].activation_status = response.json()['status']
-                    logger.debug(onboard_object[i])
-                    logger.debug(f'wag_config_id {onboard_object[i].onboard_waf_config_id} {onboard_object[i].activation_id}')
-                else:
-                    count += 1
-                    err_msg = response.json()['detail']
-                    onboard_object[i].activation_status = 'ACTIVATION_ERROR'
-                    logger.debug(f'wag_config_id {onboard_object[i].onboard_waf_config_id} {err_msg}')
-                time.sleep(1)
-            self.waf_poll_activation(wrap_api, onboard_object, network='STAGING')
+        self.activation_detail(wrap_api, onboard_object, activate)
+        self.waf_poll_activation(wrap_api, onboard_object, network='STAGING')
 
         if activate == 'production':
-            logger.warning('Activating Security Config on STAGING network')
-            count = 0
-            for i, appsec in enumerate(onboard_object):
-                logger.info(f'{onboard_object[i]}')
-                response = wrap_api.activateWafPolicy(onboard_object[i].onboard_waf_config_id,
-                                                      onboard_object[i].onboard_waf_config_version,
-                                                      network='STAGING',
-                                                      emails=onboard_object[i].notification_emails,
-                                                      note='Onboard CLI Activation')
-                if response.status_code == 200:
-                    onboard_object[i].activation_id = response.json()['activationId']
-                    onboard_object[i].activation_create = response.json()['createDate']
-                    onboard_object[i].activation_status = response.json()['status']
-                    logger.debug(onboard_object[i])
-                    logger.debug(f'wag_config_id {onboard_object[i].onboard_waf_config_id} {onboard_object[i].activation_id}')
-                else:
-                    count += 1
-                    err_msg = response.json()['detail']
-                    onboard_object[i].activation_status = 'ACTIVATION_ERROR'
-                    logger.debug(f'wag_config_id {onboard_object[i].onboard_waf_config_id} {err_msg}')
-            time.sleep(1.5)
-            self.waf_poll_activation(wrap_api, onboard_object, network='STAGING')
-
             print()
-            logger.warning(f'Activating Security Config on {activate} network, please be patient')
-            for i, appsec in enumerate(onboard_object):
-                logger.info(f'{onboard_object[i]}')
-                response = wrap_api.activateWafPolicy(onboard_object[i].onboard_waf_config_id,
-                                                      onboard_object[i].onboard_waf_config_version,
-                                                      network='PRODUCTION',
-                                                      emails=onboard_object[i].notification_emails,
-                                                      note='Onboard CLI Activation')
-                if response.status_code == 200:
-                    onboard_object[i].activation_id = response.json()['activationId']
-                    onboard_object[i].activation_create = response.json()['createDate']
-                    onboard_object[i].activation_status = response.json()['status']
-                    logger.debug(onboard_object[i])
-                    logger.debug(f'wag_config_id {onboard_object[i].onboard_waf_config_id} {onboard_object[i].activation_id}')
-                else:
-                    count += 1
-                    err_msg = response.json()['detail']
-                    onboard_object[i].activation_status = 'ACTIVATION_ERROR'
-                    logger.debug(f'wag_config_id {onboard_object[i].onboard_waf_config_id} {err_msg}')
-            time.sleep(1.5)
+            self.activation_detail(wrap_api, onboard_object, activate)
             self.waf_poll_activation(wrap_api, onboard_object, network='PRODUCTION')
-        else:
-            pass  # ok not to provide activate
 
     def waf_poll_activation(self, wrapper_api, appsec_onboard, network):
         all_waf_configs_active = False
@@ -410,12 +381,11 @@ class wafFunctions:
                             if response.json()['status'] == 'ACTIVATED':
                                 appsec_onboard[i].activation_end = datetime.datetime.utcnow().isoformat().replace('+00:00', 'Z')
                                 appsec_onboard[i].activation_status = response.json()['status']
-
                         except:
                             'no change to previous status'
                 live.update(self.waf_activation_table(appsec_onboard, network))
                 total_status = [appsec_onboard[i].activation_status for i, appsec in enumerate(appsec_onboard)]
-                pending = list(filter(lambda x: x not in ['ACTIVATED', 'ACTIVATION_ERROR'], total_status))
+                pending = list(filter(lambda x: not x.startswith('ACTIVATION_ERROR') and x not in ['ACTIVATED'], total_status))
                 if len(pending) == 0:
                     all_waf_configs_active = True
                     break
