@@ -1,9 +1,9 @@
 ﻿waf_config_name,waf_policy_name,hostname
-ah_onboard_1,policy_1,*.blanche-cloud.com
-ah_onboard_1,policy_1,ankit.blanche-cloud.com
-ah_onboard_1,policy_1,caa.blanche-cloud.com
-ah_onboard_1,policy_1,default.blanche-cloud.com
-ah_onboard_1,policy_2,joe.blanche-cloud.com
-ah_onboard_1,policy_3,katie.blanche-cloud.com
-ah_onboard_1,policy_3,ankit.blanche-cloud.com
-a_onboard_appsec_h1,policy_1,www.lillian-cloud.com
+ah_onboard_1,policy_1,sample-hostname-1.com
+ah_onboard_1,policy_1,sample-hostname-2.com
+ah_onboard_1,policy_1,sample-hostname-3.com
+ah_onboard_1,policy_1,sample-hostname-4.com
+ah_onboard_1,policy_2,sample-hostname-5.com
+ah_onboard_1,policy_3,sample-hostname-6.com
+ah_onboard_1,policy_3,sample-hostname-7.com
+ah_onboard_appsec_h1,Default,demo-hostname.com
