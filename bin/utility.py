@@ -617,34 +617,34 @@ class utility:
                 sys.exit(logger.error('Exiting....'))
             else:
                 onboard_object.waf_config_name = appsec_config_exists[0]['name']
-                msg = f'{onboard_object.config_id}:{onboard_object.waf_config_name}{space:>{column_width-(len(onboard_object.config_id)+len(onboard_object.waf_config_name))}}'
-                logger.info(f'{msg}valid config id')
+                logger.info(f'{onboard_object.waf_config_name} {space:>{column_width-(len(onboard_object.waf_config_name))}}valid config name')
+                logger.info(f'{onboard_object.config_id} {space:>{column_width-(len(onboard_object.config_id))}}valid config id')
 
             # check if config id base version exists
             if valid_waf:
-                msg = f'{onboard_object.config_version}{space:>{column_width-len(onboard_object.config_version)}}'
-                if onboard_object.config_version == 'latest':
-                    onboard_object.config_version = appsec_config_exists[0]['latestVersion']
-                    logger.info(f'{msg}using config id version {onboard_object.config_version}')
+                msg = f'{onboard_object.onboard_waf_prev_version}{space:>{column_width-len(onboard_object.onboard_waf_prev_version)}}'
+                if onboard_object.onboard_waf_prev_version == 'latest':
+                    onboard_object.onboard_waf_prev_version = appsec_config_exists[0]['latestVersion']
+                    logger.info(f'{msg} using config id version {onboard_object.onboard_waf_prev_version}')
                 else:
-                    if int(onboard_object.config_version) > appsec_config_exists[0]['latestVersion']:
-                        logger.error(f'{msg}invalid config version')
+                    if int(onboard_object.onboard_waf_prev_version) > appsec_config_exists[0]['latestVersion']:
+                        logger.error(f'{msg} invalid config version')
                         count += 1
                         valid_waf = False
                     else:
-                        logger.info(f'{msg}valid config id version')
+                        logger.info(f'{msg} valid config id version')
 
             # check if policy match targets are valid
             if valid_waf:
                 # first get all policies
-                policies = wrapper_object.get_waf_policy_update(onboard_object.config_id, onboard_object.config_version)
+                policies = wrapper_object.get_waf_policy_update(onboard_object.config_id, onboard_object.onboard_waf_prev_version)
                 if policies:
                     unique_match_target_list = list(set(list(map(lambda x: x['matchTargetId'], onboard_object.csv_dict))))
-                    resp, waf_match_target_ids = wrapper_object.list_match_targets(onboard_object.config_id, onboard_object.config_version, policies)
+                    resp, waf_match_target_ids = wrapper_object.list_match_targets(onboard_object.config_id, onboard_object.onboard_waf_prev_version, policies)
                     for unique_match_target in unique_match_target_list:
                         msg = f'{unique_match_target}{space:>{column_width-len(unique_match_target)}}'
                         if int(unique_match_target) in waf_match_target_ids:
-                            logger.info(f'{msg} valid match target id')
+                            logger.debug(f'{msg} valid match target id')
                         else:
                             logger.error(f'{msg} invalid match target id')
                             count += 1
@@ -653,30 +653,30 @@ class utility:
                 else:
                     sys.exit(logger.error('unable to get waf policies....'))
 
-        # validate that hostnames are either already selected or selectable
-        available_hostnames = wrapper_object.getWAFSelectableHosts(onboard_object.config_id, onboard_object.config_version)
-        selectable_hosts_list = list(set(list(map(lambda x: x['hostname'], available_hostnames['availableSet']))))
-        try:
-            selected_host_list = list(set(list(map(lambda x: x['hostname'], available_hostnames['selectedSet']))))
-        except KeyError:
-            selected_host_list = []
+                # validate that hostnames are either already selected or selectable
+                available_hostnames = wrapper_object.getWAFSelectableHosts(onboard_object.config_id, onboard_object.onboard_waf_prev_version)
+                selectable_hosts_list = list(set(list(map(lambda x: x['hostname'], available_hostnames['availableSet']))))
+                try:
+                    selected_host_list = list(set(list(map(lambda x: x['hostname'], available_hostnames['selectedSet']))))
+                except KeyError:
+                    selected_host_list = []
 
-        if available_hostnames:
-            logger.debug(f'{onboard_object.hostname_list=}')
-            logger.debug(f'{selectable_hosts_list=}')
-            logger.info(f'{selected_host_list=}')
-            for hostname in onboard_object.hostname_list:
-                msg = f'{hostname}{space:>{column_width-len(hostname)}}'
-                if hostname in selectable_hosts_list:
-                    logger.info(f'{msg} valid selectable hostnames')
-                elif hostname in selected_host_list:
-                    logger.warn(f'{msg} existing hostname, hostnames not added')
+                if available_hostnames:
+                    logger.debug(f'{onboard_object.hostname_list=}')
+                    logger.debug(f'{selectable_hosts_list=}')
+                    logger.debug(f'{selected_host_list=}')
+                    for hostname in onboard_object.hostname_list:
+                        msg = f'{hostname}{space:>{column_width-len(hostname)}}'
+                        if hostname in selectable_hosts_list:
+                            logger.info(f'{msg} valid selectable hostnames')
+                        elif hostname in selected_host_list:
+                            logger.warning(f'{msg} existing hostname')
+                        else:
+                            count += 1
+                            logger.error(f'{msg} invalid selectable hostnames')
+                            onboard_object.skip_selected_hosts.append(hostname)
                 else:
-                    count += 1
-                    logger.error(f'{msg} invalid selectable hostnames')
-                    onboard_object.skip_selected_hosts.append(hostname)
-        else:
-            sys.exit(logger.error('unable to get available hostnames'))
+                    sys.exit(logger.error('unable to get available hostnames'))
 
         if count == 0:
             self.valid is True
