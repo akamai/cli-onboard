@@ -13,10 +13,6 @@ Copyright 2023 Akamai Technologies, Inc. All Rights Reserved.
 """
 from __future__ import annotations
 
-import json
-import sys
-from pathlib import Path
-
 from exceptions import get_cli_root_directory
 from exceptions import setup_logger
 
@@ -25,34 +21,34 @@ root = get_cli_root_directory()
 
 
 class onboard:
-    def __init__(self, config, click_args):
+    def __init__(self, click_args):
         try:
             self.config_id = click_args['config_id']
+            self.onboard_waf_config_id = self.config_id
             self.waf_config_name = ''
-            self.config_version = click_args['version']
+            self.onboard_waf_prev_version = click_args['version']
             self.csv = click_args['csv']
             self.valid_csv = True
             self.csv_dict = []
             self.hostname_list = []
             self.appsec_json = {}
             self.skip_selected_hosts = []
-            self.onboard_waf_config_version = ''
+            self.onboard_waf_config_version = 0
             self.activate_staging = False
             self.activate_production = False
+
             if 'staging' in click_args['activate']:
                 self.activate_staging = True
             if 'production' in click_args['activate']:
                 self.activate_production = True
+
             if click_args['email']:
-                self.notification_emails = click_args['email']
+                self.notification_emails = [click_args['email']]
             else:
                 self.notification_emails = ['noreply@akamai.com']
-            self.version_notes = 'Created using Onboard CLI'
-        except KeyError as k:
-            print('\nMissing ' + str(k))
-            exit(-1)
 
-        try:
             self.version_notes = click_args['version_notes']
-        except:
-            self.version_notes = 'Created using Onboard CLI'
+
+        except KeyError as k:
+            print(f'\nMissing {k}')
+            exit(-1)
