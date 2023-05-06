@@ -379,9 +379,9 @@ class apiCallsWrapper:
         waf_configversions_response = self.session.get(get_waf_configversions_url)
         return waf_configversions_response
 
-    def createWafConfigVersion(self, config_id, base_version, notes: str):
+    def createWafConfigVersion(self, config_id, base_version: int, notes: str):
         """
-        Function to get WAF policy versions
+        Clone a configuration version
         """
         version_info = {}
         version_info['createFromVersion'] = base_version
