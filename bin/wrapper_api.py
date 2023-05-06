@@ -683,7 +683,7 @@ class apiCallsWrapper:
                 hostnames = sorted(selectable_df['hostname'].unique().tolist())
         else:
             logger.error(response.text)
-        return response, hostnames
+        return response, hostnames, selectable_df
 
     def get_property_hostnames(self, property_id: str, contract_id: str, group_id: str, network: str | None = 'staging'):
         response = self.list_property_hostname(property_id, contract_id, group_id)

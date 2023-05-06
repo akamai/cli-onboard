@@ -52,3 +52,15 @@ class Property:
     onboard_waf_config_version: int = 0
 
     notification_emails: list[str] = field(default_factory=list)
+
+
+@dataclass
+class Generic:
+    contract_id: str
+    group_id: str
+    csv: str
+    template: str
+
+    network: str = 'staging'
+    notification_emails: list = field(default_factory=lambda: ['noreply@akamai.com'])
+    activate: str = None

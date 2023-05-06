@@ -325,18 +325,26 @@ class wafFunctions:
             else:
                 count += 1
                 activation_status = 'ACTIVATION_ERROR'
-                err_msg = response.json()['detail']
+                try:
+                    err_msg = response.json()['detail']
+                except:
+                    logger.error(response.json())
+
                 if 'MultipleConfigs' in err_msg:
-                    try:
-                        old_config_id = re.findall(r'\d+', err_msg)
-                        old_config_id = int(old_config_id[0])
-                        old_config_name = wrap_api.getWafConfigVersions(old_config_id).json()['configName']
-                        activation_status = f'{activation_status} - conflict with config {old_config_name}'
-                    except:
-                        logger.error(f'wag_config_id {config_id} {err_msg}')
-                        activation_status = f'{activation_status} - conflict with multiple configs'
+                    if 'another pending process' in err_msg:
+                        activation_status = f'{activation_status}\nHostnames involved in another pending process'
+                    else:
+                        try:
+                            old_config_id = re.findall(r'\d+', err_msg)
+                            old_config_id = int(old_config_id[0])
+                            old_config_name = wrap_api.getWafConfigVersions(old_config_id).json()['configName']
+                            activation_status = f'{activation_status}\nhostname conflict with config "{old_config_name}" [{old_config_id}]'
+                        except:
+                            logger.error(f'wag_config_id {config_id} {err_msg}')
+                            activation_status = f'{activation_status}\nconflict with multiple configs'
                 else:
-                    logger.error(f'wag_config_id {config_id} {err_msg}')
+                    # logger.error(f'wag_config_id {config_id} {err_msg}')
+                    activation_status = f'{activation_status} - unable to process request'
                 onboard_object[i].activation_status = activation_status
         time.sleep(1)
 

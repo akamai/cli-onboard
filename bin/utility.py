@@ -678,6 +678,9 @@ class utility:
                 else:
                     sys.exit(logger.error('unable to get available hostnames'))
 
+        if not self.validate_email(onboard_object.notification_emails):
+            count += 1
+
         if count == 0:
             self.valid is True
             print()
@@ -1410,3 +1413,151 @@ class utility:
         except:
             newList = None
         return (newList)
+
+    def validate_email(self, emails: list) -> bool:
+        if len(emails) > 0:
+            for email in emails:
+                if not is_email(email):
+                    logger.error(f'{email}{space:>{column_width - len(email)}}invalid email address')
+                    return False
+        return True
+
+    def validate_appsec_pre_create(self, main_object, wrap_api, util_waf, selectable_df):
+        """
+        Function to validate inputs for appsec-create
+        """
+        count = 0
+        by = main_object.template
+        csv = main_object.csv
+        activate = main_object.activate
+        network = main_object.network
+        contract_id = main_object.contract_id
+        group_id = main_object.group_id
+
+        if main_object.template == 'propertyname':
+            valid_csv, data = self.csv_2_appsec_create_by_propertyname(csv)
+        else:
+            valid_csv, data = self.csv_2_appsec_create_by_hostname(csv)
+        if valid_csv is False:
+            logger.error('CSV input needs to be corrected first')
+            count += 1
+
+        logger.warning('Validating inputs. Please wait, may take a few moments')
+        df = pd.DataFrame(data)
+        logger.debug(f'\nIncoming data\n{df}')
+
+        if by == 'hostname':
+            waf = self.populate_waf_data(by, df)
+        else:
+            df.insert(0, 'property_version', '')
+            df.insert(0, 'property_id', '')
+            all_property = df.property_name.unique()
+            logger.debug(all_property)
+
+            # validate property
+            invalid_property = []
+            for property in all_property:
+                if wrap_api.property_exists(property) is False:
+                    invalid_property.append(property)
+                else:
+                    property_df = pd.DataFrame(wrap_api.get_property_id(property))
+                    if not activate:
+                        new_df = property_df[property_df['stagingStatus'] == 'ACTIVE']
+                    else:
+                        if network == 'staging':
+                            new_df = property_df[property_df['stagingStatus'] == 'ACTIVE']
+                        else:
+                            new_df = property_df[property_df['productionStatus'] == 'ACTIVE']
+
+                    if new_df.empty:
+                        sys.exit(logger.error(f'property {property} must be activated on the {network.upper()} network first'))
+                    property_id = new_df['propertyId'].values[0]
+                    df.loc[df['property_name'] == property, 'property_id'] = property_id
+                    df.loc[df['property_name'] == property, 'property_version'] = new_df['propertyVersion'].values[0]
+
+            # only process valid properties
+            if len(invalid_property) == 0:
+                valid_property = all_property
+            else:
+                logger.error(f'invalid property name {invalid_property}')
+                valid_property = list(set(all_property) - set(invalid_property))
+                logger.debug(f'{valid_property=}')
+            df = df[df['property_name'].isin(valid_property)]
+            columns = ['property_name', 'waf_config_name', 'waf_policy_name', 'hostname', 'property_id', 'property_version']
+            df.sort_values(by=['waf_config_name', 'property_name'], inplace=True)
+            df.reset_index(drop=True, inplace=True)
+            logger.debug(f'\nCleanup Round 1\n{df[columns]}')
+
+            # populate remaining empty hostname
+            if 'hostname' in df.columns:
+                if not activate:
+                    network = 'staging'
+                df['waf_target_hostname'] = df[['property_id', 'hostname']].apply(lambda x: [] if x.hostname is None else x.hostname, axis=1)
+                if 'waf_target_hostname' in df.columns:
+                    columns.append('waf_target_hostname')
+                    df['waf_target_hostname'] = df['waf_target_hostname'].apply(lambda x: self.stringToList(x))
+                df['hostname'] = df[['property_id', 'hostname']].apply(
+                    lambda x: wrap_api.get_property_hostnames(x.property_id, contract_id, group_id, network) if x.hostname is None
+                    else x.hostname, axis=1)
+                df['hostname'] = df['hostname'].apply(lambda x: self.stringToList(x))
+                logger.debug(f'\nCleanup Round 2\n{df[columns]}')
+            else:
+                df.insert(0, 'hostname', '')
+                hostnames = wrap_api.get_property_hostnames(property_id, contract_id, group_id, network)
+                df.loc[df['property_name'] == property, 'hostname'] = df['hostname'].apply(lambda x: hostnames)
+
+        # processing by name of WAF Security Configuration
+        # logger.info('Main data')
+        # print(tabulate(df[['property_id', 'waf_config_name', 'waf_policy_name', 'waf_target_hostname']], headers='keys', tablefmt='psql', showindex=True))
+        waf = self.populate_waf_data(by, df)
+        df = pd.DataFrame(waf)
+        waf_df = df.set_index('waf_config_name')
+        waf_df.fillna('', inplace=True)
+        logger.debug(f'\nPivot\n{waf_df}')
+
+        # display data on terminal
+        indexes = waf_df.index.to_list()
+        columns = waf_df.columns.to_list()
+        df = pd.DataFrame(waf, index=indexes, columns=columns)
+        show_df = df.stack()
+        show_df = pd.DataFrame(df.stack()).reset_index()
+        logger.debug(f'\n{show_df}')
+        show_df.columns = ['waf_config_name', 'policy', 'hostname']
+        show_df[['hostname', 'waf_target_hostname']] = pd.DataFrame(show_df['hostname'].tolist(), index=show_df.index)
+        logger.debug(f'\n{show_df}')
+        if by == 'propertyname':
+            columns = ['waf_config_name', 'policy', 'waf_target_hostname']
+        else:
+            columns = ['waf_config_name', 'policy', 'hostname']
+        logger.info(f'\n{show_df[columns].to_markdown(headers=columns, tablefmt="psql")}')
+
+        # check duplicate waf config name
+        all_waf = show_df['waf_config_name'].unique().tolist()
+        for waf in all_waf:
+            config_detail = self.getWafConfigIdByName(wrap_api, waf)
+            if config_detail['Found']:
+                count += 1
+                logger.error(f'{waf}{space:>{column_width - len(waf)}}duplicate waf_config_name already exists')
+
+        # check if hostnames are activated in another config
+        # TODO: is this possible on staging?
+
+        _, selectable_hostnames, _ = wrap_api.get_selectable_hostnames(contract_id[4:], group_id[4:], network)
+        all_hostnames = sorted(list({host for hosts in show_df['hostname'].tolist() for host in hosts}))
+        logger.debug(all_hostnames)
+        for hostname in all_hostnames:
+            if hostname not in selectable_hostnames:
+                count += 1
+                logger.error(f'{hostname}{space:>{column_width - len(hostname)}}invalid hostname for contract/group')
+
+        if main_object.network:
+            if not self.validate_email(main_object.notification_emails):
+                count += 1
+
+        if count == 0:
+            self.valid is True
+        else:
+            self.valid is False
+            sys.exit(logger.error(f'Total {count} errors, please review'))
+
+        return show_df
