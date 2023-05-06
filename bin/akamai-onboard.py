@@ -821,7 +821,7 @@ def appsec_update(config, **kwargs):
             for network in click_args['activate']:
                 waf_activation_status = utility_waf_object.updateActivateAndPoll(wrapper_object, onboard_object, network=network.upper())
                 if waf_activation_status is False:
-                    sys.exit(logger.error('Unable to activate WAF configuration to production network'))
+                    sys.exit(logger.error(f'Unable to activate WAF configuration to {network.upper()} network'))
         else:
             print()
             logger.warning('Activate WAF Configuration Production: SKIPPING')
