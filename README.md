@@ -537,15 +537,16 @@ By submitting a contribution (the “Contribution”) to this project, and for g
 ## Local Install
 
 - Minimum python 3.6 `git clone https://github.com/akamai/cli-onboard.git  `
+- cd into cli-onboard directory `cd cli-onboard`
 - Create python virtual environment `python3 -m venv .venv`
 - Install required packages `pip3 install -r requirements.txt`
-- If testing another branch run, for example, `git checkout -b shared-policy`
+- If testing another branch i.e `shared-policy` run `git checkout -b shared-policy`
 - Verify as Akamai CLI, first uninstall existing version `akamai uninstall onboard`
 - Install from local repo
   - Run `pwd` to get current directory i.e `/Users/Documents/cli-onboard`
-    - For MAC OS, run `akamai install file:///Users/Documents/cli-cloudlets`
+    - For MAC OS, run `akamai install file:///Users/Documents/cli-onboard`
       - Please note there is 3 slashes
-    - For Window, run `akamai install file://C:/Users/sample/cli-cloudlets`
+    - For Window, run `akamai install file://C:/Users/sample/cli-onboard`
       - Only 2 slashes
 
 # Notice
