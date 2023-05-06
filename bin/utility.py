@@ -1311,9 +1311,15 @@ class utility:
                 # logger.warning('Security Policy')
                 # print(tabulate(df, headers='keys', tablefmt='psql', showindex=True))
             else:
-                policy_str_id = list(filter(lambda x: policies[x] == [policy_name], policies))[0]
-                logger.info(f'{policy_name}{space:>{column_width - len(policy_name)}}valid policy name')
-                logger.info(f'{policy_str_id}{space:>{column_width - len(policy_str_id)}}found policy id')
+                try:
+                    policy_str_id = list(filter(lambda x: policies[x] == [policy_name], policies))[0]
+                    logger.info(f'{policy_name}{space:>{column_width - len(policy_name)}}valid policy name')
+                    logger.info(f'{policy_str_id}{space:>{column_width - len(policy_str_id)}}found policy id')
+                except:
+                    # show all policies instead
+                    print(tabulate(df, headers='keys', tablefmt='psql', showindex=True))
+                    logger.warning(f'policy name "{policy_name}" not found.  Name must be exact match.')
+                    return None, policies
         return policy_str_id, policies
 
     def csv_2_appsec_create_by_hostname(self, csv_file_loc: str):

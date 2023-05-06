@@ -409,6 +409,7 @@ If `--waf-config-name` is provided, the result displays associated policies and 
 akamai onboard appsec-policy
 akamai onboard appsec-policy --name-contains test
 akamai onboard appsec-policy --waf-config-name sample_sec
+akamai onboard appsec-policy --waf-config-name sample_sec --policy-name Default
 ```
 
 # appsec-create
