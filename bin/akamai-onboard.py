@@ -112,7 +112,7 @@ def init_config(config):
 @pass_config
 def cli(config, edgerc, section, account_key):
     '''
-    Akamai CLI for onboarding properties v2.2.0
+    Akamai CLI for onboarding properties v2.3.0
     '''
     config.edgerc = edgerc
     config.section = section
@@ -745,11 +745,11 @@ def batch_create(config, **kwargs):
 
 
 @cli.command(short_help='Add hostnames as selected hosts to existing security configuration and optionally add to policy match target')
-@click.option('--config-id', metavar='', help='name of security configuration to update', required=False)
-@click.option('--version-notes', metavar='', help='name of security configuration to update', required=False)
-@click.option('--activate', metavar='', type=click.Choice(['staging', 'production']), multiple=True, help='Options: staging, production', required=False, default='')
-@click.option('--version', metavar='', help='email(s) for activation notifications', default='latest', required=False)
+@click.option('--config-id', metavar='', help='name of security configuration to update', required=True)
 @click.option('--csv', metavar='', required=True, help='csv file with headers hostname,matchTargetId')
+@click.option('--version-notes', metavar='', help='notes for the new version', required=False)
+@click.option('--activate', metavar='', type=click.Choice(['staging', 'production']), multiple=True, help='Options: staging, production', required=False, default='')
+@click.option('--version', metavar='', help='version to add hostname(s) to', default='latest', required=False)
 @click.option('--email', metavar='', required=False, help='email for activation notifications')
 @pass_config
 def appsec_update(config, **kwargs):
@@ -757,14 +757,14 @@ def appsec_update(config, **kwargs):
     Update existing security configuration
 
     \b
-    Add additional hostnames and optionally add to policy match target')
+    Add additional hostnames and optionally add to policy match target
     """
     logger.info('Start Akamai CLI onboard')
     _, wrapper_object = init_config(config)
     util = utility.utility()
     click_args = kwargs
 
-    onboard_object = onboard_appsec_update.onboard(config, click_args)
+    onboard_object = onboard_appsec_update.onboard(click_args)
 
     # Validate setup and akamai cli and cli pipeline are installed
     csv = click_args['csv']
@@ -785,8 +785,8 @@ def appsec_update(config, **kwargs):
         utility_waf_object = utility_waf.wafFunctions()
         # First create new WAF configuration version
         logger.debug(f'Trying to create new version for WAF configuration: {onboard_object.waf_config_name}')
-        create_waf_version = utility_waf_object.createWafVersion_Update(wrapper_object, onboard_object, notes=onboard_object.version_notes)
-        # wrapper_object.update_waf_config_version_note(onboard_object, notes=onboard_object.version_notes)
+        create_waf_version = utility_waf_object.createWafVersion(wrapper_object, onboard_object, notes=onboard_object.version_notes)
+        wrapper_object.update_waf_config_version_note(onboard_object, notes=onboard_object.version_notes)
         if create_waf_version is False:
             sys.exit()
 
@@ -794,11 +794,11 @@ def appsec_update(config, **kwargs):
         logger.debug(f'Trying to add property public_hostnames as selected hosts to WAF configuration: {onboard_object.waf_config_name}')
         hostnames_to_add = list(filter(lambda x: x not in onboard_object.skip_selected_hosts, onboard_object.hostname_list))
         add_hostnames = utility_waf_object.addHostnames(wrapper_object,
-                                    hostnames_to_add,
-                                    onboard_object.config_id,
-                                    onboard_object.onboard_waf_config_version)
+                                                        hostnames_to_add,
+                                                        onboard_object.config_id,
+                                                        onboard_object.onboard_waf_config_version)
         if add_hostnames is True:
-            logger.info(f'Successfully added {hostnames_to_add} as selected hosts')
+            logger.info(f'Selected hosts: Successfully added {hostnames_to_add}')
         else:
             logger.error('Unable to add selected hosts to WAF Configuration')
             exit(-1)
@@ -812,7 +812,7 @@ def appsec_update(config, **kwargs):
                                         onboard_object.onboard_waf_config_version,
                                         policy)
             if modify_matchtarget:
-                logger.info(f'Successfully added {policy_hostnames_to_add} to WAF Configuration Match Target {policy}')
+                logger.info(f'WAF Configuration Match Target {policy}: Successfully added {policy_hostnames_to_add}')
             else:
                 logger.error(f'Failed to add {policy_hostnames_to_add} to match target {policy}')
 
@@ -823,7 +823,8 @@ def appsec_update(config, **kwargs):
                 if waf_activation_status is False:
                     sys.exit(logger.error('Unable to activate WAF configuration to production network'))
         else:
-            logger.info('Activate WAF Configuration Production: SKIPPING')
+            print()
+            logger.warning('Activate WAF Configuration Production: SKIPPING')
 
         util.log_cli_timing()
 
