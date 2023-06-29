@@ -5,8 +5,10 @@
   "commands": [
     {
       "name": "onboard",
-      "aliases": ["onboard"],
-      "version": "2.2.0",
+      "aliases": [
+        "onboard"
+      ],
+      "version": "2.3.0",
       "description": "Onboard Akamai delivery and WAF configuration"
     }
   ]

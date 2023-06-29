@@ -27,9 +27,11 @@ from time import strftime
 import _logging as lg
 import click
 import onboard
+import onboard_appsec_update
 import onboard_batch_create
 import onboard_multi_hosts
 import onboard_single_host
+import pandas as pd
 import requests
 import steps
 import utility
@@ -40,11 +42,14 @@ from akamai.edgegrid import EdgeGridAuth
 from akamai.edgegrid import EdgeRc
 from exceptions import get_cli_root_directory
 from exceptions import setup_logger
+from model.appsec import AppSec
+from model.appsec import Generic
+from model.appsec import Property
 from model.multi_hosts import MultiHosts
 from model.single_host import SingleHost
+from tabulate import tabulate
 
-
-PACKAGE_VERSION = '2.2.0'
+PACKAGE_VERSION = '2.3.0'
 logger = setup_logger()
 root = get_cli_root_directory()
 
@@ -107,13 +112,14 @@ def init_config(config):
 @pass_config
 def cli(config, edgerc, section, account_key):
     '''
-    Akamai CLI for onboarding properties v2.2.0
+    Akamai CLI for onboarding properties v2.3.0
     '''
     config.edgerc = edgerc
     config.section = section
     config.account_key = account_key
 
 
+"""
 @cli.command()
 @click.pass_context
 def help(ctx):
@@ -121,11 +127,14 @@ def help(ctx):
     Show help information
     '''
     print(ctx.parent.get_help())
+"""
 
 
 @cli.command(short_help='Pull sample templates')
-@pass_config
-def fetch_sample_templates(config):
+def fetch_sample_templates():
+    """
+    Retrieve sample templates for available commands
+    """
     source_folder = Path(root, 'templates', 'sample_setup_files')
     Path('sample_templates').mkdir(parents=True, exist_ok=True)
     target_folder = Path().resolve()
@@ -137,11 +146,17 @@ def fetch_sample_templates(config):
 
 @cli.command(short_help='Create a delivery configuration with mutltiple hostnames and security configuration with one WAF policy')
 @click.option('--csv', metavar='', required=True,
-              help='File containing hostname and origin servername i.e. testwebsite.com,origin-testwebsite.com')
+              help='File containing hostname and origin servername values in format testwebsite.com,origin-testwebsite.com')
 @click.option('-f', '--file', metavar='', required=True,
               help='File containing setup/onboard config key-value pairs in JSON')
 @pass_config
 def multi_hosts(config, csv, file):
+    """
+    Simplify onboarding ONE property with multiple hostnames and optionally multiple CPCodes
+
+    \b
+    CSV input file without headers.  Just data in format hostname,origin-hostname
+    """
     logger.info('Start Akamai CLI onboard')
     _, wrap_api = init_config(config)
     util = utility.utility()
@@ -302,6 +317,10 @@ def multi_hosts(config, csv, file):
               help='File containing setup/onboard config key-value pairs in JSON')
 @pass_config
 def single_host(config, file):
+    """
+    Simplify onboarding ONE property.  By default, delivery config will be activating on STAGING network.
+    Security config will also be activating on STAGING network if create_new_security_config is True.
+    """
     logger.info('Start Akamai CLI onboard')
     _, wrap_api = init_config(config)
     util = utility.utility()
@@ -541,9 +560,12 @@ def create(config, file):
 @click.option('--waf-match-target', metavar='', help='waf match target id to add hostnames to (use numeric waf match target id)', required=False)
 @click.option('--activate', metavar='', type=click.Choice(['delivery-staging', 'waf-staging', 'delivery-production', 'waf-production']), multiple=True, help='Options: delivery-staging, delivery-production, waf-staging, waf-production', required=False)
 @click.option('--email', metavar='', multiple=True, help='email(s) for activation notifications', required=False)
-@click.option('--csv', metavar='', required=True, help='csv file with headers hostname,origin,edgeHostname,forwardHostHeader,propertyName,')
+@click.option('--csv', metavar='', required=True, help='csv file with headers hostname,origin,propertyName,forwardHostHeader,edgeHostname')
 @pass_config
 def batch_create(config, **kwargs):
+    """
+    Create a 1 or more delivery configurations using a csv input and optionally update WAF policy
+    """
     logger.info('Start Akamai CLI onboard')
     _, wrapper_object = init_config(config)
     click_args = kwargs
@@ -722,6 +744,237 @@ def batch_create(config, **kwargs):
     return 0
 
 
+@cli.command(short_help='Add hostnames as selected hosts to existing security configuration and optionally add to policy match target')
+@click.option('--config-id', metavar='', help='name of security configuration to update', required=True)
+@click.option('--csv', metavar='', required=True, help='csv file with headers hostname,matchTargetId')
+@click.option('--version-notes', metavar='', help='notes for the new version', required=False)
+@click.option('--activate', metavar='', type=click.Choice(['staging', 'production']), multiple=True, help='Options: staging, production', required=False, default='')
+@click.option('--version', metavar='', help='version to add hostname(s) to', default='latest', required=False)
+@click.option('--email', metavar='', required=False, help='email for activation notifications')
+@pass_config
+def appsec_update(config, **kwargs):
+    """
+    Update existing security configuration
+
+    \b
+    Add additional hostnames and optionally add to policy match target
+    """
+    logger.info('Start Akamai CLI onboard')
+    _, wrapper_object = init_config(config)
+    util = utility.utility()
+    click_args = kwargs
+
+    onboard_object = onboard_appsec_update.onboard(click_args)
+
+    # Validate setup and akamai cli and cli pipeline are installed
+    csv = click_args['csv']
+
+    # Validate akamai cli and cli pipeline are installed
+    cli_installed = util.installedCommandCheck('akamai')
+    pipeline_installed = util.executeCommand(['akamai', 'pipeline'])
+
+    if not (pipeline_installed and (cli_installed or pipeline_installed)):
+        sys.exit()
+
+    # validate setup steps when csv input provided
+    util.csv_validator_appsec(onboard_object, csv)
+    util.csv_2_appsec_array(onboard_object)
+    util.validateAppsecSteps(onboard_object, wrapper_object, cli_mode='appsec-update')
+
+    if util.valid is True:
+        utility_waf_object = utility_waf.wafFunctions()
+        # First create new WAF configuration version
+        logger.debug(f'Trying to create new version for WAF configuration: {onboard_object.waf_config_name}')
+        create_waf_version = utility_waf_object.createWafVersion(wrapper_object, onboard_object, notes=onboard_object.version_notes)
+        wrapper_object.update_waf_config_version_note(onboard_object, notes=onboard_object.version_notes)
+        if create_waf_version is False:
+            sys.exit()
+
+        # Created WAF config version, now can add selected hosts to it
+        logger.debug(f'Trying to add property public_hostnames as selected hosts to WAF configuration: {onboard_object.waf_config_name}')
+        hostnames_to_add = list(filter(lambda x: x not in onboard_object.skip_selected_hosts, onboard_object.hostname_list))
+        add_hostnames = utility_waf_object.addHostnames(wrapper_object,
+                                                        hostnames_to_add,
+                                                        onboard_object.config_id,
+                                                        onboard_object.onboard_waf_config_version)
+        if add_hostnames is True:
+            logger.info(f'Selected hosts: Successfully added {hostnames_to_add}')
+        else:
+            logger.error('Unable to add selected hosts to WAF Configuration')
+            exit(-1)
+
+        # Update WAF match target
+        for policy in onboard_object.appsec_json:
+            policy_hostnames_to_add = list(filter(lambda x: x not in onboard_object.skip_selected_hosts, onboard_object.appsec_json[policy]['hostnames']))
+            modify_matchtarget = utility_waf_object.updateMatchTarget(wrapper_object,
+                                        policy_hostnames_to_add,
+                                        onboard_object.config_id,
+                                        onboard_object.onboard_waf_config_version,
+                                        policy)
+            if modify_matchtarget:
+                logger.info(f'WAF Configuration Match Target {policy}: Successfully added {policy_hostnames_to_add}')
+            else:
+                logger.error(f'Failed to add {policy_hostnames_to_add} to match target {policy}')
+
+        # Activate WAF configuration to staging
+        if click_args['activate']:
+            for network in click_args['activate']:
+                waf_activation_status = utility_waf_object.updateActivateAndPoll(wrapper_object, onboard_object, network=network.upper())
+                if waf_activation_status is False:
+                    sys.exit(logger.error(f'Unable to activate WAF configuration to {network.upper()} network'))
+        else:
+            print()
+            logger.warning('Activate WAF Configuration Production: SKIPPING')
+
+        util.log_cli_timing()
+
+
+@cli.command(short_help='List available security configuration policy')
+@click.option('--waf-config-name', metavar='', help='Security config name', required=False)
+@click.option('--policy-name', metavar='', help='Security policy name, exact match', required=False)
+@click.option('--name-contains', metavar='', help='Keyword search security config by name', required=False)
+@pass_config
+def appsec_policy(config, waf_config_name, policy_name, name_contains):
+    """
+    List available security configuration policy
+    """
+    logger.info('Start Akamai CLI onboard')
+    _, wrap_api = init_config(config)
+    util = utility.utility()
+    config_id, version, df = util.validate_waf_config_name(wrap_api, waf_config_name)
+    if not waf_config_name:
+        logger.warning('WAF Security Configuration')
+        if name_contains:
+            df = df[df['name'].str.contains(name_contains)]
+        if not df.empty:
+            print(tabulate(df[['name', 'id']], headers='keys', tablefmt='psql', showindex=False))
+            logger.warning('Add --waf-config-name to list Policy and Website Match Target')
+        else:
+            logger.info('No result found')
+    else:
+        policy_str_id, policies = util.list_waf_policy(wrap_api, config_id, version, policy_name)
+        if policy_str_id:
+            wrap_api.list_policy_match_targets(config_id, version, policy_str_id, policy_name)
+        else:
+            wrap_api.list_match_targets(config_id, version, policies)
+    util.log_cli_timing()
+
+
+class Fake:
+    def __init__(self, li_obj):
+        self.obj = li_obj
+
+
+@cli.command(short_help='Create new security configuration, security policy, and policy match target')
+@click.option('-c', '--contract-id', metavar='', help='Contract ID (starts with ctr_)', required=True)
+@click.option('-g', '--group-id', metavar='', help='Group ID (starts with grp_)', required=True)
+@click.option('--activate', metavar='', type=click.Choice(['staging', 'production']), multiple=False, required=False,
+              help='Akamai network to activate security configuration Options: staging, production')
+@click.option('--csv', metavar='', required=True, help='CSV input file')
+@click.option('--by', metavar='', type=click.Choice(['hostname', 'propertyname']), default='hostname', required=False,
+              help='by command depends on data in CSV input file.     Options: hostname, propertyname')
+@click.option('--email', metavar='', required=False, help='email for activation notifications')
+@pass_config
+def appsec_create(config, contract_id, group_id, by, activate, csv, email):
+    """
+    \b
+    Batch create new security configuration, security policy, and policy match target
+
+    Security config will not be activated, unless --activate is specified.
+
+    CSV input file options
+
+      \b
+      Option 1 by hostname [default]: Headers contain waf_config_name,waf_policy_name,hostname
+      \b
+      Option 2 by propertyname:       Headers contain propertyname,waf_config_name,waf_policy_name,hostname
+    """
+    logger.info('Start Akamai CLI onboard')
+    _, wrap_api = init_config(config)
+    util = utility.utility()
+    util_waf = utility_waf.wafFunctions()
+
+    appsec_main = Generic(contract_id, group_id, csv, by)
+    # override default
+    appsec_main.notification_emails = [email]
+    appsec_main.activate = activate
+    _, selectable_hostnames, selectable_df = wrap_api.get_selectable_hostnames(contract_id[4:], group_id[4:], appsec_main.network)
+    show_df = util.validate_appsec_pre_create(appsec_main, wrap_api, util_waf, selectable_df)
+
+    # start onboarding security config
+    if util.valid:
+
+        prev_waf_config = 0
+        appsec_onboard = []
+        for i in show_df.index:
+            # populate property onboard data
+            waf_config = show_df['waf_config_name'][i]
+            policy = show_df['policy'][i]
+            public_hostnames = show_df['hostname'][i]
+            logger.debug(f'{waf_config} {policy} {public_hostnames}')
+            onboard = Property(contract_id, group_id, waf_config, policy)
+            if len(public_hostnames) > 0:
+                onboard.public_hostnames = public_hostnames
+                if by == 'propertyname':
+                    onboard.waf_target_hostnames = show_df['waf_target_hostname'][i]
+
+            # validate hostnames and remove invalid hostnames
+            invalid_hostnames = list({x for x in onboard.public_hostnames if x not in selectable_hostnames})
+            if len(invalid_hostnames) > 1:
+                onboard.public_hostnames = list(filter(lambda x: x not in invalid_hostnames, onboard.public_hostnames))
+                if len(onboard.public_hostnames) == 0:
+                    logger.warning(f'Web security configuration {waf_config} - SKIPPING')
+                    logger.info(f'{invalid_hostnames} are not selectable hostnames')
+                    break
+                if invalid_hostnames and len(onboard.public_hostnames) > 0:
+                    logger.warning(f'{invalid_hostnames} are not selectable hostnames for {waf_config}')
+
+            # start onboarding security config
+            if waf_config != prev_waf_config:
+                if util_waf.create_waf_config(wrap_api, onboard):
+                    prev_waf_config_id = onboard.onboard_waf_config_id
+                    prev_waf_config_version = onboard.onboard_waf_config_version
+                    prev_waf_config = waf_config
+                    if activate:
+                        # popolate AppSec data
+                        appsec = AppSec(waf_config, onboard.onboard_waf_config_id, onboard.onboard_waf_config_version, [email])
+                        appsec_onboard.append(appsec)
+                else:
+                    sys.exit(logger.error('Fail to create waf config'))
+            else:
+                # add hostnames to new policy
+                onboard.onboard_waf_config_id = prev_waf_config_id
+                onboard.onboard_waf_config_version = prev_waf_config_version
+                output = []
+                for hostname in onboard.public_hostnames:
+                    member = {}
+                    member['hostname'] = hostname
+                    output.append(member)
+                payload = {}
+                payload['hostnameList'] = output
+                payload['mode'] = 'append'
+                logger.debug(output)
+                resp = wrap_api.modifyWafHosts(onboard.onboard_waf_config_id, onboard.onboard_waf_config_version, json.dumps(payload))
+                if resp.status_code != 200:
+                    logger.error(resp.json())
+
+            if util_waf.create_waf_policy(wrap_api, onboard):
+                if by == 'propertyname':
+                    if util_waf.create_waf_match_target(wrap_api, onboard, onboard.waf_target_hostnames):
+                        pass
+                else:
+                    if util_waf.create_waf_match_target(wrap_api, onboard):
+                        pass
+            else:
+                sys.exit(logger.error('Fail to create waf policy'))
+
+        # activating
+        if activate:
+            time.sleep(5)
+            util_waf.activate_and_poll(wrap_api, appsec_onboard, activate)
+        util.log_cli_timing()
+
+
 def get_prog_name():
     prog = os.path.basename(sys.argv[0])
     if os.getenv('AKAMAI_CLI'):
@@ -732,7 +985,6 @@ def get_prog_name():
 def get_cache_dir():
     if os.getenv('AKAMAI_CLI_CACHE_DIR'):
         return os.getenv('AKAMAI_CLI_CACHE_DIR')
-
     return os.curdir
 
 

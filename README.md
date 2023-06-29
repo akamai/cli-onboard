@@ -1,6 +1,6 @@
 # cli-onboard
 
-Provides a way to onboard a new Akamai Property Manager configuration using any flexible user-defined setup. You can include any desired settings (subject to authorization and entitlements) such as:
+Provides a way to onboard a new Akamai Property Manager and Akamai Security configuration using any flexible user-defined setup. You can include any desired settings (subject to authorization and entitlements) such as:
 
 - Any property manager configuration json rule template
 - Standard TLS or Enhanced TLS Network
@@ -43,11 +43,14 @@ This CLI has 4 command types for onboarding new properties:
 - [single-host](#single-host)
 - [multi-hosts](#multi-hosts)
 - [batch-create](#batch-create)
-- [fetch-sample-templates ](#fetch-sample-templates)
+- [fetch-sample-templates](#fetch-sample-templates)
+- [appsec-policy](#appsec-policy)
+- [appsec-create](#appsec-create)
+- [appsec-update](#appsec-update)
 
 # create
 
-## Example Usage
+### Usage
 
 ```bash
 akamai onboard create --file /templates/sample_setup_files/create.json
@@ -225,7 +228,7 @@ Sample **templates/sample_setup_files/create.json** for an initial empty setup f
 
 single-host creates a property with one public hostname at the top level of the contract unless group_id is specified in the JSON file.
 
-### Example Usage
+### Usage
 
 ```bash
 akamai onboard single-host --file /templates/sample_setup_files/single.json
@@ -291,7 +294,7 @@ akamai onboard single-host --file ~/path/to/single.json
 
 # multi-hosts
 
-### Example Usage
+### Usage
 
 ```bash
 akamai onboard multi-hosts -f path-to/multiple.json --csv path-to/multi-hosts-input.csv
@@ -333,13 +336,11 @@ akamai onboard multi-hosts -f path-to/multiple.json --csv path-to/multi-hosts-in
 
 batch-create creates and optionally activates multi properties based on a custom json template and csv input file. It can add multiple hostnames and origin behaviors to a single property, or create multiple porperties.
 
-## Example Usage
+### Usage
 
 ```bash
 akamai onboard batch-create --template ~/path/to/ruletree.json --csv ~/path/to/csv.csv --product prd_SPM --group grp_1234 --contract ctr_1-2345
-
 akamai onboard batch-create --template ~/path/to/ruletree.json --csv ~/path/to/csv.csv --product prd_SPM --group grp_1234 --contract ctr_1-2345 --secure-by-default
-
 ```
 
 ## CSV Input File Documentation
@@ -384,11 +385,151 @@ www.example.com,origin.example.com,new_property_1,ORIGIN_HOSTNAME,www.example.co
 
 </details>
 
-<br/><br/>
-
 # fetch-sample-templates
 
 This will create a folder called `sample_setup_files` locally so you will have sample setups in both JSON and CSV format depending on the command you choose the onboard.
+
+| command         | Required JSON      | Required CSV       |
+| --------------- | ------------------ | ------------------ |
+| `create`        | :heavy_check_mark: |                    |
+| `single-host`   | :heavy_check_mark: |                    |
+| `multi-hosts`   | :heavy_check_mark: | :heavy_check_mark: |
+| `batch-create`  | :heavy_check_mark: | :heavy_check_mark: |
+| `appsec-create` |                    | :heavy_check_mark: |
+| `appsec-update` |                    | :heavy_check_mark: |
+
+# appsec-policy
+
+This is a helper command to list existing security configurations on the account. The result displays security configuration name and id.
+If `--waf-config-name` is provided, the result displays associated policies and website match targets. This information is essential for `appsec-update` command
+
+### Usage
+
+```bash
+akamai onboard appsec-policy
+akamai onboard appsec-policy --name-contains test
+akamai onboard appsec-policy --waf-config-name sample_sec
+akamai onboard appsec-policy --waf-config-name sample_sec --policy-name Default
+```
+
+# appsec-create
+
+You can onboard multiple hostnames to a new security configuration with an option to activate. If you choose to activate, everything will be set on alert mode on the 1st version. Currently, we only allow multiple hostnames when they are on the <u>same group and contract.</u>
+
+There are two templates available. You can upload by hostname or by property name. Default option is by hostname. If the template has propertyname on the header, you need to provide argument `--by propertyname`
+
+Use [fetch-sample-templates](#fetch-sample-templates) command to get sample templates
+
+### Usage
+
+```bash
+# create only
+akamai onboard appsec-create -c ctr_1111 -g grp_1111 --csv appsec-create-by-hostname.csv
+akamai onboard appsec-create -c ctr_1111 -g grp_1111 --csv appsec-create-by-propertyname.csv --by propertyname
+
+# create and activate on Akamai staging network
+akamai onboard appsec-create -c ctr_1111 -g grp_1111 --csv appsec-create-by-hostname.csv --activate staging --email noreply@akamai.com
+akamai onboard appsec-create -c ctr_1111 -g grp_1111 --csv appsec-create-by-hostname.csv --activate production --email noreply@akamai.com
+
+# create and activate on Akamai staging and production network
+akamai onboard appsec-create -c ctr_1111 -g grp_1111 --csv appsec-create-by-propertyname.csv --by propertyname --activate staging --email noreply@akamai.com
+akamai onboard appsec-create -c ctr_1111 -g grp_1111 --csv appsec-create-by-propertyname.csv --by propertyname --activate production --email noreply@akamai.com
+```
+
+### CSV Input File Documentation
+
+#### Template 1 - By hostname [Default]
+
+<details>
+    <summary>Click me</summary>
+
+Sample **templates/sample_setup_files/appsec-create-by-hostname.csv** for an initial empty setup file.
+
+```
+waf_config_name,waf_policy_name,hostname
+ah_onboard_1,policy_1,sample-hostname-1.com
+ah_onboard_1,policy_1,sample-hostname-2.com
+ah_onboard_1,policy_1,sample-hostname-3.com
+ah_onboard_1,policy_1,sample-hostname-4.com
+ah_onboard_1,policy_2,sample-hostname-5.com
+ah_onboard_1,policy_3,sample-hostname-6.com
+ah_onboard_1,policy_3,sample-hostname-7.com
+ah_onboard_appsec_h1,Default,demo-hostname.com
+```
+
+- 2 security configuration will be created `ah_onboard_1` and `ah_onboard_appsec_h1`
+- For security config `ah_onboard_1`,
+  - 3 security policies will be created `policy_1`, `policy_1`, and `policy_3`
+    - policy_1 protects 4 hostnames
+    - policy_2 protects 1 hostname
+    - policy_3 protects 2 hostnames
+- For security config `ah_onboard_appsec_h1`,
+  - Only one security policy named `Default` is created and protect only one hostname `demo-hostname.com`
+  </details>
+
+#### Template 2 - By property name
+
+<details>
+    <summary>Click me</summary>
+Sample **templates/sample_setup_files/appsec-create-by-propertyname.csv** for an initial empty setup file.
+
+```
+property_name,waf_config_name,waf_policy_name,hostname
+sample,appsec_X,policy_1
+sample,appsec_X,policy_2,sample-hostname-1.com
+sample,appsec_X,policy_2,sample-hostname-2.com
+sample,appsec_Y,policy_1,demo-hostname-1.com
+sample,appsec_Z,policy_1,eg-hostname-1.com
+sample,appsec_Z,policy_1,eg-hostname-2.com
+another_sample,appsec_A,Default
+```
+
+- 4 security configuration will be created `appsec_X`, `appsec_Y`, `appsec_Z`, `appsec_A`
+- For security config `appsec_X`,
+  - 2 security policies will be created `policy_1` and `policy_2`
+    - policy_1 will protect `ALL Hostnames` available from property named `sample`
+    - policy_2 will protect 2 hostnames
+- For security config `appsec_Y`,
+  - Only one security policy named `policy_1` is created and protect only one hostname `demo-hostname-1.com`
+- For security config `appsec_Z`,
+  - Only one security policy named `policy_1` is created but protect 2 hostnames `eg-hostname-1.com` and `eg-hostname-2.com`
+- For security config `appsec_A`,
+  - Only one security policy named `Default` is created
+  - `ALL Hostnames` available from property named `another_sample` will be protected
+  </details>
+
+# appsec-update
+
+You can onboard multiple hostnames to an <u>**existing**</u> security configuration and optionally add to policy match target and activate.
+
+Use [fetch-sample-templates](#fetch-sample-templates) command to get sample templates
+
+```bash
+# update only
+akamai onboard appsec-update --config-id 9999 --csv appsec-update.csv
+
+# update and activate
+akamai onboard appsec-update --config-id 9999 --csv appsec-update.csv --activate staging --email noreply@akamai.com --version-notes "add 3 hostnames"
+
+```
+
+### CSV Input File Documentation
+
+<details>
+    <summary>Click me</summary>
+
+Sample **templates/sample_setup_files/appsec-update.csv** for an initial empty setup file.
+
+```
+hostname,matchTargetId
+www.example-1.com,1111111
+www.example-2.com,1111111
+www.example-3.com,2222222
+```
+
+- 2 hostnames will be added to WAF match target id `1111111` on security configuration id `9999`
+- 1 hostname will be added to WAF match target id `2222222` on security configuration id `9999`
+</details>
 
 # Contribution
 
@@ -397,8 +538,17 @@ By submitting a contribution (the “Contribution”) to this project, and for g
 ## Local Install
 
 - Minimum python 3.6 `git clone https://github.com/akamai/cli-onboard.git  `
+- cd into cli-onboard directory `cd cli-onboard`
 - Create python virtual environment `python3 -m venv .venv`
 - Install required packages `pip3 install -r requirements.txt`
+- If testing another branch i.e `shared-policy` run `git checkout -b shared-policy`
+- Verify as Akamai CLI, first uninstall existing version `akamai uninstall onboard`
+- Install from local repo
+  - Run `pwd` to get current directory i.e `/Users/Documents/cli-onboard`
+    - For MAC OS, run `akamai install file:///Users/Documents/cli-onboard`
+      - Please note there is 3 slashes
+    - For Window, run `akamai install file://C:/Users/sample/cli-onboard`
+      - Only 2 slashes
 
 # Notice
 

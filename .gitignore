@@ -7,3 +7,6 @@
 .scripts
 .templates
 sample_templates
+.sh
+*.csv
+!templates/**/*.csv

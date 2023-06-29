@@ -1,0 +1,8 @@
+﻿property_name,waf_config_name,waf_policy_name,hostname
+sample,appsec_X,policy_1
+sample,appsec_X,policy_2,sample-hostname-1.com
+sample,appsec_X,policy_2,sample-hostname-2.com
+sample,appsec_Y,policy_1,demo-hostname-1.com
+sample,appsec_Z,policy_1,eg-hostname-1.com
+sample,appsec_Z,policy_1,eg-hostname-2.com
+another_sample,appsec_A,Default
