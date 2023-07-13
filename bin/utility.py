@@ -392,7 +392,10 @@ class utility:
                     public_hostname_str = ', '.join(onboard_object.public_hostnames)
                     logger.info(f'ehn_{ehn_id}{space:>{column_width - len(str(ehn_id))-4}}valid edge_hostname_id')
                     logger.info(f'{onboard_object.edge_hostname}{space:>{column_width - len(onboard_object.edge_hostname)}}valid edge hostname')
-                    logger.info(f'{public_hostname_str}{space:>{column_width - len(public_hostname_str)}}valid public hostname')
+                    if column_width - len(public_hostname_str) <= 0:
+                        logger.info(f'{public_hostname_str} valid public hostname')
+                    else:
+                        logger.info(f'{public_hostname_str}{space:>{column_width - len(public_hostname_str)}}valid public hostname')
                     onboard_object.edge_hostname_id = ehn_id
                 except:
                     logger.error(f'{onboard_object.edge_hostname}{space:>{column_width - len(onboard_object.edge_hostname)}}invalid edge hostname')
