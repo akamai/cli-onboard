@@ -12,7 +12,9 @@
 from __future__ import annotations
 
 import json
+import os
 import random
+import re
 import string
 import sys
 
@@ -287,10 +289,21 @@ class apiCallsWrapper:
         """
         Function to get product ids for a contract
         """
-        get_products_url = f'https://{self.access_hostname}/papi/v1/products?contractId={contractId}'
-        get_products_url = self.formUrl(get_products_url)
-        get_products_response = self.session.get(get_products_url)
-        return get_products_response
+        url = f'https://{self.access_hostname}/papi/v1/products?contractId={contractId}'
+        url = self.formUrl(url)
+        resp = self.session.get(url)
+        if resp.status_code == 200:
+            return resp
+        else:
+            match = re.search(r'=(.*)', self.account_switch_key)
+
+            if match:
+                account_switch_key = match.group(1)
+                command = (f'akamai pm lg -a {account_switch_key}') if account_switch_key is not None else ('akamai pm lg')
+                logger.warning(f'Possible invalid contract id {contractId}')
+                logger.warning(f'Running akamai property manager cli command: {command}')
+                os.system(command)
+            return resp
 
     def createEdgehostname(self, productId: str, domainPrefix: str, secureNetwork: str,
                            certEnrollmentId: int,
@@ -674,7 +687,9 @@ class apiCallsWrapper:
                 df = pd.json_normalize(response.json()['availableSet'])
                 logger.debug(f'\n{df}')
                 if network == 'staging':
-                    selectable_df = df[(df['activeInStaging']) & (df['configNameInProduction'].isnull())]
+                    # & (df['configNameInProduction'].isnull())]
+                    # GH-30 not available on all accounts
+                    selectable_df = df[(df['activeInStaging'])]
                 else:
                     selectable_df = df[df['activeInProduction']]
             if selectable_df.empty:
@@ -683,6 +698,14 @@ class apiCallsWrapper:
                 hostnames = sorted(selectable_df['hostname'].unique().tolist())
         else:
             logger.error(response.text)
+            match = re.search(r'=(.*)', self.account_switch_key)
+            if match:
+                account_switch_key = match.group(1)
+                command = (f'akamai pm lg -a {account_switch_key}') if account_switch_key is not None else ('akamai pm lg')
+                logger.warning('Possible invalid contract/group_id')
+                logger.warning('Running akamai property manager cli command: {command}')
+                sys.exit(os.system(command))
+
         return response, hostnames, selectable_df
 
     def get_property_hostnames(self, property_id: str, contract_id: str, group_id: str, network: str | None = 'staging'):

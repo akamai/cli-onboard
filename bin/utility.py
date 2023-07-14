@@ -343,10 +343,18 @@ class utility:
                 logger.error('Must activate property to STAGING before activating to PRODUCTION')
                 count += 1
 
+            if onboard_object.notification_emails is None:
+                logger.error('To activate the config, --email is required.')
+                count += 1
+
         # must activate waf config to staging before activating waf to prodution
         if onboard_object.activate_waf_policy_production:
             if not onboard_object.activate_waf_policy_staging:
                 logger.error('Must activate WAF policy to STAGING before activating to PRODUCTION.')
+                count += 1
+
+            if onboard_object.notification_emails is None:
+                logger.error('To activate the config, --email is required.')
                 count += 1
 
         # validate product id available per contract
