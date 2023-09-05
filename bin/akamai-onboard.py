@@ -130,6 +130,12 @@ def help(ctx):
 """
 
 
+@cli.command(short_help='Convert from another CDN vendor to Akamai CDN')
+@pass_config
+def convert(config, **kwargs):
+    pass
+
+
 @cli.command(short_help='Pull sample templates')
 def fetch_sample_templates():
     """
