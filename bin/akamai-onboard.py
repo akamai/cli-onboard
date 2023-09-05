@@ -560,7 +560,7 @@ def create(config, file):
 @click.option('-g', '--group', metavar='', help='Group ID (starts with grp)', required=False)
 @click.option('-p', '--product', metavar='', help='one of prd_SPM, prd_Fresca, prd_API_Accel (case sensitive)', required=False)
 @click.option('-f', '--rule-format', metavar='', help='rule format (typically latest, but can use frozen rule format if desired)', default='latest', show_default=True)
-@click.option('--use-cpcode', metavar='', help='Existing CP Code (numeric) that will be used for all hostnames', required=False)
+@click.option('--use-cpcode', metavar='', help='override creating new cpcode for each hostname', required=False)
 @click.option('--secure-by-default', metavar='', is_flag=True, default=False, help='use secure by default certificates', required=False)
 @click.option('--waf-config', metavar='', help='name of security configuration to update', required=False)
 @click.option('--waf-match-target', metavar='', help='waf match target id to add hostnames to (use numeric waf match target id)', required=False)
@@ -751,7 +751,7 @@ def batch_create(config, **kwargs):
 
 
 @cli.command(short_help='Add hostnames as selected hosts to existing security configuration and optionally add to policy match target')
-@click.option('--config-id', metavar='', help='security configuration id (numeric), or run appsec-policy to get all available config', required=True)
+@click.option('--config-id', metavar='', help='name of security configuration to update', required=True)
 @click.option('--csv', metavar='', required=True, help='csv file with headers hostname,matchTargetId')
 @click.option('--version-notes', metavar='', help='notes for the new version', required=False)
 @click.option('--activate', metavar='', type=click.Choice(['staging', 'production']), multiple=True, help='Options: staging, production', required=False, default='')
@@ -902,16 +902,8 @@ def appsec_create(config, contract_id, group_id, by, activate, csv, email):
 
     appsec_main = Generic(contract_id, group_id, csv, by)
     # override default
+    appsec_main.notification_emails = [email]
     appsec_main.activate = activate
-    if email:
-        appsec_main.notification_emails = [email]
-
-    # validate contract and group id first
-    if not contract_id.startswith('ctr_'):
-        sys.exit(logger.error('Contract ID must have prefix ctr_'))
-    if not group_id.startswith('grp_'):
-        sys.exit(logger.error('Group ID must have prefix grp_'))
-
     _, selectable_hostnames, selectable_df = wrap_api.get_selectable_hostnames(contract_id[4:], group_id[4:], appsec_main.network)
     show_df = util.validate_appsec_pre_create(appsec_main, wrap_api, util_waf, selectable_df)
 
