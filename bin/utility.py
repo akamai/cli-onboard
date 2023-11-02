@@ -172,11 +172,11 @@ class utility:
                 ehn_id = self.validateEdgeHostnameExists(wrapper_object, str(edgeHostname))
                 public_hostname_str = ', '.join(onboard_object.public_hostnames)
                 if ehn_id != 0:
-                    logger.info(f'{edgeHostname}{space:>{column_width - len(edgeHostname)}}valid edge hostname (ehn_{ehn_id})')
+                    logger.info(f'{edgeHostname} valid edge hostname (ehn_{ehn_id})')
                 # logger.info(f'{public_hostname_str:<30}{space:>20}valid public hostname')
                     # onboard_object.edge_hostname_id = ehn_id
                 else:
-                    logger.error(f'{edgeHostname}{space:>{column_width - len(edgeHostname)}}invalid edge hostname')
+                    logger.error(f'{edgeHostname} invalid edge hostname')
                     count += 1
         elif onboard_object.edge_hostname_mode == 'secure_by_default':
             ehn_id = 0
@@ -185,14 +185,14 @@ class utility:
                 ehn_id = self.validateEdgeHostnameExists(wrapper_object, str(edgeHostname))
                 public_hostname_str = ', '.join(onboard_object.public_hostnames)
                 if ehn_id != 0:
-                    logger.info(f'{edgeHostname}{space:>{column_width - len(edgeHostname)}}valid edge hostname (ehn_{ehn_id})')
+                    logger.info(f'{edgeHostname} valid edge hostname (ehn_{ehn_id})')
                     # logger.info(f'{public_hostname_str:<30}{space:>20}valid public hostname')
                     # onboard_object.edge_hostname_id = ehn_id
                 else:
                     if edgeHostname.endswith(('edgekey.net', 'edgesuite.net')):
-                        logger.warning(f'{edgeHostname}{space:>{column_width - len(edgeHostname)}}does not exist, will be created upon property activation')
+                        logger.warning(f'{edgeHostname} does not exist, will be created upon property activation')
                     else:
-                        logger.warning(f'{edgeHostname}{space:>{column_width - len(edgeHostname)}}does not end with edgekey.net or edgesuite.net, using {hostname}.{onboard_object.ehn_suffix}')
+                        logger.warning(f'{edgeHostname} does not end with edgekey.net or edgesuite.net, using {hostname}.{onboard_object.ehn_suffix}')
                         # no need to error out if ehn doesn't exist for SBD - ehn will get created with property activation
                         # count += 1
 
@@ -669,7 +669,10 @@ class utility:
                     logger.debug(f'{selectable_hosts_list=}')
                     logger.debug(f'{selected_host_list=}')
                     for hostname in onboard_object.hostname_list:
-                        msg = f'{hostname}{space:>{column_width-len(hostname)}}'
+                        if column_width - len(hostname) < 0:
+                            msg = hostname
+                        else:
+                            msg = f'{hostname}{space:>{column_width-len(hostname)}}'
                         if hostname in selectable_hosts_list:
                             logger.info(f'{msg} valid selectable hostnames')
                         elif hostname in selected_host_list:
