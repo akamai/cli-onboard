@@ -112,14 +112,13 @@ def init_config(config):
 @pass_config
 def cli(config, edgerc, section, account_key):
     '''
-    Akamai CLI for onboarding properties v2.3.0
+    Akamai CLI for onboarding properties v2.3.1
     '''
     config.edgerc = edgerc
     config.section = section
     config.account_key = account_key
 
 
-"""
 @cli.command()
 @click.pass_context
 def help(ctx):
@@ -127,7 +126,6 @@ def help(ctx):
     Show help information
     '''
     print(ctx.parent.get_help())
-"""
 
 
 @cli.command(short_help='Convert from another CDN vendor to Akamai CDN')
