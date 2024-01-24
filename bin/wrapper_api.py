@@ -623,7 +623,7 @@ class apiCallsWrapper:
         else:
             payload['hostnames'] = ion.public_hostnames
         payload['isNegativeFileExtensionMatch'] = False
-        payload['isNegativePathMatch'] = True
+        payload['isNegativePathMatch'] = False
 
         security = {}
         security['policyId'] = ion.policy_id
