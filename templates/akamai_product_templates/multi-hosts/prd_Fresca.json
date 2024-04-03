@@ -172,7 +172,11 @@
                           "matchCaseSensitive": false,
                           "matchOperator": "IS_ONE_OF",
                           "matchWildcard": true,
-                          "values": ["*bot*", "*crawl*", "*spider*"]
+                          "values": [
+                            "*bot*",
+                            "*crawl*",
+                            "*spider*"
+                          ]
                         }
                       }
                     ],
@@ -246,6 +250,7 @@
                 "name": "adaptiveAcceleration",
                 "options": {
                   "abLogic": "DISABLED",
+                  "enableBrotliCompression": false,
                   "enablePreconnect": true,
                   "enablePush": true,
                   "enableRo": false,
@@ -290,7 +295,10 @@
                 "options": {
                   "matchCaseSensitive": false,
                   "matchOperator": "IS_ONE_OF",
-                  "values": ["css", "js"]
+                  "values": [
+                    "css",
+                    "js"
+                  ]
                 }
               }
             ],
@@ -316,7 +324,13 @@
                 "options": {
                   "matchCaseSensitive": false,
                   "matchOperator": "IS_ONE_OF",
-                  "values": ["eot", "woff", "woff2", "otf", "ttf"]
+                  "values": [
+                    "eot",
+                    "woff",
+                    "woff2",
+                    "otf",
+                    "ttf"
+                  ]
                 }
               }
             ],
@@ -378,7 +392,12 @@
                 "options": {
                   "matchCaseSensitive": false,
                   "matchOperator": "IS_ONE_OF",
-                  "values": ["pdf", "doc", "docx", "odt"]
+                  "values": [
+                    "pdf",
+                    "doc",
+                    "docx",
+                    "odt"
+                  ]
                 }
               }
             ],
@@ -559,7 +578,9 @@
                   "matchCaseSensitive": false,
                   "matchOperator": "MATCHES_ONE_OF",
                   "normalize": false,
-                  "values": ["/graphql"]
+                  "values": [
+                    "/graphql"
+                  ]
                 }
               }
             ],
@@ -791,7 +812,9 @@
                   "matchOperator": "IS_NOT_ONE_OF",
                   "matchWildcardName": false,
                   "matchWildcardValue": false,
-                  "values": ["true"]
+                  "values": [
+                    "true"
+                  ]
                 }
               }
             ],
@@ -849,7 +872,9 @@
                   "matchOperator": "IS_ONE_OF",
                   "matchWildcardName": false,
                   "matchWildcardValue": false,
-                  "values": ["Your-Secret-Here"]
+                  "values": [
+                    "Your-Secret-Here"
+                  ]
                 }
               }
             ],
@@ -948,7 +973,7 @@
                     "application/x-font-truetype",
                     "application/x-font-ttf",
                     "application/xmlfont/eot",
-                    "font/eot",
+                    "font/eot*",
                     "font/opentype",
                     "font/otf",
                     "image/svg+xml",
@@ -1007,7 +1032,9 @@
             "{{Forward Host Header}}"
           ],
           "originCertsToHonor": "STANDARD_CERTIFICATE_AUTHORITIES",
-          "standardCertificateAuthorities": ["akamai-permissive"]
+          "standardCertificateAuthorities": [
+            "akamai-permissive"
+          ]
         }
       }
     ],

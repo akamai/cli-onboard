@@ -250,6 +250,7 @@
                                 "name": "adaptiveAcceleration",
                                 "options": {
                                     "abLogic": "DISABLED",
+                                    "enableBrotliCompression": false,
                                     "enablePreconnect": true,
                                     "enablePush": true,
                                     "enableRo": false,
@@ -972,7 +973,7 @@
                                         "application/x-font-truetype",
                                         "application/x-font-ttf",
                                         "application/xmlfont/eot",
-                                        "font/eot",
+                                        "font/eot*",
                                         "font/opentype",
                                         "font/otf",
                                         "image/svg+xml",
