@@ -3,11 +3,11 @@
   "disable_existing_loggers": false,
   "formatters": {
     "short": {
-      "format": "%(levelname)s: %(message)s"
+      "format": "%(levelname)-8s: %(message)s"
     },
     "long": {
-      "format": "%(asctime)s %(process)d %(filename)-17s %(lineno)-3d %(levelname)s: %(message)s",
-      "datefmt": "%Y-%m-%y %H:%M:%S"
+      "format": "%(asctime)s %(process)d %(filename)-17s %(lineno)-5d %(levelname)-8s: %(message)s",
+      "datefmt": "%Y-%m-%d %H:%M:%S"
     }
   },
   "handlers": {
@@ -22,7 +22,8 @@
       "filename": "logs/onboard.log",
       "formatter": "long",
       "delay": true,
-      "mode": "w"
+      "mode": "w",
+      "encoding": "utf8"
     }
   },
   "root": {
