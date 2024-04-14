@@ -39,6 +39,7 @@ class MultiHosts:
     edge_hostname_id: int = 0
 
     # general
+    group_id: str = ''
     secure_network: str = 'ENHANCED_TLS'
     rule_format: str = 'latest'
     create_new_cpcode: bool = True

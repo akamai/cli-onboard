@@ -49,7 +49,7 @@ from model.multi_hosts import MultiHosts
 from model.single_host import SingleHost
 from tabulate import tabulate
 
-PACKAGE_VERSION = '2.3.2'
+PACKAGE_VERSION = '2.3.3'
 logger = setup_logger()
 root = get_cli_root_directory()
 
@@ -112,7 +112,7 @@ def init_config(config):
 @pass_config
 def cli(config, edgerc, section, account_key):
     '''
-    Akamai CLI for onboarding properties v2.3.2
+    Akamai CLI for onboarding properties v2.3.3
     '''
     config.edgerc = edgerc
     config.section = section
@@ -174,7 +174,8 @@ def multi_hosts(config, csv, file):
 
     # Override default
     util.onboard_override_default(onboard, setup, cli_mode='multi-hosts')
-    util.validate_group_id(onboard, wrap_api.get_groups_without_parent())
+    if not onboard.group_id:
+        util.validate_group_id(onboard, wrap_api.get_groups_without_parent())
     util.validateSetupSteps(onboard, wrap_api, cli_mode='multi-hosts')
 
     if util.valid:
