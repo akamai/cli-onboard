@@ -294,6 +294,10 @@ akamai onboard single-host --file ~/path/to/single.json
 
 # multi-hosts
 
+### Description
+
+multi-hosts creates a property with multiple public hostnames at the top level of the contract unless group_id is specified in the JSON file.
+
 ### Usage
 
 ```bash
@@ -329,6 +333,10 @@ akamai onboard multi-hosts -f path-to/multiple.json --csv path-to/multi-hosts-in
 - **property_name**: Name of the property aka delivery configuration
 - **individual_cpcode**: Set to **true** if you want to create cp code for each hostname
 - The rest is the same as **single-host** mode
+
+**Optional Values:**
+
+- **group_id**: Group ID (starts with grp\_) If you do not have security at the contract/top level or you would like to put the property on a specify property group.
 
 # batch-create
 

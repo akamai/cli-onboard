@@ -65,6 +65,11 @@ class onboard:
         except:
             self.version_notes = ''
 
+        try:
+            self.group_id = json_input['property_info']['group_id']
+        except:
+            self.group_id = ''
+
     def write_variable_json(self, default_origin: str, cp_code: int) -> None:
         """
         Override origin server inside templates/variables.json which is hidden from user

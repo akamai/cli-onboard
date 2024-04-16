@@ -978,6 +978,7 @@ class utility:
             template_path = f'{root}/templates/akamai_product_templates'
             onboard.source_values_file = f'{template_path}/single_variable.json'
         elif cli_mode == 'multi-hosts':
+            onboard.group_id = setup.group_id
             template_path = f'{root}/templates/akamai_product_templates/multi-hosts'
             onboard.source_values_file = f'{template_path}/variables.json'
 
