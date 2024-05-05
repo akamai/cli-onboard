@@ -979,9 +979,17 @@
                     "tlsVersionTitle": "",
                     "trueClientIpClientSetting": false,
                     "trueClientIpHeader": "True-Client-IP",
-                    "verificationMode": "PLATFORM_SETTINGS",
+                    "verificationMode": "CUSTOM",
                     "hostname": "${env.origin_default}",
-                    "ipVersion": "IPV4"
+                    "ipVersion": "IPV4",
+                    "customValidCnValues": [
+                        "{{Origin Hostname}}",
+                        "{{Forward Host Header}}"
+                    ],
+                    "originCertsToHonor": "STANDARD_CERTIFICATE_AUTHORITIES",
+                    "standardCertificateAuthorities": [
+                        "akamai-permissive"
+                    ]
                 }
             }
         ],
