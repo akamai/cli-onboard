@@ -6,23 +6,6 @@
                 "name": "Augment insights",
                 "children": [
                     {
-                        "name": "Traffic reporting",
-                        "children": [],
-                        "behaviors": [
-                            {
-                                "name": "cpCode",
-                                "options": {
-                                    "value": {
-                                        "id": 0
-                                    }
-                                }
-                            }
-                        ],
-                        "criteria": [],
-                        "criteriaMustSatisfy": "all",
-                        "comments": "Identify your main traffic segments so you can zoom in your traffic statistics like hits, bandwidth, offload, response codes, and errors."
-                    },
-                    {
                         "name": "mPulse RUM",
                         "children": [],
                         "behaviors": [
@@ -970,6 +953,14 @@
             }
         ],
         "behaviors": [
+            {
+                "name": "cpCode",
+                "options": {
+                    "value": {
+                        "id": 0
+                    }
+                }
+            },
             {
                 "name": "origin",
                 "options": {
