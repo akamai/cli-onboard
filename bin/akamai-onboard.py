@@ -49,7 +49,7 @@ from model.multi_hosts import MultiHosts
 from model.single_host import SingleHost
 from tabulate import tabulate
 
-PACKAGE_VERSION = '2.3.3'
+PACKAGE_VERSION = '2.3.4'
 logger = setup_logger()
 root = get_cli_root_directory()
 
@@ -112,7 +112,7 @@ def init_config(config):
 @pass_config
 def cli(config, edgerc, section, account_key):
     '''
-    Akamai CLI for onboarding properties v2.3.3
+    Akamai CLI for onboarding properties v2.3.4
     '''
     config.edgerc = edgerc
     config.section = section
