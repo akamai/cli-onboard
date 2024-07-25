@@ -11,6 +11,7 @@ from time import strftime
 
 from exceptions import setup_logger
 from poll import pollActivation
+from rich import print_json
 
 logger = setup_logger()
 
@@ -227,7 +228,10 @@ class papiFunctions:
                                                                  onboard_object.rule_format,
                                                                  ruletree=json.dumps(updateContent))
 
-        if updateRulesResponse.status_code == 200:
+        if updateRulesResponse.ok:
+            update_json = updateRulesResponse.json()
+            if 'errors' in update_json.keys():
+                print_json(data=update_json['errors'])
             logger.info('Updated property with rules')
         else:
             logger.error('Unable to update rules for property')
