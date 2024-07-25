@@ -132,6 +132,7 @@ class apiCallsWrapper:
         newPropertyData = {}
         newPropertyData['productId'] = f'{productId}'
         newPropertyData['propertyName'] = f'{property_name}'
+        newPropertyData['ruleFormat'] = 'latest'
 
         create_property_url = f'https://{self.access_hostname}/papi/v1/properties?contractId={contractId}&groupId={groupId}'
         create_property_url = self.formUrl(create_property_url)
