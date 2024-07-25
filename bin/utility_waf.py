@@ -242,7 +242,7 @@ class wafFunctions:
             resp.status_code == 201:
             logger.info(f"'{onboard_obj.waf_config_name}'{dot:>8}"
                         f'id: {onboard_obj.onboard_waf_config_id:<5}{dot:>15}'
-                        f'version: {onboard_obj.onboard_waf_config_version:<5}{dot:>5}'
+                        f'version: {onboard_obj.onboard_waf_config_version:<5}{dot:>4}'
                         f'valid Security Configuration')
             return True
         logger.error(json.dumps(resp.json(), indent=4))
