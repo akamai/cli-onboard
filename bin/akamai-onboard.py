@@ -965,7 +965,7 @@ def appsec_create(config, contract_id, group_id, by, activate, csv, email, note)
                 payload['mode'] = 'append'
                 logger.debug(output)
                 resp = wrap_api.modifyWafHosts(onboard.onboard_waf_config_id, onboard.onboard_waf_config_version, json.dumps(payload))
-                if resp.status_code != 200:
+                if not resp.ok:
                     logger.error(resp.json())
 
             if util_waf.create_waf_policy(wrap_api, onboard):

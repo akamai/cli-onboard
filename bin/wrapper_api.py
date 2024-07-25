@@ -550,8 +550,7 @@ class apiCallsWrapper:
         logger.debug(payload)
 
         resp = self.session.post(url, data=json.dumps(payload), headers=headers)
-        if resp.status_code == 200 or \
-            resp.status_code == 201:
+        if resp.ok:
             ion.onboard_waf_config_id = resp.json()['configId']
             ion.onboard_waf_config_version = resp.json()['version']
             self.update_waf_config_version_note(ion, notes=ion.version_notes)
@@ -670,7 +669,7 @@ class apiCallsWrapper:
         url = f'https://{self.access_hostname}/appsec/v1/contracts/{contract_id}/groups/{group_id}/selectable-hostnames'
         url = self.formUrl(url)
         response = self.session.get(url)
-        if response.status_code == 200:
+        if response.ok:
             if len(response.json()['availableSet']) > 0:
                 df = pd.json_normalize(response.json()['availableSet'])
                 logger.debug(f'\n{df}')
