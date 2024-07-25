@@ -879,7 +879,7 @@ class Fake:
 @click.option('--by', metavar='', type=click.Choice(['hostname', 'propertyname']), default='hostname', required=False,
               help='by command depends on data in CSV input file.     Options: hostname, propertyname')
 @click.option('--email', metavar='', required=False, help='email for activation notifications')
-@click.option('--note', metavar='', default='Onboard CLI Activation', help='config version notes')
+@click.option('--version-notes', 'note', metavar='', default='Onboard CLI Activation', help='config version notes')
 @pass_config
 def appsec_create(config, contract_id, group_id, by, activate, csv, email, note):
     """
