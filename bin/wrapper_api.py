@@ -148,7 +148,7 @@ class apiCallsWrapper:
         """
         headers = {'Content-Type': 'application/vnd.akamai.papirules.latest+json'}
         if ruleFormat != 'latest':
-            version_string = f'application/vnd.akamai.papirules.{ruleFormat}json'
+            version_string = f'application/vnd.akamai.papirules.{ruleFormat}+json'
             headers['Content-Type'] = version_string
         update_property_url = 'https://' + self.access_hostname + '/papi/v1/properties/' + \
                               propertyId + '/versions/1/rules?contractId=' + \
