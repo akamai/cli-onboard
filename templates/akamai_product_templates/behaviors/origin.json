@@ -27,7 +27,8 @@
                 "originCertsToHonor": "STANDARD_CERTIFICATE_AUTHORITIES",
                 "standardCertificateAuthorities": [
                     "akamai-permissive"
-                ]
+                ],
+                "minTlsVersion": "DYNAMIC"
             }
         }
     ],
@@ -36,7 +37,9 @@
             "name": "hostname",
             "options": {
                 "matchOperator": "IS_ONE_OF",
-                "values": ["$env.hostname"]
+                "values": [
+                    "$env.hostname"
+                ]
             }
         }
     ],
