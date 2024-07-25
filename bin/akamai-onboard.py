@@ -901,7 +901,8 @@ def appsec_create(config, contract_id, group_id, by, activate, csv, email):
 
     appsec_main = Generic(contract_id, group_id, csv, by)
     # override default
-    appsec_main.notification_emails = [email]
+    if email:
+        appsec_main.notification_emails = [email]
     appsec_main.activate = activate
     _, selectable_hostnames, selectable_df = wrap_api.get_selectable_hostnames(contract_id[4:], group_id[4:], appsec_main.network)
     show_df = util.validate_appsec_pre_create(appsec_main, wrap_api, util_waf, selectable_df)
