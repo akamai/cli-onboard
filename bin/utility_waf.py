@@ -79,7 +79,7 @@ class wafFunctions:
                                                 onboard_object.onboard_waf_config_version,
                                                 network,
                                                 onboard_object.notification_emails,
-                                                note='Onboard CLI Activation')
+                                                note=onboard_object.version_note)
 
         if act_response.status_code == 200:
             activation_status = False
@@ -315,8 +315,8 @@ class wafFunctions:
                                             onboard_object[i].onboard_waf_config_version,
                                             network='STAGING',
                                             emails=onboard_object[i].notification_emails,
-                                            note='Onboard CLI Activation')
-            if response.status_code in (200, 201):
+                                            note=onboard_object[i].version_notes)
+            if response.ok:
                 onboard_object[i].activation_id = response.json()['activationId']
                 onboard_object[i].activation_create = response.json()['createDate']
                 onboard_object[i].activation_status = response.json()['status']

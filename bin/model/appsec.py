@@ -34,6 +34,7 @@ class AppSec:
     activation_status: str = ''
     activation_create: str = ''
     activation_end: str = ''
+    version_notes: str = ''
 
 
 @dataclass
@@ -47,7 +48,7 @@ class Property:
     waf_target_hostnames: list[str] = field(default_factory=list)
     property_name: str = ''
     target_id: int = 0
-    version_notes = ''
+    version_notes: str = ''
     onboard_waf_config_id: int = 0
     onboard_waf_config_version: int = 0
 
@@ -64,3 +65,4 @@ class Generic:
     network: str = 'staging'
     notification_emails: list = field(default_factory=lambda: ['noreply@akamai.com'])
     activate: str = None
+    version_notes: str = None
