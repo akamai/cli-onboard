@@ -55,10 +55,10 @@ def setup_logger():
 
 def get_cli_root_directory():
     docker_path = os.path.expanduser(Path('/cli'))
-    local_home_path = os.path.expanduser(Path('~/.akamai-cli'))
+    local_home_path = os.path.expanduser(Path('~/.akamai-cli/src/cli-onboard'))
     if Path(docker_path).exists():
         return Path(f'{docker_path}/.akamai-cli/src/cli-onboard')
     elif Path(local_home_path).exists():
-        return Path(f'{local_home_path}/src/cli-onboard')
+        return Path(f'{local_home_path}')
     else:
         return os.getcwd()

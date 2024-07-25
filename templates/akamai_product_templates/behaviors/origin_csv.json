@@ -5,30 +5,31 @@
     {
       "name": "origin",
       "options": {
-          "originType": "CUSTOMER",
-          "hostname": "$env.origin_name",
-          "cacheKeyHostname": "REQUEST_HOST_HEADER",
-          "compress": true,
-          "enableTrueClientIp": true,
-          "forwardHostHeader": "$env.forward_host_header",
-          "httpPort": 80,
-          "httpsPort": 443,
-          "originCertificate": "",
-          "originSni": true,
-          "ports": "",
-          "trueClientIpClientSetting": false,
-          "trueClientIpHeader": "True-Client-IP",
-          "verificationMode": "CUSTOM",
-          "ipVersion": "IPV4",
-          "customValidCnValues": [
-              "{{Origin Hostname}}",
-              "{{Forward Host Header}}"
-          ],
-          "originCertsToHonor": "STANDARD_CERTIFICATE_AUTHORITIES",
-          "standardCertificateAuthorities": [
-              "akamai-permissive",
-              "THIRD_PARTY_AMAZON"
-          ]
+        "originType": "CUSTOMER",
+        "hostname": "$env.origin_name",
+        "cacheKeyHostname": "REQUEST_HOST_HEADER",
+        "compress": true,
+        "enableTrueClientIp": true,
+        "forwardHostHeader": "$env.forward_host_header",
+        "httpPort": 80,
+        "httpsPort": 443,
+        "originCertificate": "",
+        "originSni": true,
+        "ports": "",
+        "trueClientIpClientSetting": false,
+        "trueClientIpHeader": "True-Client-IP",
+        "verificationMode": "CUSTOM",
+        "ipVersion": "IPV4",
+        "customValidCnValues": [
+          "{{Origin Hostname}}",
+          "{{Forward Host Header}}"
+        ],
+        "originCertsToHonor": "STANDARD_CERTIFICATE_AUTHORITIES",
+        "standardCertificateAuthorities": [
+          "akamai-permissive",
+          "THIRD_PARTY_AMAZON"
+        ],
+        "minTlsVersion": "DYNAMIC"
       }
     }
   ],
@@ -37,7 +38,9 @@
       "name": "hostname",
       "options": {
         "matchOperator": "IS_ONE_OF",
-        "values": ["$env.hostname"]
+        "values": [
+          "$env.hostname"
+        ]
       }
     }
   ],
