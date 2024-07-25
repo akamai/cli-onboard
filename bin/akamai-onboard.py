@@ -49,7 +49,7 @@ from model.multi_hosts import MultiHosts
 from model.single_host import SingleHost
 from tabulate import tabulate
 
-PACKAGE_VERSION = '2.3.5'
+PACKAGE_VERSION = '2.3.6'
 logger = setup_logger()
 root = get_cli_root_directory()
 
