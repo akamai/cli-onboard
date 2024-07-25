@@ -79,7 +79,7 @@ class wafFunctions:
                                                 onboard_object.onboard_waf_config_version,
                                                 network,
                                                 onboard_object.notification_emails,
-                                                note=onboard_object.version_note)
+                                                note=onboard_object.version_notes)
 
         if act_response.ok:
             activation_status = False
