@@ -674,7 +674,7 @@ class apiCallsWrapper:
                 df = pd.json_normalize(response.json()['availableSet'])
                 logger.debug(f'\n{df}')
                 if network == 'staging':
-                    selectable_df = df[(df['activeInStaging']) & (df['configNameInProduction'].isnull())]
+                    selectable_df = df[(df['activeInStaging'])]  # & (df['activeInProduction'].isnull())]
                 else:
                     selectable_df = df[df['activeInProduction']]
             if selectable_df.empty:
