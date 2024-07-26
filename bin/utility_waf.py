@@ -79,9 +79,9 @@ class wafFunctions:
                                                 onboard_object.onboard_waf_config_version,
                                                 network,
                                                 onboard_object.notification_emails,
-                                                note='Onboard CLI Activation')
+                                                note=onboard_object.version_notes)
 
-        if act_response.status_code == 200:
+        if act_response.ok:
             activation_status = False
             activation_id = act_response.json()['activationId']
             while activation_status is False:
@@ -90,7 +90,7 @@ class wafFunctions:
 
                 logger.debug(json.dumps(polling_status_response.json(), indent=4))
                 logger.debug(polling_status_response.url)
-                if polling_status_response.status_code == 200:
+                if polling_status_response.ok:
                     if network in polling_status_response.json()['network']:
                         if 'status' not in polling_status_response.json():
                             time.sleep(30)
@@ -127,7 +127,7 @@ class wafFunctions:
         selected_hosts_response = wrapper_object.getWafSelectedHosts(config_id, version)
         logger.debug(selected_hosts_response.url)
         logger.debug(selected_hosts_response.status_code)
-        if selected_hosts_response.status_code == 200:
+        if selected_hosts_response.ok:
             # Update the hostnames here
             updated_json_data = selected_hosts_response.json()
             logger.debug(json.dumps(updated_json_data, indent=4))
@@ -140,8 +140,7 @@ class wafFunctions:
             modify_hosts_response = wrapper_object.modifyWafHosts(config_id,
                                                                   version,
                                                                   json.dumps(updated_json_data))
-            if modify_hosts_response.status_code == 200 or \
-                modify_hosts_response.status_code == 201:
+            if modify_hosts_response.ok:
                 logger.info(f'Created WAF configuration version: {version}')
                 return True
             else:
@@ -191,8 +190,7 @@ class wafFunctions:
         version_creation_response = wrapper_object.createWafConfigVersion(onboard_obj.onboard_waf_config_id,
                                                                           onboard_obj.onboard_waf_prev_version,
                                                                           notes)
-        if version_creation_response.status_code == 200 or \
-            version_creation_response.status_code == 201:
+        if version_creation_response.ok:
             onboard_obj.onboard_waf_config_version = version_creation_response.json()['version']
             logger.info(f"'{onboard_obj.waf_config_name}'{dot:>8}"
                         f'id: {onboard_obj.onboard_waf_config_id:<5}{dot:>15}'
@@ -244,7 +242,7 @@ class wafFunctions:
             resp.status_code == 201:
             logger.info(f"'{onboard_obj.waf_config_name}'{dot:>8}"
                         f'id: {onboard_obj.onboard_waf_config_id:<5}{dot:>15}'
-                        f'version: {onboard_obj.onboard_waf_config_version:<5}{dot:>5}'
+                        f'version: {onboard_obj.onboard_waf_config_version:<5}{dot:>4}'
                         f'valid Security Configuration')
             return True
         logger.error(json.dumps(resp.json(), indent=4))
@@ -315,8 +313,8 @@ class wafFunctions:
                                             onboard_object[i].onboard_waf_config_version,
                                             network='STAGING',
                                             emails=onboard_object[i].notification_emails,
-                                            note='Onboard CLI Activation')
-            if response.status_code in (200, 201):
+                                            note=onboard_object[i].version_notes)
+            if response.ok:
                 onboard_object[i].activation_id = response.json()['activationId']
                 onboard_object[i].activation_create = response.json()['createDate']
                 onboard_object[i].activation_status = response.json()['status']

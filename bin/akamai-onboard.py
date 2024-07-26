@@ -49,7 +49,7 @@ from model.multi_hosts import MultiHosts
 from model.single_host import SingleHost
 from tabulate import tabulate
 
-PACKAGE_VERSION = '2.3.5'
+PACKAGE_VERSION = '2.3.6'
 logger = setup_logger()
 root = get_cli_root_directory()
 
@@ -879,8 +879,9 @@ class Fake:
 @click.option('--by', metavar='', type=click.Choice(['hostname', 'propertyname']), default='hostname', required=False,
               help='by command depends on data in CSV input file.     Options: hostname, propertyname')
 @click.option('--email', metavar='', required=False, help='email for activation notifications')
+@click.option('--version-notes', 'note', metavar='', default='Onboard CLI Activation', help='config version notes')
 @pass_config
-def appsec_create(config, contract_id, group_id, by, activate, csv, email):
+def appsec_create(config, contract_id, group_id, by, activate, csv, email, note):
     """
     \b
     Batch create new security configuration, security policy, and policy match target
@@ -901,8 +902,10 @@ def appsec_create(config, contract_id, group_id, by, activate, csv, email):
 
     appsec_main = Generic(contract_id, group_id, csv, by)
     # override default
-    appsec_main.notification_emails = [email]
+    if email:
+        appsec_main.notification_emails = [email]
     appsec_main.activate = activate
+    appsec_main.version_notes = note
     _, selectable_hostnames, selectable_df = wrap_api.get_selectable_hostnames(contract_id[4:], group_id[4:], appsec_main.network)
     show_df = util.validate_appsec_pre_create(appsec_main, wrap_api, util_waf, selectable_df)
 
@@ -918,6 +921,7 @@ def appsec_create(config, contract_id, group_id, by, activate, csv, email):
             public_hostnames = show_df['hostname'][i]
             logger.debug(f'{waf_config} {policy} {public_hostnames}')
             onboard = Property(contract_id, group_id, waf_config, policy)
+            onboard.version_notes = note
             if len(public_hostnames) > 0:
                 onboard.public_hostnames = public_hostnames
                 if by == 'propertyname':
@@ -943,6 +947,7 @@ def appsec_create(config, contract_id, group_id, by, activate, csv, email):
                     if activate:
                         # popolate AppSec data
                         appsec = AppSec(waf_config, onboard.onboard_waf_config_id, onboard.onboard_waf_config_version, [email])
+                        appsec.version_notes = note
                         appsec_onboard.append(appsec)
                 else:
                     sys.exit(logger.error('Fail to create waf config'))
@@ -960,7 +965,7 @@ def appsec_create(config, contract_id, group_id, by, activate, csv, email):
                 payload['mode'] = 'append'
                 logger.debug(output)
                 resp = wrap_api.modifyWafHosts(onboard.onboard_waf_config_id, onboard.onboard_waf_config_version, json.dumps(payload))
-                if resp.status_code != 200:
+                if not resp.ok:
                     logger.error(resp.json())
 
             if util_waf.create_waf_policy(wrap_api, onboard):
