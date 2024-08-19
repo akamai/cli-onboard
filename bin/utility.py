@@ -15,7 +15,7 @@ from time import strftime
 from urllib import parse
 
 import pandas as pd
-from cerberus import Validator
+from jsonschema import validate, ValidationError
 from distutils.dir_util import copy_tree
 from exceptions import get_cli_root_directory
 from exceptions import setup_logger
@@ -1025,19 +1025,16 @@ class utility:
                 'regex': (r'(.*\.edgekey\.net$|.*\.edgesuite\.net$)')}
         }
 
-        v = Validator(schema)
         logger.warning(f'Reading customer property name input: {csv_file_loc}')
 
         with open(csv_file_loc, encoding='utf-8-sig', newline='') as f:
             for i, row in enumerate(csv.DictReader(f), 1):
                 csv_dict.append(row)
-                valid = v.validate(row)
-                validation_errors = v.errors
-                if validation_errors:
+                try:
+                    validate(instance=row, schema=schema)
+                except ValidationError as e:
                     onboard_object.valid_csv = False
-                    logger.warning(f'CSV Validation Error in row: {i}...')
-                    for error in validation_errors:
-                        logger.warning(f'{error} {validation_errors[error]}')
+                    logger.warning(f'CSV Validation Error in row: {i} - {e}')
 
         onboard_object.csv_dict = csv_dict
         return onboard_object.valid_csv
@@ -1056,19 +1053,16 @@ class utility:
             }
         }
 
-        v = Validator(schema)
         logger.warning(f'Reading csv input: {csv_file_loc}')
 
         with open(csv_file_loc, encoding='utf-8-sig', newline='') as f:
             for i, row in enumerate(csv.DictReader(f), 1):
                 csv_dict.append(row)
-                valid = v.validate(row)
-                validation_errors = v.errors
-                if validation_errors:
+                try:
+                    validate(instance=row, schema=schema)
+                except ValidationError as e:
                     onboard_object.valid_csv = False
-                    logger.warning(f'CSV Validation Error in row: {i}...')
-                    for error in validation_errors:
-                        logger.warning(f'{error} {validation_errors[error]}')
+                    logger.warning(f'CSV Validation Error in row: {i} - {e}')
 
         onboard_object.csv_dict = csv_dict
         return onboard_object.valid_csv
@@ -1344,18 +1338,18 @@ class utility:
                                'required': False},
                  }
 
-        v = Validator(schema)
         logger.warning(f'Reading customer security configuration input: {csv_file_loc}')
         valid = True
         with open(csv_file_loc, encoding='utf-8-sig', newline='') as f:
             data = []
             for i, row in enumerate(csv.DictReader(f), 1):
                 data.append(row)
-                v.validate(row)
-                if v.errors:
+                try:
+                    validate(instance=row, schema=schema)
+                except ValidationError as e:
                     valid = False
-                    for error in v.errors:
-                        logger.error(f'CSV Validation Error in row: {i} {error}')
+                    logger.error(f'CSV Validation Error in row: {i} - {e}')
+
         return valid, data
 
     def csv_2_appsec_create_by_propertyname(self, csv_file_loc: str):
@@ -1373,18 +1367,18 @@ class utility:
                                'required': False}
                  }
 
-        v = Validator(schema)
         logger.warning(f'Reading customer security configuration input: {csv_file_loc}')
         valid = True
         with open(csv_file_loc, encoding='utf-8-sig', newline='') as f:
             data = []
             for i, row in enumerate(csv.DictReader(f), 1):
                 data.append(row)
-                v.validate(row)
-                if v.errors:
+                try:
+                    validate(instance=row, schema=schema)
+                except ValidationError as e:
                     valid = False
-                    for error in v.errors:
-                        logger.error(f'CSV Validation Error in row: {i} {error}')
+                    logger.error(f'CSV Validation Error in row: {i} - {e}')
+
         return valid, data
 
     def populate_waf_data(self, by: str, input: dict) -> dict:
