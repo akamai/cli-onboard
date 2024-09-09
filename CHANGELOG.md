@@ -14,3 +14,10 @@
 
 - appsec-create fail on brand new group without any config
 - appsec-create version/activation note is empty
+
+## 2.3.7
+
+#### ENHANCEMENTS:
+
+- Replaced `cerberus` with `jsonschema`
+- Upgraded `pandas` to version `2.2.2`
