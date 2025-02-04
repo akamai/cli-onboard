@@ -36,6 +36,7 @@ class onboard:
             self.onboard_waf_config_version = 0
             self.activate_staging = False
             self.activate_production = False
+            self.existing_selected_hosts = []
 
             if 'staging' in click_args['activate']:
                 self.activate_staging = True

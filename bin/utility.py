@@ -15,13 +15,14 @@ from time import strftime
 from urllib import parse
 
 import pandas as pd
-from jsonschema import validate, ValidationError
-from distutils.dir_util import copy_tree
 from exceptions import get_cli_root_directory
 from exceptions import setup_logger
+from jsonschema import validate
+from jsonschema import ValidationError
 from pyisemail import is_email
 from rich import print_json
 from tabulate import tabulate
+# from diskutils.dir_util import copy_tree
 
 logger = setup_logger()
 root = get_cli_root_directory()
@@ -594,7 +595,7 @@ class utility:
             logger.error(f'{onboard_object.csv:<30}{space:>20}invalid CSV file; check above validation errors')
             count += 1
 
-        if cli_mode == 'appsec-update':
+        if cli_mode in ['appsec-update', 'appsec-remove']:
             # check if config id exists
             msg = f'{onboard_object.config_id}{space:>{column_width-len(onboard_object.config_id)}}'
             appsec_configs = wrapper_object.getWafConfigurations()
@@ -641,18 +642,20 @@ class utility:
             if valid_waf:
                 # first get all policies
                 policies = wrapper_object.get_waf_policy_update(onboard_object.config_id, onboard_object.onboard_waf_prev_version)
+
                 if policies:
-                    unique_match_target_list = list(set(list(map(lambda x: x['matchTargetId'], onboard_object.csv_dict))))
                     resp, waf_match_target_ids = wrapper_object.list_match_targets(onboard_object.config_id, onboard_object.onboard_waf_prev_version, policies)
-                    for unique_match_target in unique_match_target_list:
-                        msg = f'{unique_match_target}{space:>{column_width-len(unique_match_target)}}'
-                        if int(unique_match_target) in waf_match_target_ids:
-                            logger.debug(f'{msg} valid match target id')
-                        else:
-                            logger.error(f'{msg} invalid match target id')
-                            count += 1
                     if resp.status_code != 200:
                         sys.exit(logger.error('unable to get waf match targets....'))
+                    if cli_mode != 'appsec-remove':
+                        unique_match_target_list = list(set(list(map(lambda x: x['matchTargetId'], onboard_object.csv_dict))))
+                        for unique_match_target in unique_match_target_list:
+                            msg = f'{unique_match_target}{space:>{column_width-len(unique_match_target)}}'
+                            if int(unique_match_target) in waf_match_target_ids:
+                                logger.debug(f'{msg} valid match target id')
+                            else:
+                                logger.error(f'{msg} invalid match target id')
+                                count += 1
                 else:
                     sys.exit(logger.error('unable to get waf policies....'))
 
@@ -664,25 +667,29 @@ class utility:
                 except KeyError:
                     selected_host_list = []
 
-                if available_hostnames:
-                    logger.debug(f'{onboard_object.hostname_list=}')
-                    logger.debug(f'{selectable_hosts_list=}')
-                    logger.debug(f'{selected_host_list=}')
-                    for hostname in onboard_object.hostname_list:
-                        if column_width - len(hostname) < 0:
-                            msg = hostname
-                        else:
-                            msg = f'{hostname}{space:>{column_width-len(hostname)}}'
-                        if hostname in selectable_hosts_list:
-                            logger.info(f'{msg} valid selectable hostnames')
-                        elif hostname in selected_host_list:
-                            logger.warning(f'{msg} existing hostname')
-                        else:
-                            count += 1
-                            logger.error(f'{msg} invalid selectable hostnames')
-                            onboard_object.skip_selected_hosts.append(hostname)
+                if cli_mode == 'appsec-remove':
+                    onboard_object.existing_selected_hosts = selected_host_list
+
                 else:
-                    sys.exit(logger.error('unable to get available hostnames'))
+                    if available_hostnames:
+                        logger.debug(f'{onboard_object.hostname_list=}')
+                        logger.debug(f'{selectable_hosts_list=}')
+                        logger.debug(f'{selected_host_list=}')
+                        for hostname in onboard_object.hostname_list:
+                            if column_width - len(hostname) < 0:
+                                msg = hostname
+                            else:
+                                msg = f'{hostname}{space:>{column_width-len(hostname)}}'
+                            if hostname in selectable_hosts_list:
+                                logger.info(f'{msg} valid selectable hostnames')
+                            elif hostname in selected_host_list:
+                                logger.warning(f'{msg} existing hostname')
+                            else:
+                                count += 1
+                                logger.error(f'{msg} invalid selectable hostnames')
+                                onboard_object.skip_selected_hosts.append(hostname)
+                    else:
+                        sys.exit(logger.error('unable to get available hostnames'))
 
         if not self.validate_email(onboard_object.notification_emails):
             count += 1
@@ -872,7 +879,7 @@ class utility:
                     rtn_code = child_process.returncode
             else:
                 # Copy the folder and run pipeline merge
-                copy_tree(onboard_object.folder_path, 'temp_pm')
+                # copy_tree(onboard_object.folder_path, 'temp_pm')
 
                 # Read the projectInfo file to update the name of it
                 with open(os.path.join('temp_pm', 'projectInfo.json')) as f:
@@ -1261,25 +1268,32 @@ class utility:
                 error_count += 1
         return error_count
 
-    def csv_2_appsec_array(self, onboard_object) -> dict:
+    def csv_2_appsec_array(self, onboard_object, delete=False) -> dict:
         hostname_list = []
         appsec_json = {}
 
-        for i, row in enumerate(onboard_object.csv_dict):
-            policyName = row['matchTargetId']
-            # Check if policyName already exists in dictionary and append hostname to list
-            if policyName in appsec_json.keys():
-                appsec_json[policyName]['hostnames'].append(row['hostname'])
+        if delete:
+            for i, row in enumerate(onboard_object.csv_dict):
+
                 hostname_list.append(row['hostname'])
 
-            # If policy doesn't already exist in dict, add policy to dictionary and add hostname to list
-            else:
-                appsec_json[policyName] = {}
-                appsec_json[policyName]['hostnames'] = [row['hostname']]
-                hostname_list.append(row['hostname'])
+        else:
+            for i, row in enumerate(onboard_object.csv_dict):
+                policyName = row['matchTargetId']
+                # Check if policyName already exists in dictionary and append hostname to list
+                if policyName in appsec_json.keys():
+                    appsec_json[policyName]['hostnames'].append(row['hostname'])
+                    hostname_list.append(row['hostname'])
+
+                # If policy doesn't already exist in dict, add policy to dictionary and add hostname to list
+                else:
+                    appsec_json[policyName] = {}
+                    appsec_json[policyName]['hostnames'] = [row['hostname']]
+                    hostname_list.append(row['hostname'])
+
+            onboard_object.appsec_json = appsec_json
 
         onboard_object.hostname_list = hostname_list
-        onboard_object.appsec_json = appsec_json
 
     def validate_waf_config_name(self, wrapper_object, config_name: str | None = None) -> int:
         if config_name:

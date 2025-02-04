@@ -697,3 +697,15 @@ class apiCallsWrapper:
             hostnames = new_df['cnameFrom'].unique().tolist()
             logger.debug(hostnames)
         return hostnames
+
+    def getAllWebMatchTargets(self, config_id, version):
+        url = f'https://{self.access_hostname}/appsec/v1/configs/{config_id}/versions/{version}/match-targets'
+        url = self.formUrl(url)
+        resp = self.session.get(url)
+        logger.debug(json.dumps(resp.json()['matchTargets'], indent=3))
+        if resp.status_code == 200:
+            web_tgts = resp.json()['matchTargets']['websiteTargets']
+            return web_tgts
+        else:
+            logger.error('The system was unable to locate security match targets.')
+        return web_tgts
