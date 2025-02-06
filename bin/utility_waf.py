@@ -185,13 +185,19 @@ class wafFunctions:
             logger.error(json.dumps(selected_hosts_response.json(), indent=4))
             return False, None
 
+    def get_security_policy(self, wrapper_object, config_id, version, policy_id):
+        """
+        Function to fetch a Match Target Id
+        """
+        return wrapper_object.get_security_policy(config_id, version, policy_id)
+
     def updateMatchTarget(self, wrapper_object, hostname_list, config_id, version, target_id):
         """
         Function to fetch and update Match Target
         """
         match_target_response = wrapper_object.getMatchTarget(config_id, version, target_id)
         logger.debug(json.dumps(match_target_response.json(), indent=4))
-        if match_target_response.status_code == 200:
+        if match_target_response.ok:
             # Update the hostnames here
             updated_json_data = match_target_response.json()
             if 'hostnames' in updated_json_data.keys():

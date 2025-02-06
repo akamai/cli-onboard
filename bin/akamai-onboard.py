@@ -809,17 +809,20 @@ def appsec_update(config, **kwargs):
             exit(-1)
 
         # Update WAF match target
+        policy_id = ''
         for policy in onboard_object.appsec_json:
             policy_hostnames_to_add = list(filter(lambda x: x not in onboard_object.skip_selected_hosts, onboard_object.appsec_json[policy]['hostnames']))
-            modify_matchtarget = utility_waf_object.updateMatchTarget(wrapper_object,
-                                        policy_hostnames_to_add,
-                                        onboard_object.config_id,
-                                        onboard_object.onboard_waf_config_version,
-                                        policy)
+            modify_matchtarget, policy_id = utility_waf_object.updateMatchTarget(wrapper_object,
+                                                                                 policy_hostnames_to_add,
+                                                                                 onboard_object.config_id,
+                                                                                 onboard_object.onboard_waf_config_version,
+                                                                                 policy)
             if modify_matchtarget:
-                logger.info(f'WAF Configuration Match Target {policy}: Successfully added {policy_hostnames_to_add}')
+                resp = utility_waf_object.get_security_policy(wrapper_object, onboard_object.config_id, onboard_object.onboard_waf_config_version, policy_id)
+                policy_name = resp['policyName']
+                logger.info(f"WAF Configuration Match Target '{policy_name}/{policy_id}': Successfully added {policy_hostnames_to_add}")
             else:
-                logger.error(f'Failed to add {policy_hostnames_to_add} to match target {policy}')
+                logger.error(f"Failed to add {policy_hostnames_to_add} to match target '{policy_name}/{policy_id}'")
 
         # Activate WAF configuration to staging
         if click_args['activate']:
@@ -918,7 +921,8 @@ def appsec_remove(config, **kwargs):
                                                         onboard_object.config_id,
                                                         onboard_object.onboard_waf_config_version)
         if success is True:
-            logger.info(f'Selected hosts: Successfully Removed {removed_hostnames} hostnames from selected hosts')
+            if removed_hostnames > 0:
+                logger.info(f'Selected hosts: Successfully Removed {removed_hostnames} hostnames from selected hosts')
         else:
             logger.error('Unable to remove selected hosts to WAF Configuration')
             exit(-1)
@@ -926,28 +930,31 @@ def appsec_remove(config, **kwargs):
         all_match_targets = wrapper_object.getAllWebMatchTargets(onboard_object.config_id, onboard_object.onboard_waf_config_version)
         # Update WAF match target
         for match_target in all_match_targets:
-            if match_target.get('hostnames', False):
+            policy_id = match_target['securityPolicy']['policyId']
+            resp = utility_waf_object.get_security_policy(wrapper_object, onboard_object.config_id, onboard_object.onboard_waf_config_version, policy_id)
+            policy_name = resp['policyName']
+            policy_name = f"'{policy_name}/{match_target['securityPolicy']['policyId']}'"
 
+            if match_target.get('hostnames', False):
                 policy_hostnames_remaining = list(filter(lambda x: x not in onboard_object.hostname_list, match_target['hostnames']))
                 policy_hostnames_to_remove = list(filter(lambda x: x in onboard_object.hostname_list, match_target['hostnames']))
                 logger.debug(f"Removing {len(policy_hostnames_to_remove)} hostnames from {match_target['securityPolicy']['policyId']}")
                 logger.debug(policy_hostnames_to_remove)
                 removed_hostnames = len(match_target['hostnames']) - len(policy_hostnames_remaining)
                 if removed_hostnames == 0:
-                    logger.info(f"WAF Configuration Match Target {match_target['securityPolicy']['policyId']}: No hostnames found to removed")
+                    logger.debug(f"Website Match Targets {match_target['securityPolicy']['policyId']}: No hostnames found to removed")
                 else:
                     modify_matchtarget = utility_waf_object.updateMatchTargetRemoveHosts(wrapper_object,
-                                                policy_hostnames_remaining,
-                                                onboard_object.config_id,
-                                                onboard_object.onboard_waf_config_version,
-                                                match_target['targetId'])
+                                                                                         policy_hostnames_remaining,
+                                                                                         onboard_object.config_id,
+                                                                                         onboard_object.onboard_waf_config_version,
+                                                                                         match_target['targetId'])
                     if modify_matchtarget:
-                        logger.info(f"WAF Configuration Match Target {match_target['securityPolicy']['policyId']}: Successfully removed {removed_hostnames} hostnames")
+                        logger.info(f'WAF Configuration Match Target {policy_name}: Successfully removed {removed_hostnames} hostnames')
                     else:
-                        logger.error(f"Failed to remove {removed_hostnames} hostnames from match target {match_target['securityPolicy']['policyId']}")
-
+                        logger.error(f'Failed to remove {removed_hostnames} hostnames from match target {policy_name}')
             else:
-                logger.info(f"WAF Configuration Match Target {match_target['securityPolicy']['policyId']}: No hostnames in match target")
+                logger.info(f'WAF Configuration Match Target {policy_name}: No hostnames found')
         # Activate WAF configuration to staging
         if click_args['activate']:
             for network in click_args['activate']:

@@ -709,3 +709,11 @@ class apiCallsWrapper:
         else:
             logger.error('The system was unable to locate security match targets.')
         return web_tgts
+
+    def get_security_policy(self, config_id, version_numnber, policy_id):
+        url = f'https://{self.access_hostname}/appsec/v1/configs/{config_id}/versions/{version_numnber}/security-policies/{policy_id}'
+        url = self.formUrl(url)
+        resp = self.session.get(url)
+        if not resp.ok:
+            logger.error('The system was unable to locate security match targets.')
+        return resp.json()
