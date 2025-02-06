@@ -878,7 +878,7 @@ class utility:
                     rtn_code = child_process.returncode
             else:
                 # Copy the folder and run pipeline merge
-                shutil.copy2(onboard_object.folder_path, 'temp_pm')
+                shutil.copytree(onboard_object.folder_path, 'temp_pm')
 
                 # Read the projectInfo file to update the name of it
                 with open(os.path.join('temp_pm', 'projectInfo.json')) as f:
