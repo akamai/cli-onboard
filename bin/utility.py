@@ -223,9 +223,9 @@ class utility:
                     if onboard_object.onboard_waf_config_id is not None:
                         logger.debug(f'{onboard_object.onboard_waf_config_id} {onboard_object.onboard_waf_prev_version}')
                         _, policies = wrapper_object.get_waf_policy(onboard_object)
-                        _, target_ids = wrapper_object.list_match_targets(onboard_object.onboard_waf_config_id,
-                                                                          onboard_object.onboard_waf_prev_version,
-                                                                          policies)
+                        _, target_ids, _ = wrapper_object.list_match_targets(onboard_object.onboard_waf_config_id,
+                                                                             onboard_object.onboard_waf_prev_version,
+                                                                             policies)
                         if (onboard_object.update_match_target) and (onboard_object.waf_match_target_id in target_ids):
                             for k in policies:
                                 if onboard_object.waf_match_target_id in policies[k]:
@@ -494,7 +494,7 @@ class utility:
                 if onboard_object.onboard_waf_config_id is not None:
                     logger.debug(f'{onboard_object.onboard_waf_config_id} {onboard_object.onboard_waf_prev_version}')
                     _, policies = wrapper_object.get_waf_policy(onboard_object)
-                    _, target_ids = wrapper_object.list_match_targets(onboard_object.onboard_waf_config_id,
+                    _, target_ids, _ = wrapper_object.list_match_targets(onboard_object.onboard_waf_config_id,
                                                                         onboard_object.onboard_waf_prev_version,
                                                                         policies)
                     if onboard_object.waf_match_target_id in target_ids:
@@ -643,7 +643,7 @@ class utility:
                 policies = wrapper_object.get_waf_policy_update(onboard_object.config_id, onboard_object.onboard_waf_prev_version)
 
                 if policies:
-                    resp, waf_match_target_ids = wrapper_object.list_match_targets(onboard_object.config_id, onboard_object.onboard_waf_prev_version, policies)
+                    resp, waf_match_target_ids, _ = wrapper_object.list_match_targets(onboard_object.config_id, onboard_object.onboard_waf_prev_version, policies)
                     if resp.status_code != 200:
                         sys.exit(logger.error('unable to get waf match targets....'))
                     if cli_mode != 'appsec-remove':

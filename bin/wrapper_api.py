@@ -434,7 +434,7 @@ class apiCallsWrapper:
             print(tabulate(df, headers='keys', tablefmt='psql', showindex=True))
         else:
             logger.error('The system was unable to locate security match targets.')
-        return resp, waf_match_target_ids
+        return resp, waf_match_target_ids, waf_targets
 
     def list_policy_match_targets(self, config_id: int, version: int, policy_id: str, policy_name: str):
         url = f'https://{self.access_hostname}/appsec/v1/configs/{config_id}/versions/{version}/match-targets'
