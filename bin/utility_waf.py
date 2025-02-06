@@ -211,16 +211,16 @@ class wafFunctions:
                                                                                 version, target_id,
                                                                                 json.dumps(updated_json_data))
                 if modify_match_target_response.status_code == 200:
-                    return True
+                    return True, updated_json_data['securityPolicy']['policyId']
                 else:
                     logger.error(json.dumps(modify_match_target_response.json(), indent=4))
-                    return False
+                    return False, None
             else:
                 logger.info('This WAF policy already uses "ALL HOSTNAMES" as match target.')
-                return True
+                return True, updated_json_data['securityPolicy']['policyId']
         else:
             logger.error(json.dumps(match_target_response.json(), indent=4))
-            return False
+            return False, None
 
     def updateMatchTargetRemoveHosts(self, wrapper_object, remaining_hostname_list, config_id, version, target_id):
         """
