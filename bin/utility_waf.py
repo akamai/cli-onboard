@@ -141,7 +141,7 @@ class wafFunctions:
                                                                   version,
                                                                   json.dumps(updated_json_data))
             if modify_hosts_response.ok:
-                logger.info(f'Created WAF configuration version: {version}')
+                logger.debug(f'Created WAF configuration version: {version}')
                 return True
             else:
                 logger.debug(modify_hosts_response.url)
@@ -174,7 +174,7 @@ class wafFunctions:
                                                                   version,
                                                                   json.dumps(updated_json_data))
             if modify_hosts_response.ok:
-                logger.info(f'Created WAF configuration version: {version}')
+                logger.debug(f'Created WAF configuration version: {version}')
                 return True, hostnames_removed
             else:
                 logger.debug(modify_hosts_response.url)

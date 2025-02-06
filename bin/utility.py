@@ -651,7 +651,7 @@ class utility:
                         for unique_match_target in unique_match_target_list:
                             msg = f'{unique_match_target}{space:>{column_width-len(unique_match_target)}}'
                             if int(unique_match_target) in waf_match_target_ids:
-                                logger.debug(f'{msg} valid match target id')
+                                logger.info(f'{msg} valid match target id')
                             else:
                                 logger.error(f'{msg} invalid match target id')
                                 count += 1
