@@ -871,10 +871,10 @@ def appsec_policy(config, waf_config_name, policy_name, name_contains):
 @cli.command(short_help='Remove hostnames from selected hosts and remove from any policy match targets')
 @click.option('--config-id', metavar='', help='name of security configuration to update', required=True)
 @click.option('--csv', metavar='', required=True, help='csv file with headers hostname,matchTargetId')
-@click.option('--version-notes', metavar='', help='notes for the new version', required=False)
-@click.option('--activate', metavar='', type=click.Choice(['staging', 'production']), multiple=True, help='Options: staging, production', required=False, default='')
-@click.option('--version', metavar='', help='version to add hostname(s) to', default='latest', required=False)
-@click.option('--email', metavar='', required=False, help='email for activation notifications')
+@click.option('--version-notes', metavar='', help='notes for the new version')
+@click.option('--activate', metavar='', type=click.Choice(['staging', 'production']), multiple=True, help='Options: staging, production')
+@click.option('--version', metavar='', help='version to add hostname(s) to', default='latest')
+@click.option('--email', metavar='', help='email for activation notifications')
 @pass_config
 def appsec_remove(config, **kwargs):
     """
