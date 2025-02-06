@@ -406,6 +406,7 @@ This will create a folder called `sample_setup_files` locally so you will have s
 | `batch-create`  | :heavy_check_mark: | :heavy_check_mark: |
 | `appsec-create` |                    | :heavy_check_mark: |
 | `appsec-update` |                    | :heavy_check_mark: |
+| `appsec-remove` |                    | :heavy_check_mark: |
 
 # appsec-policy
 
