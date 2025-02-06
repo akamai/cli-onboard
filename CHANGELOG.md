@@ -1,5 +1,13 @@
 # RELEASE NOTES
 
+## 2.4.0
+
+#### ENHANCEMENTS/BUG FIXES:
+
+- New command: `appsec-remove`
+- `appsec-update` improve logging messages
+- Bump minimum python version to 3.12
+
 ## 2.3.5
 
 #### BUG FIXES:

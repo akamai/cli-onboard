@@ -49,7 +49,7 @@ from model.multi_hosts import MultiHosts
 from model.single_host import SingleHost
 from tabulate import tabulate
 
-PACKAGE_VERSION = '2.3.7'
+PACKAGE_VERSION = '2.4.0'
 logger = setup_logger()
 root = get_cli_root_directory()
 
@@ -112,7 +112,7 @@ def init_config(config):
 @pass_config
 def cli(config, edgerc, section, account_key):
     '''
-    Akamai CLI for onboarding properties v2.3.7
+    Akamai CLI for onboarding properties v2.4.0
     '''
     config.edgerc = edgerc
     config.section = section
@@ -868,7 +868,7 @@ def appsec_policy(config, waf_config_name, policy_name, name_contains):
     util.log_cli_timing()
 
 
-@cli.command(short_help='Remove hostnames from selected hosts and remove from any policy match targets')
+@cli.command(short_help='Remove hostnames from selected hosts and any policy match targets')
 @click.option('--config-id', metavar='', help='name of security configuration to update', required=True)
 @click.option('--csv', metavar='', required=True, help='csv file with headers hostname,matchTargetId')
 @click.option('--version-notes', metavar='', help='notes for the new version')
@@ -878,10 +878,7 @@ def appsec_policy(config, waf_config_name, policy_name, name_contains):
 @pass_config
 def appsec_remove(config, **kwargs):
     """
-    Remove hostnames from Security Configuration
-
-    \b
-    Remove hostnames from selected hosts and configuration match targets
+    Remove hostnames from selected hosts and any policy match targets
     """
     logger.info('Start Akamai CLI onboard')
     _, wrapper_object = init_config(config)
