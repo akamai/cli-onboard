@@ -22,7 +22,6 @@ from jsonschema import ValidationError
 from pyisemail import is_email
 from rich import print_json
 from tabulate import tabulate
-# from diskutils.dir_util import copy_tree
 
 logger = setup_logger()
 root = get_cli_root_directory()
@@ -879,7 +878,7 @@ class utility:
                     rtn_code = child_process.returncode
             else:
                 # Copy the folder and run pipeline merge
-                # copy_tree(onboard_object.folder_path, 'temp_pm')
+                shutil.copy2(onboard_object.folder_path, 'temp_pm')
 
                 # Read the projectInfo file to update the name of it
                 with open(os.path.join('temp_pm', 'projectInfo.json')) as f:
