@@ -141,7 +141,7 @@ class wafFunctions:
                                                                   version,
                                                                   json.dumps(updated_json_data))
             if modify_hosts_response.ok:
-                logger.info(f'Created WAF configuration version: {version}')
+                logger.debug(f'Created WAF configuration version: {version}')
                 return True
             else:
                 logger.debug(modify_hosts_response.url)
@@ -152,13 +152,52 @@ class wafFunctions:
             logger.error(json.dumps(selected_hosts_response.json(), indent=4))
             return False
 
+    def removeHostnames(self, wrapper_object, hostname_list, config_id, version):
+        """
+        Function to fetch and update Match Target
+        """
+        logger.debug(f'{hostname_list}, config_id: {config_id}, version: {version}')
+        selected_hosts_response = wrapper_object.getWafSelectedHosts(config_id, version)
+        logger.debug(selected_hosts_response.url)
+        logger.debug(selected_hosts_response.status_code)
+        if selected_hosts_response.ok:
+            # Update the hostnames here
+            updated_json_data = selected_hosts_response.json()
+            removed_selected_hosts = list(filter(lambda x: x['hostname'] not in hostname_list, updated_json_data['hostnameList']))
+
+            hostnames_removed = (len(updated_json_data['hostnameList'])) - len(removed_selected_hosts)
+
+            updated_json_data['hostnameList'] = removed_selected_hosts
+            logger.debug(json.dumps(updated_json_data, indent=4))
+            # Now update the match target
+            modify_hosts_response = wrapper_object.modifyWafHosts(config_id,
+                                                                  version,
+                                                                  json.dumps(updated_json_data))
+            if modify_hosts_response.ok:
+                logger.debug(f'Created WAF configuration version: {version}')
+                return True, hostnames_removed
+            else:
+                logger.debug(modify_hosts_response.url)
+                logger.debug(modify_hosts_response.status_code)
+                logger.error(json.dumps(modify_hosts_response.json(), indent=4))
+                return False, None
+        else:
+            logger.error(json.dumps(selected_hosts_response.json(), indent=4))
+            return False, None
+
+    def get_security_policy(self, wrapper_object, config_id, version, policy_id):
+        """
+        Function to fetch a Match Target Id
+        """
+        return wrapper_object.get_security_policy(config_id, version, policy_id)
+
     def updateMatchTarget(self, wrapper_object, hostname_list, config_id, version, target_id):
         """
         Function to fetch and update Match Target
         """
         match_target_response = wrapper_object.getMatchTarget(config_id, version, target_id)
         logger.debug(json.dumps(match_target_response.json(), indent=4))
-        if match_target_response.status_code == 200:
+        if match_target_response.ok:
             # Update the hostnames here
             updated_json_data = match_target_response.json()
             if 'hostnames' in updated_json_data.keys():
@@ -172,13 +211,37 @@ class wafFunctions:
                                                                                 version, target_id,
                                                                                 json.dumps(updated_json_data))
                 if modify_match_target_response.status_code == 200:
-                    return True
+                    return True, updated_json_data['securityPolicy']['policyId']
                 else:
                     logger.error(json.dumps(modify_match_target_response.json(), indent=4))
-                    return False
+                    return False, None
             else:
                 logger.info('This WAF policy already uses "ALL HOSTNAMES" as match target.')
+                return True, updated_json_data['securityPolicy']['policyId']
+        else:
+            logger.error(json.dumps(match_target_response.json(), indent=4))
+            return False, None
+
+    def updateMatchTargetRemoveHosts(self, wrapper_object, remaining_hostname_list, config_id, version, target_id):
+        """
+        Function to fetch and update Match Target
+        """
+        match_target_response = wrapper_object.getMatchTarget(config_id, version, target_id)
+        logger.debug(json.dumps(match_target_response.json(), indent=4))
+        if match_target_response.status_code == 200:
+            # Update the hostnames here
+            updated_json_data = match_target_response.json()
+            updated_json_data['hostnames'] = remaining_hostname_list
+            # Now update the match target
+            modify_match_target_response = wrapper_object.modifyMatchTarget(config_id,
+                                                                                version, target_id,
+                                                                                json.dumps(updated_json_data))
+            if modify_match_target_response.status_code == 200:
                 return True
+            else:
+                logger.error(json.dumps(modify_match_target_response.json(), indent=4))
+                return False
+
         else:
             logger.error(json.dumps(match_target_response.json(), indent=4))
             return False

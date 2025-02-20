@@ -434,7 +434,7 @@ class apiCallsWrapper:
             print(tabulate(df, headers='keys', tablefmt='psql', showindex=True))
         else:
             logger.error('The system was unable to locate security match targets.')
-        return resp, waf_match_target_ids
+        return resp, waf_match_target_ids, waf_targets
 
     def list_policy_match_targets(self, config_id: int, version: int, policy_id: str, policy_name: str):
         url = f'https://{self.access_hostname}/appsec/v1/configs/{config_id}/versions/{version}/match-targets'
@@ -697,3 +697,23 @@ class apiCallsWrapper:
             hostnames = new_df['cnameFrom'].unique().tolist()
             logger.debug(hostnames)
         return hostnames
+
+    def getAllWebMatchTargets(self, config_id, version):
+        url = f'https://{self.access_hostname}/appsec/v1/configs/{config_id}/versions/{version}/match-targets'
+        url = self.formUrl(url)
+        resp = self.session.get(url)
+        logger.debug(json.dumps(resp.json()['matchTargets'], indent=3))
+        if resp.status_code == 200:
+            web_tgts = resp.json()['matchTargets']['websiteTargets']
+            return web_tgts
+        else:
+            logger.error('The system was unable to locate security match targets.')
+        return web_tgts
+
+    def get_security_policy(self, config_id, version_numnber, policy_id):
+        url = f'https://{self.access_hostname}/appsec/v1/configs/{config_id}/versions/{version_numnber}/security-policies/{policy_id}'
+        url = self.formUrl(url)
+        resp = self.session.get(url)
+        if not resp.ok:
+            logger.error('The system was unable to locate security match targets.')
+        return resp.json()

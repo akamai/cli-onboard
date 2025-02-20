@@ -47,6 +47,7 @@ This CLI has 4 command types for onboarding new properties:
 - [appsec-policy](#appsec-policy)
 - [appsec-create](#appsec-create)
 - [appsec-update](#appsec-update)
+- [appsec-remove](#appsec-remove)
 
 # create
 
@@ -405,6 +406,7 @@ This will create a folder called `sample_setup_files` locally so you will have s
 | `batch-create`  | :heavy_check_mark: | :heavy_check_mark: |
 | `appsec-create` |                    | :heavy_check_mark: |
 | `appsec-update` |                    | :heavy_check_mark: |
+| `appsec-remove` |                    | :heavy_check_mark: |
 
 # appsec-policy
 
@@ -538,6 +540,12 @@ www.example-3.com,2222222
 - 2 hostnames will be added to WAF match target id `1111111` on security configuration id `9999`
 - 1 hostname will be added to WAF match target id `2222222` on security configuration id `9999`
 </details>
+
+# appsec-remove
+
+You can remove multiple hostnames to an <u>**existing**</u> security configuration and optionally remove from policy match target and activate.
+
+Use [fetch-sample-templates](#fetch-sample-templates) command to get sample templates
 
 # Contribution
 
