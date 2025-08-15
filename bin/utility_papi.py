@@ -558,3 +558,41 @@ class papiFunctions:
 
         _walk_and_remove(rule_node)
         return rules_modified
+    
+    
+    def update_rules_from_property_tree(self,rule_node: dict,rulenames_to_update: set,update_from_paths: set,update_to_paths: set) -> bool:
+            """
+            Recursively updates 'path' criteria in rules whose names are in
+            rulenames_to_update, swapping any values in update_from_paths for
+            the corresponding entry in update_to_paths.
+            Returns True if any criteria were updated, False otherwise.
+            """
+            rules_modified = False
+            # build a one-to-one mapping from old to new paths
+            path_map = dict(zip(update_from_paths, update_to_paths))
+
+            def _walk_and_update(node):
+                nonlocal rules_modified
+                for child in node.get('children', []):
+                    logger.debug(f"Walking rule: {child['name']}")
+                    if child.get('name', '').strip() in rulenames_to_update:
+                        logger.debug(f"Evaluating rule for updating: {child['name']}")
+                        for crit in child.get('criteria', []):
+                            if crit.get('name') == 'path':
+                                opts = crit.setdefault('options', {})
+                                # single-value case
+                                val = opts.get('value')
+                                if val in path_map:
+                                    opts['value'] = path_map[val]
+                                    rules_modified = True
+                                # multi-value case
+                                if 'values' in opts:
+                                    new_vals = [ path_map.get(v, v) for v in opts['values'] ]
+                                    if new_vals != opts['values']:
+                                        opts['values'] = new_vals
+                                        rules_modified = True
+                    # recurse into grandchildren
+                    _walk_and_update(child)
+
+            _walk_and_update(rule_node)
+            return rules_modified

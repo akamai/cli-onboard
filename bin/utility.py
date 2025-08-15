@@ -1433,6 +1433,30 @@ class utility:
         except FileNotFoundError as err:
             logger.error(err)
         return paths
+    
+    
+    def csv_2_pathToUpdate_array(self, filepath: str) -> list:
+        paths = []
+        try:
+            with open(filepath, encoding='utf-8-sig', newline='') as f:
+                reader = csv.DictReader(f)
+                for row in reader:
+                    old = row['path'].strip()
+                    new = row['updated_path'].strip()
+
+                    # Same extraction logic as csv_2_path_array
+                    # Grab the token before the first '-' in the segment after a '/'
+                    m = re.search(r'/([^/-]+)-', old)
+                    rulename = m.group(1).upper() if m else None
+                    logger.info(f"rulename is....... {rulename}")
+                    paths.append({
+                        'path_match':     old,     # original path to replace
+                        'path_update_to': new,     # new path
+                        'rulename':       rulename # e.g., 'AGPRHQQ' from '/en/hotels/agprhqq-.../'
+                    })
+        except FileNotFoundError as err:
+            logger.error(err)
+        return paths
 
     def validate_group_id(self, onboard, groups) -> None:
         for group in groups:
@@ -2030,7 +2054,7 @@ class Cloudlets:
             stdout, stderr = act_cloudlet_cli.communicate()
             print(stdout.decode('utf-8'))
 
-    def activate_policy_for_customdelete(self, onboard, version: int, network: str):
+    def activate_policy_for_customdelete1(self, onboard, version: int, network: str):
         activation = False
         if network == 'STAGING':
             activation = onboard.activate_cloudlet_staging
@@ -2041,13 +2065,43 @@ class Cloudlets:
             logger.warning(f'SKIP - Activate Cloudlet on {network.upper()}')
         else:
             cmd = self.build_cmd()
-            cmd = f'{cmd} activate --policy {onboard.cloudlet_policy} --network  {network.lower()} --version {version}'
+            #cmd = f'{cmd} activate --policy {onboard.cloudlet_policy} --network  {network.lower()} --version {version}'
+            
+            if network == 'STAGING':
+                cmd = f'{cmd} activate --policy {onboard.cloudlet_policy} --network  staging --version {version}'
+            if network == 'PRODUCTION':
+                cmd = f'{cmd} activate --policy {onboard.cloudlet_policy} --network  production --version {version}'
+
             command = cmd.split(' ')
             logger.debug(cmd)
             act_cloudlet_cli = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
             stdout, stderr = act_cloudlet_cli.communicate()
             print(stdout.decode('utf-8'))
             logger.warning(f'Successfully activated Cloudlet configuration to Akamai {network} network')  
+
+    def activate_policy_for_customdelete(self, onboard, version: int, network: str):
+        if network == 'STAGING' and onboard.activate_cloudlet_staging:
+            cmd = self.build_cmd()
+            cmd += f' activate --policy {onboard.cloudlet_policy} --network staging --version {version}'
+        elif network == 'PRODUCTION' and onboard.activate_cloudlet_production:
+            cmd = self.build_cmd()
+            cmd += f' activate --policy {onboard.cloudlet_policy} --network production --version {version}'
+        else:
+            logger.warning(f'SKIP - Activate Cloudlet on {network.upper()}')
+            return
+
+        command = cmd.split(' ')  # Using plain split
+        logger.debug(f'Running command: {cmd}')
+
+        act_cloudlet_cli = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+        stdout, _ = act_cloudlet_cli.communicate()
+        output = stdout.decode('utf-8')
+        print(output)
+
+        if act_cloudlet_cli.returncode == 0:
+            logger.warning(f'Successfully activated Cloudlet configuration to Akamai {network.upper()} network')
+        else:
+            logger.error(f'Failed to activate Cloudlet on {network.upper()}. Output:\n{output}')
 
 
     def update_phasedrelease_rule(self,
@@ -2166,6 +2220,57 @@ class Cloudlets:
                 logger.debug(f"Value of 'updated' after removal attempt: {removed_any}")
                 logger.debug(json.dumps(updated_rules, indent=2))
                 return removed_any, updated_rules
+
+        logger.warning('Rule "Property" not found in Cloudlet Policy')
+        return False, {}
+    
+    def replace_phasedrelease_paths(self, cloudlet_rules: dict, onboard, update_from_paths: list, update_to_paths: list) -> tuple[bool, dict]:
+        """
+        Replace path match entries in the Cloudlet rule named 'Property'.
+        Returns a tuple (did_replace_flag, updated_rules_dict).
+        """
+        # 1) Build a mapping old_path → new_path
+        replace_map = dict(zip(
+            [p.strip() for p in update_from_paths],
+            [p.strip() for p in update_to_paths]
+        ))
+        logger.debug(f"Calling replace_phasedrelease_paths with map: {replace_map}")
+
+        # 2) Locate the 'Property' rule
+        for rule in cloudlet_rules.get('matchRules', []):
+            if rule.get('name', '').strip().lower() == 'property':
+                matches = rule.get('matches', [])
+                new_matches = []
+                did_replace = False
+
+                # 3) Iterate and replace path values
+                for match in matches:
+                    if match.get('matchType') == 'path':
+                        values = match.get('matchValue', '').split()
+                        replaced_values = []
+                        for v in values:
+                            original = v.strip()
+                            if original in replace_map:
+                                replaced_values.append(replace_map[original])
+                                did_replace = True
+                            else:
+                                replaced_values.append(original)
+                        if replaced_values:
+                            match['matchValue'] = ' '.join(replaced_values)
+                            new_matches.append(match)
+                    else:
+                        new_matches.append(match)
+
+                # 4) Build updated rules payload
+                rule['matches'] = new_matches
+                updated_rules = {
+                    "matchRuleFormat": "1.0",
+                    "matchRules": cloudlet_rules.get('matchRules', [])
+                }
+
+            logger.debug(f"Replacements applied? {did_replace}")
+            logger.debug(json.dumps(updated_rules, indent=2))
+            return did_replace, updated_rules
 
         logger.warning('Rule "Property" not found in Cloudlet Policy')
         return False, {}

@@ -39,6 +39,7 @@ class Onboard:
             self.valid_csv = True
             self.valid_env = True
             self.paths = util.csv_2_path_array(self.csv_loc)
+            self.paths_update = []
             self.property_version = click_args['property_version']
             self.property_version_note = click_args['note']
             self.cloudlet_policy = self.env_details[self.build_env]['cloudlet_policy']
@@ -72,3 +73,13 @@ class Onboard:
             return abs_file_location
         else:
             exit(logger.error(f'File not found {abs_file_location}'))
+
+class OnboardCustomUpdate(Onboard):
+    """Update flow: modify existing rules"""
+    def __init__(self, config, click_args: dict, util):
+        super().__init__(config, click_args, util)
+        self.paths_update = util.csv_2_pathToUpdate_array(self.csv_loc)
+
+    @property
+    def input_paths(self):
+        return self.paths_update

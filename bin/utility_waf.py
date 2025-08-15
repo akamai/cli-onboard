@@ -5,6 +5,7 @@ import json
 import re
 import sys
 import time
+import wrapper_api
 from time import gmtime
 from time import strftime
 
@@ -483,4 +484,60 @@ class wafFunctions:
                 return False
         else:
             logger.error(json.dumps(match_target_response.json(), indent=4))
+            return False
+        
+    def replacingMatchTargetPaths(self, wrapper_object,
+                              path_list_from, path_list_to,
+                              config_id, version, target_id):
+        """
+        Fetches the WAF match target configuration, replaces specified file paths,
+        and applies the update back to the target.
+
+        :param wrapper_object: API client wrapper with getMatchTarget and modifyMatchTarget
+        :param path_list_from: List of file paths to replace
+        :param path_list_to:   List of corresponding new file paths
+        :param config_id:      WAF configuration ID
+        :param version:        Configuration version to modify
+        :param target_id:      Match target ID within the configuration
+        :return: True if replacement and update succeeded, False otherwise
+        """
+        # 1. Retrieve current match-target configuration
+        response = wrapper_object.getMatchTarget(config_id, version, target_id)
+        if not response.ok:
+            logger.error("Failed to fetch WAF match target: %s", response.status_code)
+            logger.debug(json.dumps(response.json(), indent=4))
+            return False
+
+        data = response.json()
+
+        # 2. Preserve original filePaths order
+        original_paths = data.get('filePaths', [])
+        logger.debug("Original WAF filePaths: %s", original_paths)
+
+        # 3. Build precise replacement map
+        if len(path_list_from) != len(path_list_to):
+            logger.error("Mismatched lengths: from=%d, to=%d", len(path_list_from), len(path_list_to))
+            return False
+        replace_map = {old: new for old, new in zip(path_list_from, path_list_to)}
+        logger.debug("Replacement map: %s", replace_map)
+
+        # 4. Apply replacements
+        updated_paths = [replace_map.get(fp, fp) for fp in original_paths]
+        if updated_paths == original_paths:
+            logger.warning("No matching paths found in WAF match target to replace.")
+            return False
+
+        # 5. Commit updated paths
+        data['filePaths'] = updated_paths
+        #logger.info("Applying updated filePaths: %s", updated_paths)
+
+        modify_response = wrapper_object.modifyMatchTarget(
+            config_id, version, target_id, json.dumps(data)
+        )
+        if modify_response.ok:
+            logger.info("Successfully replaced match-target paths.")
+            return True
+        else:
+            logger.error("Failed to modify match target: %s", modify_response.status_code)
+            logger.debug(json.dumps(modify_response.json(), indent=4))
             return False

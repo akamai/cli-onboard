@@ -578,13 +578,12 @@ akamai onboard -s default custom --env environments.json --csv batch-create.csv 
     --property-version staging --use-cpcode 111111 --dryrun
 ```
 
+# custom_update
 
-# custom_delete
-
-Remove path matches from delivery config + cloudlet policy + waf for curated rules in PM
+Update delivery config + cloudlet policy + WAF for curated rules in PM
 
 ```bash
-Options:
+  Options:
   --env                environment JSON file  [required]
   --csv                csv file with headers "path,propertyName"  [required]
   --build-env          environment to build  [default: dev; required]
@@ -593,14 +592,20 @@ Options:
 
   --email              email(s) for activation notifications
 
+  --use-cpcode         override creating new cpcode for each new path, provide
+                       valid existing numeric value
+
   --dryrun             validate only  [default: False]
+
+  --note               property version note  [default: Onboard CLI custom]
 
 ```
 
 ```mermaid
 flowchart LR
     A[fill environment detail into JSON file] --> B[populate paths into CSV file]
-    B-->C[run akamai onboard custom_delete to delete he entries for curated setup]
+    B-->C[run akamai onboard custom_update to update the entries for curated setup]
+    C-->D[update delivery configuration, cloudlet policy, and WAF match target]
 ```
 
 ### Usage
@@ -609,9 +614,9 @@ flowchart LR
 
 ```bash
 
-akamai onboard -s default custom_delete --env environments.json --csv batch-delete.csv --build-env prod
+akamai onboard -s default custom_update --env environments.json --csv batch-update.csv --build-env prod
 
-akamai onboard -s default custom_delete --env environments.json --csv batch-delete.csv --build-env dev \
+akamai onboard -s default custom_update --env environments.json --csv batch-update.csv --build-env dev \
     --property-version staging --dryrun
 
 ```

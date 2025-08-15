@@ -48,6 +48,7 @@ from model.appsec import Property
 from model.multi_hosts import MultiHosts
 from model.single_host import SingleHost
 from tabulate import tabulate
+import re
 
 
 
@@ -1172,9 +1173,13 @@ def custom_delete(config, **kwargs):
         util_papi = utility_papi.papiFunctions()
         property_rule_tree = util_papi.custom_property_version(onboard, wrapper, util)
         paths_to_delete = set(path['path_match'].strip() for path in onboard.paths)
-        rulenames_to_delete = set(path['rulename'].strip() for path in onboard.paths)
-
-        
+        # Extract rulename from path_match using your pattern logic
+        pattern = r'/([^/-]+)-'
+        rulenames_to_delete = {
+            re.search(pattern, p).group(1).upper()
+            for p in paths_to_delete
+            if re.search(pattern, p)
+        }
 
         logger.info(f'Looking to delete rules for {len(paths_to_delete)} paths and {len(rulenames_to_delete)} rulenames.')
         logger.info(f"Paths to delete (WAF + Cloudlet): {paths_to_delete}")
@@ -1298,7 +1303,175 @@ def custom_delete(config, **kwargs):
     elapse_time = str(strftime('%H:%M:%S', gmtime(end_time - start_time)))
     logger.info(f'TOTAL DURATION: {elapse_time}, End Akamai CLI delete process')
 
+@cli.command(name='custom_update',short_help='Custom update command using account switch key')
+@click.option('--env',         metavar='', required=True, help='Path to environment JSON file')
+@click.option('--csv',         metavar='', required=True, help='Path to input CSV file')
+@click.option('--build-env',   metavar='', required=True, default='dev', show_default=True,help='Which environment in the JSON to build (e.g. dev, prod)')
+@click.option('--property-version', metavar='', default='prod', show_default=True,help='Base property version to update from (options: prod, staging, latest, or numeric)')
+@click.option('--email',       metavar='', multiple=True,help='Email(s) for activation notifications')
+@click.option('--dryrun',      is_flag=True, default=False, show_default=True,help='Validate only, don’t actually perform updates')
+@click.option('--note',        metavar='', default='Update paths CLI', show_default=True,help='Property version note')
+@pass_config
+def custom_update(config, **kwargs):
+    """
+    Delete entries from delivery config + cloudlet policy + WAF
+    """
+    logger.info('Start Akamai CLI update process')
+    _, wrapper = init_config(config)
+    start_time = time.perf_counter()
 
+    # Verify required Akamai CLI components
+    util = utility.utility()
+    if not all([
+        util.installedCommandCheck('akamai'),
+        util.executeCommand(['akamai', 'pipeline']),
+        util.executeCommand(['akamai', 'cloudlets'])
+        
+    ]):
+        logger.info("into all")
+        sys.exit()
+
+    # Load onboarding config and parse CSV
+    onboard = onboard_custom.OnboardCustomUpdate(config, kwargs, util)
+    result = util.validateCustomSteps(onboard, wrapper)
+    logger.debug(f"✅ validateCustomSteps returned: {result}")
+
+    if result:
+        util_papi = utility_papi.papiFunctions()
+        logger.info(f"into util_papi: {util_papi}")
+        property_rule_tree = util_papi.custom_property_version(onboard, wrapper, util)
+        update_from_paths   = { p['path_match']      for p in onboard.paths_update}
+        update_to_paths     = { p['path_update_to']  for p in onboard.paths_update }
+
+        # and derive your rule-names from the paths:
+        rulenames_to_update = {r['rulename'] for r in onboard.paths_update if r.get('rulename')}      
+        logger.info(f"Rule update from PM in Progress: {rulenames_to_update}")
+        logger.info(f"PM + WAF + Cloudlet: Paths will be updated from: {update_from_paths} tp {update_to_paths}")
+        rules_modified = util_papi.update_rules_from_property_tree(property_rule_tree['rules'], rulenames_to_update, update_from_paths,update_to_paths)
+
+        if not rules_modified:
+            logger.warning('No matching rules found to remove.')
+            sys.exit(0)    
+
+        #Handle Property Manager
+        print('\n\n')
+        logger.warning('Updating Property Manager')
+        logger.info(f"Rule updation from PM in Progress: {rulenames_to_update}")
+        onboard.updated_property_rule_tree = property_rule_tree['rules']
+        util_papi.update_custom_property(onboard, wrapper, property_rule_tree['ruleFormat'])
+        logger.info(f'New property version: v{onboard.updated_property_version} is based on v{onboard.property_version_base}')
+
+        print()
+        property = [{'propertyName': onboard.property_name, 'propertyId': property_rule_tree['propertyId']}]
+
+        if not onboard.activate_property_staging:
+            staging_act_id = 0
+            logger.warning('SKIP - Activate delivery configuration on STAGING')
+        else:
+            _, _, fail, act = util_papi.batch_activate_and_poll(wrapper,
+                                                            property,
+                                                            onboard.contract_id,
+                                                            onboard.group_id,
+                                                            version=onboard.updated_property_version,
+                                                            network='STAGING',
+                                                            emailList=onboard.notification_emails,
+                                                            notes=onboard.property_version_note)
+            staging_act_id = act[0]['activationId'] if len(fail) == 0 else fail[0]['activationId']
+
+        if not onboard.activate_property_production:
+            prod_act_id = 0
+            logger.warning('SKIP - Activate delivery configuration on PRODUCTION')
+        else:
+            _, _, fail, act = util_papi.batch_activate_and_poll(wrapper,
+                                                                property,
+                                                                onboard.contract_id,
+                                                                onboard.group_id,
+                                                                version=onboard.updated_property_version,
+                                                                network='PRODUCTION',
+                                                                emailList=onboard.notification_emails,
+                                                                notes=onboard.property_version_note)
+            prod_act_id = act[0]['activationId'] if len(fail) == 0 else fail[0]['activationId']
+
+        
+        #Handle Security Config
+        print('\n\n')
+        logger.warning('Updating WAF - removing match targets')
+        util_waf = utility_waf.wafFunctions()
+        if not util_waf.createWafVersionfordelete(wrapper, onboard, notes=onboard.version_notes):
+            logger.error('Failed to create WAF version')
+            sys.exit()
+        wrapper.update_waf_config_version_note(onboard, notes=onboard.version_notes)
+        logger.info(f"Replacing WAF paths:\n  from: {update_from_paths}\n    to: {update_to_paths}")
+
+        # 3) call your new replace function
+        replace_result = util_waf.replacingMatchTargetPaths(
+            wrapper,
+            update_from_paths,
+            update_to_paths,
+            onboard.onboard_waf_config_id,
+            onboard.onboard_waf_config_version,
+            onboard.waf_match_target_id
+        )
+
+        if replace_result:
+            logger.info('WAF match‐target paths successfully replaced.')
+        else:
+            logger.error('Failed to replace one or more WAF match‐target paths.')
+
+        if onboard.activate_waf_staging:
+            util_waf.activateAndPoll(wrapper, onboard, network='STAGING')
+        else:
+            logger.warning('SKIP - Activate WAF config on STAGING')
+
+        if onboard.activate_property_production:
+            util_waf.activateAndPoll(wrapper, onboard, network='PRODUCTION')
+        else:
+            logger.warning('SKIP - Activate WAF config on PRODUCTION')
+
+
+        #Handle Cloudlet Config
+        print('\n\n')
+        logger.warning('Updating Cloudlet Policy - replacing path matches')
+        uc = utility.Cloudlets(config)
+        uc.retrieve_matchrules(onboard.cloudlet_policy)
+        cloudlet_rules = load_json('policy_matchrules.json')
+        #logger.info(f'cloudlet_rules: {cloudlet_rules}')
+        if not cloudlet_rules:
+            logger.error("❌ Failed to load cloudlet_rules from policy_matchrules.json")
+            return
+        
+        logger.debug("🦪 Scanning cloudlet_rules for 'Property'")
+        logger.debug(json.dumps(cloudlet_rules, indent=2))   
+
+        replaced, replaced_rules = uc.replace_phasedrelease_paths(cloudlet_rules, onboard,update_from_paths,update_to_paths)
+        if replaced:
+            for path in set(map(lambda x: x['path_match'].strip(), onboard.paths)):
+                logger.info(f"Replaced Cloudlet path: {path}")
+            logger.debug('Updating Cloudlet Policy after path removal')
+            
+            version_number = uc.create_cloudlet_policy_version(
+                onboard.cloudlet_policy,
+                replaced_rules["matchRules"],
+                onboard.version_notes
+            )
+            #uc.activate_policy_for_customdelete(onboard, version_number, network='STAGING')
+            #uc.activate_policy_for_customdelete(onboard, version_number, network='PRODUCTION')
+
+            if onboard.activate_cloudlet_staging:
+                uc.activate_policy_for_customdelete(onboard, version_number, network='STAGING')
+            else:
+                logger.warning('SKIP - Activate cloudlet config on STAGING')
+
+            if onboard.activate_cloudlet_production:
+                uc.activate_policy_for_customdelete(onboard, version_number, network='PRODUCTION')
+            else:
+                logger.warning('SKIP - Activate cloudlet config on PRODUCTION')
+        else:
+            logger.warning('No cloudlet paths removed or no update needed')   
+
+    end_time = time.perf_counter()
+    elapse_time = str(strftime('%H:%M:%S', gmtime(end_time - start_time)))
+    logger.info(f'TOTAL DURATION: {elapse_time}, End Akamai CLI delete process')
 
 
 def get_prog_name():
