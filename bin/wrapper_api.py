@@ -83,6 +83,19 @@ class apiCallsWrapper:
             if len(resp.json()['hostnames']['items']) > 0:
                 return resp.json()['hostnames']['items']
 
+    def get_acme_tokens(self, hostname_list):
+        jsonBody = {}
+        jsonBody['cnamesFrom'] = hostname_list
+        url = f'https://{self.access_hostname}/papi/v1/hostnames/certificate-challenges'
+        url = self.formUrl(f'{url}')
+        resp = self.session.post(url, data=json.dumps(jsonBody), headers=headers)
+        if resp.status_code == 200:
+            if len(resp.json()['hostnames']['items']) > 0:
+                return resp.json()['hostnames']['items']
+        else:
+            print(resp)
+            print(resp.text)
+
     def get_groups_without_parent(self) -> list:
         url = f'https://{self.access_hostname}/papi/v1/groups/'
         url = self.formUrl(url)
@@ -444,7 +457,7 @@ class apiCallsWrapper:
         waf_match_target_ids = []
         if resp.status_code == 200:
             web_tgts = resp.json()['matchTargets']['websiteTargets']
-            logger.warning(f'{"Policy Name":<50}waf_target_id (Website Match Target)')
+            logger.warning(f'{'Policy Name':<50}waf_target_id (Website Match Target)')
             for tgt in web_tgts:
                 if tgt['securityPolicy']['policyId'] == policy_id:
                     logger.info(f"{policy_name:<50}{tgt['targetId']}")
@@ -584,7 +597,7 @@ class apiCallsWrapper:
         policies_name = {}
         if resp.status_code == 200:
             pol_list = resp.json()['policies']
-            logger.debug(f'{"Policy Name":<20}Policy ID')
+            logger.debug(f'{'Policy Name':<20}Policy ID')
 
             for p in pol_list:
                 logger.debug(f"{p['policyName']:<20}{p['policyId']}")
@@ -597,7 +610,7 @@ class apiCallsWrapper:
         policies_name = {}
         if resp.status_code == 200:
             pol_list = resp.json()['policies']
-            logger.debug(f'{"Policy Name":<40}Policy ID')
+            logger.debug(f'{'Policy Name':<40}Policy ID')
             for p in pol_list:
                 logger.debug(f"{p['policyName']:<40}{p['policyId']}")
                 policies_name[f"{p['policyId']}"] = [f"{p['policyName']}"]
@@ -697,6 +710,33 @@ class apiCallsWrapper:
             hostnames = new_df['cnameFrom'].unique().tolist()
             logger.debug(hostnames)
         return hostnames
+
+    def get_all_account_hostnames(self):
+        url = f'https://{self.access_hostname}/papi/v1/hostnames'
+        hostnameJson = []
+        account_key = self.account_switch_key.split('=')[1]
+        params = {
+            'accountSwitchKey': account_key,
+            'limit': '999'
+        }
+
+        nextLink = True
+        offset = 0
+        while nextLink is True:
+            result = self.session.get(url, params=params)
+            if result.ok:
+                resultJson = result.json()
+                assert 'hostnames' in resultJson
+                hostnameJson.extend(resultJson['hostnames']['items'])
+                if 'nextLink' not in resultJson['hostnames'].keys():
+                    nextLink = False
+                    continue
+                else:
+                    params['offset'] = offset + 999
+            else:
+                pass
+
+        return hostnameJson
 
     def getAllWebMatchTargets(self, config_id, version):
         url = f'https://{self.access_hostname}/appsec/v1/configs/{config_id}/versions/{version}/match-targets'

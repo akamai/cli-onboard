@@ -48,6 +48,7 @@ This CLI has 4 command types for onboarding new properties:
 - [appsec-create](#appsec-create)
 - [appsec-update](#appsec-update)
 - [appsec-remove](#appsec-remove)
+- [sbd-precheck](#sbd-precheck)
 
 # create
 
@@ -546,6 +547,33 @@ www.example-3.com,2222222
 You can remove multiple hostnames to an <u>**existing**</u> security configuration and optionally remove from policy match target and activate.
 
 Use [fetch-sample-templates](#fetch-sample-templates) command to get sample templates
+
+# sbd-precheck
+
+Generate acme_challenge token for hostnames you want to onboard into Akamai.
+[More detail on Default Domain Validation Certificate](https://techdocs.akamai.com/domain-validation/docs/validate-a-domain-using-dns-cname-record#use-this-method-when)
+
+```bash
+akamai onboard sbd-precheck --csv batch-create.csv
+```
+
+### CSV Input File Documentation
+
+<details>
+    <summary>Click me</summary>
+
+Sample **templates/sample_setup_files/SBD.csv** for an initial empty setup file.
+
+```
+hostname,propertyName,product
+sample.media-broadca.com,property_2210580,Download_Delivery
+cdn-srv20.cdn.sample.com,property_2230880,Download_Delivery
+cdn-srv23.cdn.sample.com,property_2230940,Download_Delivery
+cdn-srv17.cdn.sample.com,property_2230820,Download_Delivery
+cdn-srv24.cdn.sample.com,property_2230960,Download_Delivery
+```
+
+</details>
 
 # Contribution
 

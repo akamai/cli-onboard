@@ -31,15 +31,20 @@ import onboard_appsec_update
 import onboard_batch_create
 import onboard_multi_hosts
 import onboard_single_host
+import onboard_smoke_test
 import pandas as pd
 import requests
 import steps
+import util_emojis as emoji
 import utility
 import utility_papi
+import utility_sbd
+import utility_smoketest
 import utility_waf
 import wrapper_api
 from akamai.edgegrid import EdgeGridAuth
 from akamai.edgegrid import EdgeRc
+from exceptions import get_cli_execution_directory
 from exceptions import get_cli_root_directory
 from exceptions import setup_logger
 from model.appsec import AppSec
@@ -47,11 +52,14 @@ from model.appsec import Generic
 from model.appsec import Property
 from model.multi_hosts import MultiHosts
 from model.single_host import SingleHost
+from rich import print
+from rich.console import Console
 from tabulate import tabulate
 
-PACKAGE_VERSION = '2.4.0'
+PACKAGE_VERSION = '2.5.0'
 logger = setup_logger()
 root = get_cli_root_directory()
+dir = get_cli_execution_directory()
 
 
 class Config:
@@ -76,7 +84,7 @@ def init_config(config):
 
     if not config.section:
         if not os.getenv('AKAMAI_EDGERC_SECTION'):
-            section = 'onboard'
+            section = 'default'
         else:
             section = os.getenv('AKAMAI_EDGERC_SECTION')
     else:
@@ -96,8 +104,18 @@ def init_config(config):
         if config.account_key:
             account_name = wrap_api.get_account_name(config.account_key)
             logger.warning(f'Account Name: {account_name} {config.account_key}')
+            account_name = account_name.replace(' ', '_')  # replace empty space with underscore
+            Path(f'input/{account_name}').mkdir(parents=True, exist_ok=True)
+            Path(f'output/{account_name}').mkdir(parents=True, exist_ok=True)
+            account_input_folder = f'input/{account_name}'
+            account_output_folder = f'output/{account_name}'
+        else:
+            account_input_folder = ''
+            account_output_folder = ''
 
-    return session, wrap_api
+        print('_' * 120)
+        print()
+    return session, wrap_api, account_input_folder, account_output_folder
 
 
 @click.group(context_settings={'help_option_names': ['-h', '--help']})
@@ -112,7 +130,7 @@ def init_config(config):
 @pass_config
 def cli(config, edgerc, section, account_key):
     '''
-    Akamai CLI for onboarding properties v2.4.0
+    Akamai CLI for onboarding properties v2.5.0
     '''
     config.edgerc = edgerc
     config.section = section
@@ -162,7 +180,11 @@ def multi_hosts(config, csv, file):
     CSV input file without headers.  Just data in format hostname,origin-hostname
     """
     logger.info('Start Akamai CLI onboard')
-    _, wrap_api = init_config(config)
+    try:
+        _, wrap_api, account_input, account_output = init_config(config)
+    except Exception as err:
+        lg._log_error(err)
+        return 1
     util = utility.utility()
     origin_parent_rules, public_hostnames, origin_hostnames = util.csv_2_origin_rules(csv)
     setup = onboard_multi_hosts.onboard(load_json(file))
@@ -327,7 +349,11 @@ def single_host(config, file):
     Security config will also be activating on STAGING network if create_new_security_config is True.
     """
     logger.info('Start Akamai CLI onboard')
-    _, wrap_api = init_config(config)
+    try:
+        _, wrap_api, account_input, account_output = init_config(config)
+    except Exception as err:
+        lg._log_error(err)
+        return 1
     util = utility.utility()
 
     # Populate onboarding data from user input and default values
@@ -423,7 +449,11 @@ def single_host(config, file):
 def create(config, file):
 
     logger.info('Start Akamai CLI onboard')
-    _, wrapper_object = init_config(config)
+    try:
+        _, wrapper_object, account_input, account_output = init_config(config)
+    except Exception as err:
+        lg._log_error(err)
+        return 1
     setup_json_content = load_json(file)
     onboard_object = onboard.onboard(setup_json_content, config)
 
@@ -572,7 +602,11 @@ def batch_create(config, **kwargs):
     Create a 1 or more delivery configurations using a csv input and optionally update WAF policy
     """
     logger.info('Start Akamai CLI onboard')
-    _, wrapper_object = init_config(config)
+    try:
+        _, wrapper_object, account_input, account_output = init_config(config)
+    except Exception as err:
+        lg._log_error(err)
+        return 1
     click_args = kwargs
     start_time = time.perf_counter()
 
@@ -591,17 +625,17 @@ def batch_create(config, **kwargs):
 
     # If groupId, contractId or productId is missing, list them
     if click_args['group'] is None:
-        command = (f'akamai pm lg -a {config.account_key}') if config.account_key is not None else ('akamai pm lg')
+        command = (f'akamai pm lg -s default -a {config.account_key}') if config.account_key is not None else ('akamai pm lg')
         logger.warning(f'Group ID is required.  Running akamai property manager cli command: {command}')
         sys.exit(os.system(command))
 
     if click_args['contract'] is None:
-        command = (f'akamai pm lc -a {config.account_key}') if config.account_key is not None else ('akamai pm lc')
+        command = (f'akamai pm lc -s default -a {config.account_key}') if config.account_key is not None else ('akamai pm lc')
         logger.warning(f'Contract ID is required.  Running akamai property manager cli command: {command}')
         sys.exit(os.system(command))
 
     if click_args['product'] is None:
-        command = (f"akamai pm lp -c {click_args['contract']} -a {config.account_key}") if config.account_key is not None else (f"akamai pm lc -c {click_args['contract']}")
+        command = (f"akamai pm lp -s default -c {click_args['contract']} -a {config.account_key}") if config.account_key is not None else (f"akamai pm lc -c {click_args['contract']}")
         logger.warning(f'Product ID is required.  Running akamai property manager cli command: {command}')
         sys.exit(os.system(command))
 
@@ -624,11 +658,11 @@ def batch_create(config, **kwargs):
         for hostname in onboard_object.public_hostnames:
             if not click_args['use_cpcode']:
                 cpcode = utility_papi_object.create_new_cpcode(onboard_object,
-                                                            wrapper_object,
-                                                            hostname,
-                                                            onboard_object.contract_id,
-                                                            onboard_object.group_id,
-                                                            onboard_object.product_id)
+                                                               wrapper_object,
+                                                               hostname,
+                                                               onboard_object.contract_id,
+                                                               onboard_object.group_id,
+                                                               onboard_object.product_id)
             else:
                 cpcode = int(click_args['use_cpcode'])
             cpcodeList[hostname] = cpcode
@@ -653,7 +687,7 @@ def batch_create(config, **kwargs):
             if (len(failed_activations) > 0) or (activation_status is False):
                 logger.error('Unable to activate property to staging network')
                 for failedActivation in failed_activations:
-                    logger.error(f'Unable to activate {failedActivation["propertyName"]} to staging network')
+                    logger.error(f'Unable to activate {failedActivation['propertyName']} to staging network')
                     # get list of successfully activated properties
                 if len(success_hostnames) == 0:
                     exit(-1)
@@ -749,6 +783,65 @@ def batch_create(config, **kwargs):
     return 0
 
 
+@cli.command(short_help=f'{emoji.heavy_check_mark} Precheck Default DV (SBD) hostnames for token placement')
+@click.option('--csv', metavar='', required=True, help='csv file with a list of hostnames')
+@click.option('--launch/--no-launch', default=True, metavar='', help='automatically open excel application')
+@click.option('--tokens-only', default=False, is_flag=True, metavar='', help='skip dns check to see if acme record is valid (only generate tokens)')
+@pass_config
+def sbd_precheck(config, **kwargs):
+    """
+    Precheck Default DV (SBD) hostnames for token placement
+    """
+    logger.info('Start Akamai CLI onboard Secure by Default Precheck')
+
+    # Validate akamai cli and cli pipeline are installed
+    try:
+        _, wrapper_object, account_input, account_output = init_config(config)
+    except Exception as err:
+        lg._log_error(err)
+        return 1
+
+    precheck_object = onboard_smoke_test.smoketest(config, kwargs)
+    csv = kwargs['csv']
+    util = utility.utility()
+    cli_installed = util.installedCommandCheck('akamai')
+    pipeline_installed = util.executeCommand(['akamai', 'pipeline'])
+
+    if not (pipeline_installed and (cli_installed or pipeline_installed)):
+        sys.exit()
+
+    utility_papi_object = utility_papi.papiFunctions()
+    utility_precheck_object = utility_smoketest.smoketestFunctions(wrapper_object.session)
+    utility_precheck_object.getHostnamesFromCsv(precheck_object)  # import hostnames to list
+
+    utility_papi_object.get_acme_challenges(config, precheck_object, wrapper_object)  # get acme tokens
+    if kwargs['tokens_only']:
+        token_output = []
+        precheck_file = 'sbd-tokens.csv'
+        for hostname in precheck_object.acme_challenges:
+            token_output.append({
+                'hostname': hostname['cnameFrom'],
+                'acme_hostname': hostname['validationCname']['hostname'],
+                'acme_target': hostname['validationCname']['target']})
+        filename = utility_precheck_object.buildOutputcsv_sbd_tokens_only(token_output, precheck_file, account_output)
+    else:
+        logger.info('Validating acme tokens...')
+
+        utility_precheck_object.check_acme_dns_sbd_precheck(precheck_object)
+
+        precheck_file = 'certificate-sbd-precheck.xlsx'
+        open_excel_automatically = kwargs['launch'] if kwargs['launch'] else False
+        filename = utility_precheck_object.buildOutputXLS_sbd_precheck(precheck_object,
+                                                                    precheck_file,
+                                                                    directory=account_output,
+                                                                    launch=open_excel_automatically)
+
+    print()
+    logger.info(f'Review this output before running convert command {emoji.attention}')
+    logger.info(f'{filename} {emoji.bow}')
+    util.log_cli_timing()
+
+
 @cli.command(short_help='Add hostnames as selected hosts to existing security configuration and optionally add to policy match target')
 @click.option('--config-id', metavar='', help='name of security configuration to update', required=True)
 @click.option('--csv', metavar='', required=True, help='csv file with headers hostname,matchTargetId')
@@ -765,7 +858,11 @@ def appsec_update(config, **kwargs):
     Add additional hostnames and optionally add to policy match target
     """
     logger.info('Start Akamai CLI onboard')
-    _, wrapper_object = init_config(config)
+    try:
+        _, wrapper_object, account_input, account_output = init_config(config)
+    except Exception as err:
+        lg._log_error(err)
+        return 1
     util = utility.utility()
     click_args = kwargs
 
@@ -847,7 +944,11 @@ def appsec_policy(config, waf_config_name, policy_name, name_contains):
     List available security configuration policy
     """
     logger.info('Start Akamai CLI onboard')
-    _, wrap_api = init_config(config)
+    try:
+        _, wrap_api, account_input, account_output = init_config(config)
+    except Exception as err:
+        lg._log_error(err)
+        return 1
     util = utility.utility()
     config_id, version, df = util.validate_waf_config_name(wrap_api, waf_config_name)
     if not waf_config_name:
@@ -996,7 +1097,11 @@ def appsec_create(config, contract_id, group_id, by, activate, csv, email, note)
       Option 2 by propertyname:       Headers contain propertyname,waf_config_name,waf_policy_name,hostname
     """
     logger.info('Start Akamai CLI onboard')
-    _, wrap_api = init_config(config)
+    try:
+        _, wrap_api, account_input, account_output = init_config(config)
+    except Exception as err:
+        lg._log_error(err)
+        return 1
     util = utility.utility()
     util_waf = utility_waf.wafFunctions()
 

@@ -24,7 +24,7 @@ import coloredlogs
 
 
 def setup_logger():
-    # Create folders and copy config json when running via Akamai CLI
+    """Create folders and copy config json when running via Akamai CLI"""
     Path('logs').mkdir(parents=True, exist_ok=True)
     Path('config').mkdir(parents=True, exist_ok=True)
 
@@ -37,7 +37,7 @@ def setup_logger():
         origin_config = f'{local_home_path}/src/cli-onboard/config/logging.json'
         origin_config = os.path.expanduser(origin_config)
     else:
-        raise FileNotFoundError('Could not find logging.json')
+        origin_config = 'cli-onboard/config/logging.json'
 
     try:
         shutil.copy2(origin_config, 'config/logging.json')
@@ -49,7 +49,7 @@ def setup_logger():
     logging.config.dictConfig(log_cfg)
     logging.Formatter.converter = time.gmtime
     logger = logging.getLogger(__name__)
-    coloredlogs.install(logger=logger, fmt='%(levelname)-7s: %(message)s')
+    coloredlogs.install(logger=logger, fmt='%(levelname)-8s: %(message)s')
     return logger
 
 
@@ -62,3 +62,7 @@ def get_cli_root_directory():
         return Path(f'{local_home_path}')
     else:
         return os.getcwd()
+
+
+def get_cli_execution_directory():
+    return os.getcwd()

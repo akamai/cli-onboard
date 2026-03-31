@@ -70,14 +70,14 @@ class papiFunctions:
         """
 
         for i, activation in enumerate(propertyDict):
-            logger.warning(f'Preparing to activate property {activation["propertyName"]} on Akamai {network} network')
+            logger.warning(f'Preparing to activate property {activation['propertyName']} on Akamai {network} network')
             act_response = wrapper_object.activateConfiguration(contract_id, group_id, activation['propertyId'],
                                                                 version, network, emailList, notes)
             if act_response.status_code == 201:
                 activation_status = False
                 activation_id = act_response.json()['activationLink'].split('?')[0].split('/')[-1]
                 propertyDict[i]['activationId'] = activation_id
-                logger.warning(f'Activation started for {activation["propertyName"]} on Akamai {network} network')
+                logger.warning(f'Activation started for {activation['propertyName']} on Akamai {network} network')
 
             else:
                 logger.error(json.dumps(act_response.json(), indent=4))
@@ -438,3 +438,14 @@ class papiFunctions:
         # update template to include origin and cpCode behaviors in default rule if they don't exist
         default_behaviors = templateData['rules']['behaviors']
         onboard_object.level_0_rules = templateData['rules']['children']
+
+    def get_acme_challenges(self, config, onboard_object, wrapper_object):
+        """
+        Function to get all all acme challenges:
+        """
+        # CHUNK FOR >1000 ACME CHALLENGES
+        chunk_size = 999
+        chunks = [onboard_object.unique_hostnames[i:i + chunk_size] for i in range(0, len(onboard_object.unique_hostnames), chunk_size)]
+        for i, chunk in enumerate(chunks):
+            logger.debug(chunk)
+            onboard_object.acme_challenges.extend(wrapper_object.get_acme_tokens(chunk))

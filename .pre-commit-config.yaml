@@ -1,6 +1,6 @@
 repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
-    rev: v4.3.0
+    rev: v5.0.0
     hooks:
       - id: trailing-whitespace
       - id: end-of-file-fixer
@@ -12,18 +12,18 @@ repos:
       - id: mixed-line-ending
       # - id: pretty-format-json
   - repo: https://github.com/asottile/reorder_python_imports
-    rev: v3.9.0
+    rev: v3.13.0
     hooks:
       - id: reorder-python-imports
         exclude: ^(pre_commit/resources/|testing/resources/python3_hooks_repo/)
         args: [--py37-plus, --add-import, "from __future__ import annotations"]
   - repo: https://github.com/asottile/pyupgrade
-    rev: v3.2.0
+    rev: v3.17.0
     hooks:
       - id: pyupgrade
         args: [--py37-plus]
   - repo: https://github.com/PyCQA/flake8
-    rev: 5.0.4
+    rev: 7.1.1
     hooks:
       - id: flake8
         args:
