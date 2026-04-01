@@ -19,6 +19,7 @@ import logging.config
 import os
 import sys
 import time
+from datetime import datetime
 from pathlib import Path
 from shutil import copytree
 from time import gmtime
@@ -29,6 +30,7 @@ import click
 import onboard
 import onboard_appsec_update
 import onboard_batch_create
+import onboard_convert
 import onboard_multi_hosts
 import onboard_single_host
 import onboard_smoke_test
@@ -56,7 +58,7 @@ from rich import print
 from rich.console import Console
 from tabulate import tabulate
 
-PACKAGE_VERSION = '2.5.1'
+PACKAGE_VERSION = '2.5.2'
 logger = setup_logger()
 root = get_cli_root_directory()
 dir = get_cli_execution_directory()
@@ -130,7 +132,7 @@ def init_config(config):
 @pass_config
 def cli(config, edgerc, section, account_key):
     '''
-    Akamai CLI for onboarding properties v2.5.1
+    Akamai CLI for onboarding properties v2.5.2
     '''
     config.edgerc = edgerc
     config.section = section
@@ -146,10 +148,289 @@ def help(ctx):
     print(ctx.parent.get_help())
 
 
-@cli.command(short_help='Convert from another CDN vendor to Akamai CDN')
+@cli.command(short_help=f'{emoji.rainbow} Bring over delivery configs from Competitors {emoji.rainbow}')
+@click.option('-n', '--network', metavar='', type=click.Choice(['ENHANCED_TLS', 'STANDARD_TLS']), help='use either ENHANCED_TLS or STANDARD_TLS',
+              show_default=True, default='STANDARD_TLS')
+@click.option('-c', '--contract', metavar='', help='contract ID  (starts with ctr)')
+@click.option('-g', '--group', metavar='', help='group ID     (starts with grp)')
+@click.option('-p', '--product', metavar='', help='one of prd_SPM, prd_Fresca, prd_Site_Accel, prd_Download_Delivery (case sensitive)',
+              required=False)
+@click.option('-d', '--directory', metavar='', help='directory where ruletree json files are', required=True)
+@click.option('-f', '--rule-format', metavar='', help='rule format (typically latest, but can use frozen rule format if desired)', default='latest', show_default=True)
+@click.option('--media-ehn', metavar='', type=click.Choice(['VOD', 'LIVE']), default='VOD', multiple=False, help='AMD Edge Hostname option (VOD, LIVE)', show_default=True)
+@click.option('--gtm-domain', metavar='', multiple=False, default=None, help='gtm domain to use in properties', show_default=True)
+@click.option('--use-cpcode', metavar='', help='existing CP Code (numeric) that will be used for all hostnames')
+@click.option('--use-existing-edgehostname', metavar='', is_flag=True, default=False, help='use existing edge hostnames.  CSV requires edgeHostname header')
+@click.option('--activate', metavar='', type=click.Choice(['staging', 'production']), multiple=True, help='Options: staging, production')
+@click.option('--email', metavar='', multiple=True, help='email(s) for activation notifications')
+@click.option('--csv', metavar='', help='csv file with headers hostname,propertyName (at minimum)', required=True)
+@click.option('--force', metavar='', is_flag=True, default=False, help='skip user confirmation prompt')
+@click.option('--dryrun', metavar='', is_flag=True, default=False, help='admin - test config')
+@click.option('--prefix', metavar='', help='admin - required for dryrun.')
+@click.option('--launch/--no-launch', default=True, metavar='', help='automatically open excel application')
 @pass_config
 def convert(config, **kwargs):
-    pass
+    """
+    Bring over Cloudflare/Cloudfront/Imperva/Fastly configs to Akamai platform
+    """
+    logger.info('Start Akamai CLI onboard')
+    start_time = time.perf_counter()
+    try:
+        _, papi, account_input, account_output = init_config(config)
+    except Exception as err:
+        lg._log_error(err)
+        return 1
+    click_args = kwargs
+
+    onboard_object = onboard_convert.onboard(config, click_args)
+    onboard_object.ASK = config.account_key
+
+    # Validate setup and akamai cli and cli pipeline are installed
+    util_papi = utility_papi.papiFunctions()
+    util = utility.utility()
+    util.check_cli_prereq(click_args, config)
+
+    if util.check_api_access(papi):
+        sys.exit()
+
+    # validate setup steps when csv input provided
+    logger.warning(f'{emoji.checking} Validating setup information. Please wait, may take a few moments')
+    print('_' * 120)
+    print()
+
+    onboard_object.csv_dict = util.load_csv_input(click_args['csv'], function='convert')
+    loaded_properties = onboard_object.csv_dict
+
+    if not click_args['dryrun']:
+        if click_args['prefix']:
+            sys.exit(logger.error('--prefix is require under --dryrun mode'))
+    else:
+        prefix = click_args['prefix']
+        if not prefix:
+            sys.exit(logger.error('--dryrun requires --prefix argument'))
+        replace_properties = []
+        for i, _prop in enumerate(loaded_properties, start=1):
+            _properties = {}
+            _properties['hostname'] = f'{prefix}{i}.com'
+            _properties['propertyName'] = f"{prefix}{_prop['propertyName']}"
+            _properties['product'] = click_args['product'] if click_args['product'] else _prop['product']
+            _properties['group'] = _prop['GroupID']
+            replace_properties.append(_properties)
+        onboard_object.csv_dict = replace_properties
+
+    replace_properties = []
+    for i, _prop in enumerate(loaded_properties, start=1):
+        _properties = {}
+        _properties['hostname'] = _prop['hostname']
+        _properties['propertyName'] = _prop['propertyName']
+        _properties['product'] = click_args['product'] if click_args['product'] else _prop['product']
+        if 'edgeHostname' in _prop and click_args['use_existing_edgehostname']:
+            _properties['edgeHostname'] = _prop['edgeHostname']
+        replace_properties.append(_properties)
+    onboard_object.csv_dict = replace_properties
+
+    propertyList, hostnameList = util.csv_2_property_dict_convert(onboard_object)
+    property_dict = util.csv_2_property_array_convert(onboard_object, click_args['prefix'])
+
+    # validate if account has enough SBD to proceed
+    if not click_args['use_existing_edgehostname']:
+        valid_quota = util.check_sbd_quota(papi, click_args, len(onboard_object.property_list))
+        if valid_quota is not None and not valid_quota:
+            akam = []
+            for key, value in property_dict.items():
+                ehns = value['edgeHostnames']
+                akam.extend([ehn for ehn in ehns if ehn.endswith('.akamaized.net')])
+
+            if len(akam) == 0:
+                return -1
+            else:
+                csv_file = click_args['csv']
+                try:
+                    csv_file = csv_file.split('/')[-1]
+                except Exception as e:
+                    logger.info(e)
+
+    # Got this far, we are ready to try and execute the actual steps
+    valid_steps = util.validateSetupStepsConvert(onboard_object, papi, click_args['prefix'], cli_mode='convert')
+    if not valid_steps:
+        logger.error('Please correct the setup json file settings and try again.')
+        return -1
+    else:
+        print()
+        if click_args['use_cpcode']:
+            logger.warning(f'Reusing existing cpCode {int(click_args['use_cpcode'])}')
+        else:
+            logger.warning('Finding cpCodes to use')
+
+        all_smoketest = []
+        sheet = {}
+        for property in property_dict:
+            custom_solution = False  # csv doesn't have GroupID header
+            onboard_object.ok_to_activate = True
+            original_ruletree = property_dict[property]['ruleTree']
+
+            if not click_args['use_cpcode']:
+                logger.critical(f'{emoji.dart}{property}')
+
+            try:
+                comments = original_ruletree['comments']
+            except KeyError:
+                comments = 'Created using CLI-Onboard'
+
+            # convert ruletree to amd
+            if property_dict[property]['product'] == 'prd_Adaptive_Media_Delivery':
+                amd_rule_tree = util.convert_property_amd(original_ruletree, onboard_object)
+                original_ruletree = amd_rule_tree
+            if property_dict[property]['product'] in ['prd_Site_Accel' or 'Site_Accel']:
+                dsa_rule_tree = util.convert_property_dsa(original_ruletree)
+                original_ruletree = dsa_rule_tree
+
+            level0 = original_ruletree['rules']
+            host = property_dict[property]['hostnames'][0]
+            cpcode_name = f'{host}'
+            if not click_args['use_cpcode']:
+                if onboard_object.group_id is None:
+                    onboard_object.group_id = property_dict[property]['group']
+                    custom_solution = True
+
+                logger.debug(f'{onboard_object.group_id=}')
+                cpcode = util_papi.search_for_cpcode(onboard, papi, cpcode_name,
+                                                        onboard_object.contract_id,
+                                                        onboard_object.group_id,
+                                                        property_dict[property]['product'], 'default')
+                if not cpcode:
+                    cpcode = util_papi.create_new_cpcode(onboard, papi, cpcode_name,
+                                                        onboard_object.contract_id,
+                                                        onboard_object.group_id,
+                                                        property_dict[property]['product'], 'default')
+            else:
+                cpcode = int(click_args['use_cpcode'])
+            original_ruletree = util_papi.inject_cpcode_behavior(level0, cpcode)
+            all_smoketest.append([host, '/', cpcode])
+
+            property_dict[property]['ruleTree'] = {'rules': original_ruletree}
+            property_dict[property]['comments'] = comments
+            if custom_solution is True:
+                onboard_object.group_id = None
+
+            with open(f'logs/{property}_v1.json', 'w') as outfile:
+                json.dump(original_ruletree, outfile, ensure_ascii=True, indent=2)
+
+        logger.debug(all_smoketest)
+        headers = ['hostname', 'scope', 'cpcode']
+        dt_string = datetime.now().strftime('%Y%m%d_%H%M_')
+
+        print()
+        msg = 'smoke-test input'
+
+        # create new properties based on json rule tree dictionary
+        propertyIds_list, skip_property = util_papi.batch_create_update_pm_convert(config,
+                                                                                   onboard_object,
+                                                                                   papi,
+                                                                                   property_dict,
+                                                                                   click_args['dryrun'])
+        logger.debug(f'{propertyIds_list=}')
+        logger.debug(f'{skip_property=}')
+
+        properties_to_activate = list(filter(lambda x: x['propertyId'] not in skip_property, propertyIds_list))
+        logger.debug(properties_to_activate)
+        # activate to staging if required
+        success_hostnames = []
+        stg_df = pd.DataFrame()
+        if len(properties_to_activate) > 0 and onboard_object.activate_property_staging:
+            activation_status, success_hostnames, failed_activations, stg_activation = util_papi.batch_activate_and_poll(papi,
+                                                    properties_to_activate,
+                                                    onboard_object.contract_id,
+                                                    onboard_object.group_id,
+                                                    version=1,
+                                                    network='STAGING',
+                                                    emailList=onboard_object.notification_emails,
+                                                    notes='Onboard CLI Activation')
+
+            # check to see if any activations failed
+            if (len(failed_activations) > 0) or (activation_status is False):
+                for failedActivation in failed_activations:
+                    logger.error(f'{emoji.fail} Unable to activate {failedActivation['propertyName']} to staging network {emoji.attention}')
+                    # get list of successfully activated properties
+                if len(success_hostnames) > 0:
+                    logger.info('Proceeding with hostnames that were successfully activated')
+
+            # remove hostnames from failed activations from WAF eligible hostnames
+            onboard_object.public_hostnames = success_hostnames
+
+            stg_df = pd.DataFrame(stg_activation)
+            end_time = time.perf_counter()
+            elapse_time = str(strftime('%H:%M:%S', gmtime(end_time - start_time)))
+            if activation_status:
+                logger.info(f'activation time total: {elapse_time}\n')
+        else:
+            print()
+            logger.info('Activate Property Staging: SKIPPING')
+
+        # Activate property to production
+        prd_df = pd.DataFrame()
+        if len(success_hostnames) > 0 and onboard_object.activate_property_production:
+            # get list of successful staging activations
+            success_staging_activations = (list(filter(lambda x: x['activationStatus']['STAGING'] in ['ACTIVE'], stg_activation)))
+            activation_status, success_hostnames, failed_activations, prd_activation = util_papi.batch_activate_and_poll(papi,
+                                                        success_staging_activations,
+                                                        onboard_object.contract_id,
+                                                        onboard_object.group_id,
+                                                        version=1,
+                                                        network='PRODUCTION',
+                                                        emailList=onboard_object.notification_emails,
+                                                        notes='Onboard CLI Activation')
+            prd_df = pd.DataFrame(prd_activation)
+            end_time = time.perf_counter()
+            elapse_time = str(strftime('%H:%M:%S', gmtime(end_time - start_time)))
+            if activation_status:
+                print()
+                logger.info(f'activation time total: {elapse_time}\n')
+        else:
+            logger.info('Activate Property Production: SKIPPING')
+
+        activation_df = pd.DataFrame()
+        if onboard_object.activate_property_staging:
+            # provide activation result in excel
+            activation_df = pd.concat([stg_df, prd_df], ignore_index=True)
+            activation_df = activation_df.reset_index(drop=True)
+            activation_df.index = activation_df.index + 1
+
+        # Final logging to excel
+        for property in property_dict:
+            property_dict[property]['ruleTree'] = ''
+
+        result_df = pd.DataFrame(property_dict).T
+        result_df.index.name = 'propertyName'
+        result_df = result_df.reset_index()
+
+        cols = ['error_flags', 'hostnames', 'edgeHostnames']
+        for col in cols:
+            result_df[col] = result_df.apply(lambda row: utility.split_elements_newline_withcomma(row[col])
+                                                        if row[col] else '', axis=1)
+        cols.insert(0, 'propertyName')
+        cols.insert(1, 'product')
+        cols.insert(4, 'comments')
+        result_df = result_df.rename(columns={'url': 'propertyName'})
+
+        sheet['properties'] = result_df[cols]
+
+        if not activation_df.empty:
+            sheet['activation_status'] = activation_df
+
+        activation_df = pd.DataFrame()
+
+        conversion_filepath = f'{account_output}/{dt_string}conversion-result.xlsx'
+        logger.info('conversion (activation) output')
+        logger.info(f'{conversion_filepath} {emoji.bow}')
+        utility.write_xlsx(conversion_filepath, sheet, show_index=False, freeze_column=1)
+        open_excel_automatically = kwargs['launch'] if kwargs['launch'] else False
+        if open_excel_automatically:
+            utility.open_excel_application(conversion_filepath, result_df)
+
+        print()
+        util.log_cli_timing()
+    return 0
 
 
 @cli.command(short_help='Pull sample templates')
@@ -783,6 +1064,75 @@ def batch_create(config, **kwargs):
     return 0
 
 
+@cli.command(short_help=f'{emoji.heavy_check_mark} View Default DV (SBD) certificate deployment status')
+@pass_config
+def sbd_status(config, **kwargs):
+    """
+    Check status of all secure by default hostnames on an account
+    """
+    logger.info('Start Akamai CLI onboard Secure by Default Status')
+
+    # Validate akamai cli and cli pipeline are installed
+    try:
+        _, wrapper_object, account_input, account_output = init_config(config)
+    except Exception as err:
+        lg._log_error(err)
+        return 1
+
+    util = utility.utility()
+    cli_installed = util.installedCommandCheck('akamai')
+    pipeline_installed = util.executeCommand(['akamai', 'pipeline'])
+
+    if not (pipeline_installed and (cli_installed or pipeline_installed)):
+        sys.exit()
+
+    # utility_papi_object = utility_papi.papiFunctions()
+    utility_sbd_object = utility_sbd.sbdFunctions(wrapper_object.session)
+
+    sbd_hostnames = utility_sbd_object.get_sbd_hostnames(wrapper_object)
+    if sbd_hostnames:
+        logger.info(f'Found {len(sbd_hostnames)} DEFAULT hostnames, checking status. {emoji.magnify_glass}')
+    else:
+        logger.info(f'Found no DEFAULT hostnames... {emoji.shrug}')
+        util.log_cli_timing()
+        exit(0)
+
+    unique_properties = utility_sbd_object.get_unique_properties(sbd_hostnames)
+
+    logger.info(f'Pulling down {len(unique_properties)} unique properties to fetch status. {emoji.looking}')
+
+    hostname_status = utility_sbd_object.get_papi_hostname_status(wrapper_object, unique_properties, sbd_hostnames)
+    stalled_status = ['PENDING', 'STALLED', 'DEPLOYING']
+    #  stalled_hostnames = list(filter(lambda x: (x['productionStatus'] in stalled_status and x['production'] != '') or x['stagingStatus'] in stalled_status, hostname_status))
+    stalled_hostnames = list(filter(lambda x: (x.get('productionStatus', '') in stalled_status and x.get('production', '') != '') or x.get('stagingStatus', '') in stalled_status, hostname_status))
+
+    keys_to_remove = ['groupId', 'contractId', 'staging', 'production']
+    for d in stalled_hostnames:
+        if d['production'] == '':
+            d['productionStatus'] = 'AWAITING_PRODUCTION_ACTIVATION'
+        for key in keys_to_remove:
+            d.pop(key, None)
+
+    if stalled_hostnames:
+        table = utility_sbd_object.create_output_table(stalled_hostnames, stalled_status)
+        logger.info(f'{len(stalled_hostnames)} stalled hostnames found. {emoji.attention}')
+        print('_' * 120)
+        console = Console()
+        print()
+        console.print(table)
+    else:
+        logger.info(f'No stalled hostnames found {emoji.tada}')
+
+    print()
+    if stalled_hostnames:
+        sbd_output_filename = 'sbd_output.csv'
+        _DataFrame = pd.DataFrame(stalled_hostnames)
+        _DataFrame.to_csv(sbd_output_filename, encoding='utf-8', index=False)
+        logger.info(f'CSV output contains all hostnames checked with the PAPI status, please review {emoji.attention}')
+        logger.info(f'{sbd_output_filename} {emoji.bow}')
+    util.log_cli_timing()
+
+
 @cli.command(short_help=f'{emoji.heavy_check_mark} Precheck Default DV (SBD) hostnames for token placement')
 @click.option('--csv', metavar='', required=True, help='csv file with a list of hostnames')
 @click.option('--launch/--no-launch', default=True, metavar='', help='automatically open excel application')
@@ -843,10 +1193,10 @@ def sbd_precheck(config, **kwargs):
 
 
 @cli.command(short_help='Add hostnames as selected hosts to existing security configuration and optionally add to policy match target')
-@click.option('--config-id', metavar='', help='name of security configuration to update', required=True)
+@click.option('--config-id', metavar='', help='security configuration id (numeric), or run appsec-policy to get all available config', required=True)
 @click.option('--csv', metavar='', required=True, help='csv file with headers hostname,matchTargetId')
 @click.option('--version-notes', metavar='', help='notes for the new version', required=False)
-@click.option('--activate', metavar='', type=click.Choice(['staging', 'production']), multiple=True, help='Options: staging, production', required=False, default='')
+@click.option('--activate', metavar='', type=click.Choice(['staging', 'production']), multiple=True, help='Options: staging, production', required=False, default=[])
 @click.option('--version', metavar='', help='version to add hostname(s) to', default='latest', required=False)
 @click.option('--email', metavar='', required=False, help='email for activation notifications')
 @pass_config

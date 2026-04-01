@@ -3,7 +3,6 @@ from __future__ import annotations
 from collections import defaultdict
 
 from exceptions import setup_logger
-from rich import print
 from rich.table import Table
 
 
@@ -62,16 +61,18 @@ class sbdFunctions:
                                                                    property[1],
                                                                    property[2])
 
+            if not prop_hostnames:
+                continue
             try:
                 obj_to_append = [{'hostname': x['cnameFrom'],
-                                  'stagingStatus': x['certStatus']['staging'][0]['status'],
-                                  'productionStatus': x['certStatus']['production'][0]['status']
-                                  }
-                                 for x in prop_hostnames
-                                 if x.get('stagingCertType') == 'DEFAULT'
+                                'stagingStatus': x['certStatus']['staging'][0]['status'],
+                                'productionStatus': x['certStatus']['production'][0]['status']
+                                }
+                                for x in prop_hostnames
+                                if x.get('stagingCertType') == 'DEFAULT'
                                 ]
-            except KeyError:
-                logger.exception(f'{prop_hostnames=}')
+            except (KeyError, TypeError):
+                logger.error(f'{property=}')
 
             for hostname_obj in obj_to_append:
                 hostname = hostname_obj['hostname']

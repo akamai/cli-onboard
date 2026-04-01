@@ -1,10 +1,10 @@
 # RELEASE NOTES
 
-## 2.5.1
+## 2.5.2
 
 #### ENHANCEMENTS/BUG FIXES:
 
-- New command: `sbd-precheck`, `sbd-status`
+- New command: `sbd-precheck`, `sbd-status`, `convert`
 - Update Ion Premier and Ion Standard Template
 
 ## 2.4.0

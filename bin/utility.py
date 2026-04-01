@@ -3,25 +3,33 @@ from __future__ import annotations
 import csv
 import json
 import os
+import platform
 import re
 import shutil
 import subprocess
 import sys
 import time
+from datetime import datetime
 from pathlib import Path
 from shutil import which
 from time import gmtime
 from time import strftime
 from urllib import parse
 
+import openpyxl
 import pandas as pd
+import util_emojis as emoji
+from cerberus import Validator
+from distutils.dir_util import copy_tree
 from exceptions import get_cli_root_directory
 from exceptions import setup_logger
 from jsonschema import validate
 from jsonschema import ValidationError
 from pyisemail import is_email
+from rich import print
 from rich import print_json
 from tabulate import tabulate
+from UliPlot.XLSX import auto_adjust_xlsx_column_width
 
 logger = setup_logger()
 root = get_cli_root_directory()
@@ -42,6 +50,101 @@ class utility:
         self.valid = True
         self.validate_prerequisite_cli()
         self.start_time = time.perf_counter()
+
+    def check_cli_prereq(self, click_args, config) -> None:
+        cli_installed = self.installedCommandCheck('akamai')
+        pipeline_installed = self.executeCommand(['akamai', 'pipeline'])
+        if not (pipeline_installed and (cli_installed or pipeline_installed)):
+            sys.exit()
+
+        # If groupId, contractId or productId is missing, list them
+        if click_args['group'] is None:
+            command = (f'akamai pm -s default lg -a {config.account_key}') if config.account_key is not None else ('akamai pm lg')
+            logger.warning(f'Group ID is required.  Running akamai property manager cli command: {command}')
+            # sys.exit(os.system(command))
+
+        if click_args['contract'] is None:
+            command = (f'akamai pm lc -s default -a {config.account_key}') if config.account_key is not None else ('akamai pm lc')
+            logger.warning(f'Contract ID is required.  Running akamai property manager cli command: {command}')
+            sys.exit(os.system(command))
+
+    def check_sbd_quota(self, papi, click_args, total_needed) -> bool:
+        contract_id = click_args['contract']
+        group_id = click_args['group']
+        csv_file = click_args['csv']
+        props = papi.list_properties(contract_id, group_id)
+
+        if not props:
+            return None
+        else:
+            sbc_init_prop = [x for x in props if x['propertyName'].startswith('sbd_vcd_init')]
+            logger.debug(sbc_init_prop)
+            # either sbd_vcd_init property was deleted or never created
+            if len(sbc_init_prop) == 0:
+                return None
+
+        property_id = sbc_init_prop[0]['propertyId']
+        property_name = sbc_init_prop[0]['propertyName']
+
+        base_version = 1
+        status = papi.get_edittable_property_version(property_id, base_version)
+
+        if status == 'ACTIVE':
+            base_version = papi.create_new_property_version(property_id, base_version)
+            if base_version == -1:
+                base_version = 1
+
+        items = papi.get_property_version_hostname(property_id, base_version)
+        logger.debug(f'{property_id} {property_name} {status} {items}')
+
+        if not items:
+            return False
+
+        sbd = [x for x in items if x['cnameTo'].startswith('sbd-vcd-init')]
+        logger.debug(f'{property_id} {property_name} {status} {items} {sbd}')
+        # if not sbd:
+        #    return False
+
+        if len(sbd) > 0:
+            test_sbd = {'cnameType': 'EDGE_HOSTNAME',
+                        'cnameFrom': 'testlumen.com',
+                        'cnameTo': 'testlumen.com.edgesuite.net',
+                        'certProvisioningType': 'DEFAULT'}
+
+            sbd_resp = papi.add_property_hostname(contract_id, group_id, property_id, base_version,
+                                            {'add': [test_sbd]})
+
+            if sbd_resp.status_code == 403:
+                msg = 'SBD certificates are being provisioned by product team, please try again later'
+                logger.error(f'{emoji.fail} {msg}')
+                msg_1 = 'If you see this message again after for more than 4 hours waiting, '
+                msg_2 = 'please share account name in the '
+                webex = 'Mob Programming webex'
+                url = 'webexteams://im?space=24bba630-70c1-11ed-b903-b9ad3cd4462a'
+                msg_3 = self.console_hyperlink(url, webex)
+                logger.info(f'{msg_1} {msg_2}{msg_3} space')
+                logger.info(f'{webex} space {url}')
+                return False
+            elif sbd_resp.status_code == 429:
+                limit = sbd_resp.json()['limit']
+                msg = f'Please request for more SBD certificates. Account has reached a limit of {limit}'
+                msg = f'{msg}, or try again after 60 minutes'
+                logger.error(f'{emoji.fail} {msg}')
+                return False
+            else:
+                try:
+                    # limit = int(sbd_resp.headers['x-limit-default-certs-per-contract-limit'])
+                    # print_json(data=sbd_resp.json())
+                    remaining = int(sbd_resp.headers['x-limit-default-certs-per-contract-remaining'])
+                    if total_needed > remaining:
+                        additional_sbd = total_needed - remaining
+                        msg = f'{additional_sbd} more SBD are needed to create {total_needed} configs'
+                        logger.info(f' {emoji.fail} {msg}')
+                        logger.info('    or You can ignore this if you only create properties with sharecert edge hostname')
+                        return False
+                except KeyError:
+                    logger.error(KeyError)
+                    print_json(data=sbd.json())
 
     def installedCommandCheck(self, command_name) -> bool:
         """
@@ -72,6 +175,56 @@ class utility:
             logger.warning('or run >> akamai install property-manager')
             return self.valid
         return self.valid
+
+    def check_read_write_v1(self, accessLevels: list):
+        for x in accessLevels:
+            if x['name'] == 'READ-WRITE':
+                return True
+        return False
+
+    def check_read_write_v3(self, accessLevels: list):
+        return 'READ-WRITE' in accessLevels
+
+    def check_api_access(self, papi):
+        resp = papi.get_api_client()
+        if not resp.ok:
+            return False
+        else:
+            username = resp.json()['authorizedUsers'][0]
+            access_token = resp.json()['accessToken']
+            resp_v3 = papi.all_api_permission(username)
+            if not resp_v3.ok:
+                logger.error(resp_v3.json()['title'])
+                return False
+
+        df = pd.DataFrame(resp_v3.json())
+        df = df[['apiName', 'accessLevels']].sort_values(by='apiName')
+        logger.debug(f'\n{df.to_string()}')
+        required = ['CPS',
+                    'Property Manager (PAPI)',
+                    'Edge Hostnames API (hapi)',
+                    'CPcode and Reporting group (cprg)']
+        df_3 = df[df['apiName'].isin(required)].copy()
+        df_3['RW'] = df_3['accessLevels'].apply(lambda x: self.check_read_write_v3(x))
+        logger.debug(f"\n{df_3[['apiName', 'accessLevels', 'RW']]}")
+
+        resp_v1 = papi.allowed_api_permission(access_token)
+        if not resp_v1.ok:
+            return False
+
+        df = pd.json_normalize(resp_v1.json()['authorization']['services'])
+        df = df[df['serviceName'].isin(required)].copy()
+        df = df[['serviceName', 'grantScopes']].copy()
+        df['RW'] = df['grantScopes'].apply(lambda x: self.check_read_write_v1(x))
+        df_1 = df[df['RW']].copy()
+        logger.debug(f'\n{df_1.to_string()}')
+
+        missing = set(df_3['apiName'].tolist()) - set(df_1['serviceName'].tolist())
+        if missing:
+            logger.error(f'Missing READ-WRITE access on API: {missing}\n')
+            return True
+        else:
+            return False
 
     def checkPermissions(self, session, apicalls_wrapper_object):
         """
@@ -149,10 +302,10 @@ class utility:
             count += 1
 
         # ensure hostname doesn't contain special characters and is of valid length
-        reg = re.compile(r'[^\.\-a-zA-Z0-9]')
+        reg = re.compile(r'[^\.\-\*a-zA-Z0-9]')
         for hostname in onboard_object.public_hostnames:
             if re.search(reg, hostname):
-                logger.error(f'{hostname} contains invalid character. Only alphanumeric (a-z, A-Z, 0-9) and hyphen (-) characters are supported.')
+                logger.error(f'{hostname} contains invalid character. Only alphanumeric (a-z, A-Z, 0-9), hyphen (-) and asterisk (*) characters are supported.')
                 count += 1
             if len(hostname) > 60 and len(hostname) < 4:
                 logger.error(f'{hostname} is invalid length. Hostname length must be between 4-60 characters')
@@ -286,6 +439,248 @@ class utility:
 
         return self.valid
 
+    def validateSetupStepsConvert(self, onboard_object, wrapper_object, prefix, cli_mode='convert') -> bool:
+        """
+        Function to validate the input values of {hostname}.json when in convert mode
+        """
+
+        count = 0
+
+        # check if csv is valid
+        csv_file = onboard_object.csv_loc.split('/')[-1]
+        if not onboard_object.valid_csv:
+            logger.error(f'{space}{emoji.fail} {onboard_object.csv_loc:<30}{space:>20}invalid csv')
+            count += 1
+        else:
+            logger.info(f'{space}{emoji.tada} {csv_file:<30}')
+
+        print()
+        logger.warning(f'{emoji.looking} Checking for all required JSON files in directory')
+        self.json_input_file_validator(onboard_object, prefix)
+
+        if not onboard_object.all_template_json_exists:
+            logger.error(f'{space}{emoji.fail} {onboard_object.source_directory:<30}{space:>20}missing some template json')
+            count += 1
+        else:
+            logger.info(f'{space}{emoji.tada} {onboard_object.source_directory}')
+
+        print()
+        logger.warning(f'{emoji.looking} Validating all hostnames')
+        reg = re.compile(r'[^\.\-\*a-zA-Z0-9]')
+        hostname_error_count = 0
+        for hostname in onboard_object.public_hostnames:
+            if re.search(reg, hostname):
+                logger.error(f'{space}{emoji.thumbdown} {hostname} contains invalid character. Only alphanumeric (a-z, A-Z, 0-9), hyphen (-) and asterisk (*) characters are supported.')
+                count += 1
+                hostname_error_count += 1
+            if len(hostname) > 60 and len(hostname) < 4:
+                logger.error(f'{space}{emoji.thumbdown} {hostname} is invalid length. Hostname length must be between 4-60 characters')
+                count += 1
+                hostname_error_count += 1
+            if (hostname[0] == '-') or (hostname[-1] == '-'):
+                logger.error(f'{space}{emoji.thumbdown} {hostname} cannot begin or end with a hyphen.')
+                count += 1
+                hostname_error_count += 1
+        if hostname_error_count == 0:
+            logger.info(f'{space}{emoji.tada} all hostnames valid ')
+
+        # check if gtm domain is valid
+        print()
+        logger.warning(f'{emoji.looking} Validating GTM domain')
+        gtm_domain_error_count = 0
+        if not onboard_object.gtm_domain:
+            if onboard_object.gtm_replacement_count > 0:
+                onboard_object.gtm_domain = f'{((onboard_object.ASK).replace(':', '-')).lower()}.akadns.net'
+                logger.error(f'{space}{emoji.thumbdown} No --gtm-domain input ---> properties have [{onboard_object.gtm_replacement_count}] references to gtm. Using {onboard_object.gtm_domain}')
+
+        else:
+            if re.search(reg, onboard_object.gtm_domain):
+                logger.error(f'{space}{emoji.thumbdown} {onboard_object.gtm_domain} contains invalid character. Only alphanumeric (a-z, A-Z, 0-9) and hyphen (-) characters are supported.')
+                count += 1
+                gtm_domain_error_count += 1
+            if (onboard_object.gtm_domain[0] == '-') or (onboard_object.gtm_domain[-1] == '-'):
+                logger.error(f'{space}{emoji.thumbdown} {onboard_object.gtm_domain} cannot begin or end with a hyphen.')
+                count += 1
+                gtm_domain_error_count += 1
+
+            if not onboard_object.gtm_domain.endswith('.akadns.net'):
+                logger.error('Domain must end with akadns.net')
+                count += 1
+                gtm_domain_error_count += 1
+
+        if gtm_domain_error_count == 0:
+            logger.info(f'{space}{emoji.tada} valid gtm domain ')
+
+        # check if property name exists
+        print()
+        logger.warning(f'{emoji.looking} Validating all {len(onboard_object.property_list)} property names')
+        for property in onboard_object.property_list:
+            width = column_width - len(property)
+            if width < 0:
+                msg = f'{property}'
+            else:
+                msg = f'{property}{space:>{width}}'
+            if wrapper_object.property_exists(property):
+                logger.error(f'{space}{emoji.thumbdown} {msg}invalid property name; already in use {emoji.shrug}')
+                count += 1
+            else:
+                logger.info(f'{space}{emoji.thumbup} {msg}')
+
+        # if activating pm to prod, must active to staging first
+        print()
+        logger.warning(f'{emoji.looking} Validating activation details')
+        if onboard_object.activate_property_production:
+            if onboard_object.activate_property_staging is True:
+                width = column_width - len('Activating on STAGING')
+                msg = f'Activating on STAGING{space:>{width}}'
+                logger.info(f'{space}{emoji.pass_green} {msg}')
+
+                width = column_width - len('Activating on PRODUCTION')
+                msg = f'Activating on PRODUCTION{space:>{width}}'
+                logger.info(f'{space}{emoji.pass_green} {msg}')
+            else:
+                logger.error(f'{space}{emoji.fail}Must activate property to STAGING before activating to PRODUCTION')
+                count += 1
+        elif onboard_object.activate_property_staging:
+            width = column_width - len('Activating on STAGING only')
+            msg = f'Activating on STAGING only{space:>{width}}'
+            logger.info(f'{space}{emoji.pass_green} {msg}')
+
+        else:
+            width = column_width - len('No activations set')
+            msg = f'No activations set{space:>{width}}'
+            logger.info(f'{space}{emoji.attention} {msg}')
+
+        print()
+        logger.warning(f'{emoji.looking} Validating product, group and contract details')
+        # validate product id available per contract
+
+        for product in onboard_object.product_list:
+            product_detail = self.validateProductId(wrapper_object,
+                                                    onboard_object.contract_id,
+                                                    product)
+            if product_detail['Found']:
+                logger.info(f'{space}{emoji.thumbup} {product}{space:>{column_width - len(product)}}valid product_id')
+                logger.info(f'{space}{emoji.thumbup} {onboard_object.contract_id}{space:>{column_width - len(onboard_object.contract_id)}}valid contract_id')
+                # entitlement relies on contract, not group
+                # logger.info(f'{space}{emoji.thumbup} {onboard_object.group_id}{space:>{column_width - len(onboard_object.group_id)}}valid group_id')
+            else:
+                logger.error(f'{space}{emoji.thumbdown} {product}{space:>{column_width - len(product)}}invalid product_id')
+                logger.warning(f'Available valid product_id for contract {onboard_object.contract_id}')
+                count += 1
+                products_list = sorted(product_detail['products'])
+                for p in products_list:
+                    logger.warning(p)
+
+        print()
+        # network must be either STANDARD_TLS or ENHANCED_TLS
+        logger.warning(f'{emoji.looking} Validating network')
+        if onboard_object.secure_network not in ['STANDARD_TLS', 'ENHANCED_TLS']:
+            width = column_width - len(onboard_object.secure_network)
+            msg = f'{onboard_object.secure_network}{space:>{width}}'
+            logger.error(f'{emoji.thumbdown} {msg}invalid secure_network')
+            count += 1
+        else:
+            logger.info(f'{space}{emoji.tada} {onboard_object.secure_network}')
+
+        print()
+        logger.warning(f'{emoji.looking} Validating edge hostname setup')
+        # must be one of three valid modes
+        edgeHostnameList = onboard_object.edge_hostname_list
+        valid_modes = ['use_existing_edgehostname', 'secure_by_default']
+        width = column_width - len(onboard_object.edge_hostname_mode)
+        msg = f'{onboard_object.edge_hostname_mode}{space:>{width}}'
+        logger.info(f'{space}{emoji.pushpin} {msg}edge hostname mode')
+
+        if onboard_object.edge_hostname_mode == 'use_existing_edgehostname':
+            ehn_id = 0
+            # check to see if specified edge hostname exists
+            for edgeHostname in edgeHostnameList:
+
+                edgeHostname_log = column_width - len(edgeHostname) - 1
+                if edgeHostname_log < 0:
+                    edgeHostname_log = f'{edgeHostname}'
+                else:
+                    edgeHostname_log = f'{edgeHostname}{space:>{edgeHostname_log}}'
+
+                ehn_id = self.validateEdgeHostnameExists(wrapper_object, str(edgeHostname))
+                public_hostname_str = ', '.join(onboard_object.public_hostnames)
+                if ehn_id != 0:
+                    logger.info(f'{space}{emoji.thumbup} {edgeHostname_log} valid edge hostname (ehn_{ehn_id})')
+                # logger.info(f'{public_hostname_str:<30}{space:>20}valid public hostname')
+                    # onboard_object.edge_hostname_id = ehn_id
+                else:
+                    logger.error(f'{space}{emoji.thumbdown} {edgeHostname_log} invalid edge hostname')
+                    count += 1
+        elif onboard_object.edge_hostname_mode == 'secure_by_default':
+            ehn_id = 0
+            for i, edgeHostname in enumerate(edgeHostnameList):
+                # check to see if specified edge hostname exists
+                ehn_id = self.validateEdgeHostnameExists(wrapper_object, str(edgeHostname))
+                public_hostname_str = ', '.join(onboard_object.public_hostnames)
+
+                edgeHostname_log = column_width - len(edgeHostname) - 1
+
+                if edgeHostname_log < 0:
+                    edgeHostname_log = f'{edgeHostname}'
+                else:
+                    edgeHostname_log = f'{edgeHostname}{space:>{edgeHostname_log}}'
+
+                if ehn_id != 0:
+                    if not edgeHostname.endswith(('edgekey.net', 'edgesuite.net')):
+                        logger.info(f'{space}{emoji.thumbdown} {edgeHostname_log} already exist (ehn_{ehn_id}) {edgeHostname}')
+                        count += 1
+                    else:
+                        logger.info(f'{space}{emoji.thumbup} {edgeHostname_log} valid edge hostname (ehn_{ehn_id})')
+                    # logger.info(f'{public_hostname_str:<30}{space:>20}valid public hostname')
+                    # onboard_object.edge_hostname_id = ehn_id
+                else:
+                    if edgeHostname.endswith(('edgekey.net', 'edgesuite.net')):
+                        logger.info(f'{space}{emoji.thumbup} {edgeHostname_log} does not exist, will be created upon property activation')
+                    else:
+                        logger.warning(f'{space}{emoji.construction} {edgeHostname_log} does not end with edgekey.net or edgesuite.net, using {edgeHostname}')
+
+        # valid notify_emails is required
+        emails = onboard_object.notification_emails
+
+        # check if emails are empty and activation is true - can be [""] or []
+        if (onboard_object.activate_property_staging or onboard_object.activate_property_production):
+            if len(emails) == 0:
+                logger.error('At least one valid notification email is required for activations')
+                count += 1
+            if len(emails) == 1:
+                if emails[0] == '':
+                    logger.error('At least one valid notification email is required for activations')
+                    count += 1
+            # check that emails are valid
+            if len(emails) > 0:
+                for email in emails:
+                    if not is_email(email):
+                        logger.error(f'{emoji.thumbdown} {email}{space:>{column_width - len(email)}}invalid email address')
+                        count += 1
+
+        if count == 0:
+            self.valid is True
+            if not onboard_object.iteractive_mode:
+                print()
+                print('_' * 120)
+                print()
+                logger.warning('Please review all settings. Do you want to proceed? (yes/no)')
+                print('_' * 120)
+                string = str(input())
+                proceed_variations = ['yes', 'y', 'Y', 'YES', 'Yes']
+                if string in proceed_variations:
+                    logger.warning(f'{emoji.ok_hand} Proceeding with Onboarding')
+                    print()
+                else:
+                    sys.exit(logger.info(f'{emoji.disappointed} ...Exiting...{emoji.disappointed}'))
+
+        else:
+            print()
+            sys.exit(logger.error('Please review all errors'))
+
+        return self.valid
+
     def validateSetupSteps(self, onboard_object, wrapper_object, cli_mode='create') -> bool:
         """
         Function to validate the input values of setup.json
@@ -390,7 +785,7 @@ class utility:
                     # check to see if specified edge hostname exists
                     ehn_id = self.validateEdgeHostnameExists(wrapper_object, str(onboard_object.edge_hostname))
                     public_hostname_str = ', '.join(onboard_object.public_hostnames)
-                    logger.info(f'ehn_{ehn_id}{space:>{column_width - len(str(ehn_id))-4}}valid edge_hostname_id')
+                    logger.info(f'ehn_{ehn_id}{space:>{column_width - len(str(ehn_id)) - 4}}valid edge_hostname_id')
                     logger.info(f'{onboard_object.edge_hostname}{space:>{column_width - len(onboard_object.edge_hostname)}}valid edge hostname')
                     if column_width - len(public_hostname_str) <= 0:
                         logger.info(f'{public_hostname_str} valid public hostname')
@@ -436,7 +831,7 @@ class utility:
                     # check to see if specified edge hostname exists
                     ehn_id = self.validateEdgeHostnameExists(wrapper_object, str(onboard_object.secure_by_default_use_existing_ehn))
                     public_hostname_str = ', '.join(onboard_object.public_hostnames)
-                    logger.info(f'ehn_{ehn_id}{space:>{column_width - len(str(ehn_id))+4}}valid edge_hostname_id')
+                    logger.info(f'ehn_{ehn_id}{space:>{column_width - len(str(ehn_id)) + 4}}valid edge_hostname_id')
                     logger.info(f'{onboard_object.secure_by_default_use_existing_ehn}{space:>{column_width - len(onboard_object.secure_by_default_use_existing_ehn)}}valid edge hostname')
                     logger.info(f'{public_hostname_str}{space:>{column_width - len(public_hostname_str)}}valid public hostname')
                     onboard_object.edge_hostname_id = ehn_id
@@ -501,7 +896,7 @@ class utility:
                         for k in policies:
                             if onboard_object.waf_match_target_id in policies[k]:
                                 logger.info(f'{policies[k][0]}{space:>{column_width - len(policies[k][0])}}found existing policy')
-                                logger.info(f'{onboard_object.waf_match_target_id}{space:>{column_width - len(str(onboard_object.onboard_waf_config_id))-2}}found existing onboard_waf_config_id')
+                                logger.info(f'{onboard_object.waf_match_target_id}{space:>{column_width - len(str(onboard_object.onboard_waf_config_id)) - 2}}found existing onboard_waf_config_id')
                     else:
                         logger.error(f'{onboard_object.waf_match_target_id}{space:>{column_width - len(str(onboard_object.onboard_waf_config_id))}}invalid onboard_waf_config_id')
                         count += 1
@@ -596,7 +991,7 @@ class utility:
 
         if cli_mode in ['appsec-update', 'appsec-remove']:
             # check if config id exists
-            msg = f'{onboard_object.config_id}{space:>{column_width-len(onboard_object.config_id)}}'
+            msg = f'{onboard_object.config_id}{space:>{column_width - len(onboard_object.config_id)}}'
             appsec_configs = wrapper_object.getWafConfigurations()
             if appsec_configs.status_code == 200:
                 appsec_configs = appsec_configs.json()
@@ -616,16 +1011,16 @@ class utility:
                 logger.warning('Showing all available configs...')
                 logger.info(f'Config Name:{space:>38}Config Id:')
                 for waf_config in appsec_configs['configurations']:
-                    logger.info(f"{waf_config['name']}{space:>{column_width-len(waf_config['name'])}}{waf_config['id']}")
+                    logger.info(f"{waf_config['name']}{space:>{column_width - len(waf_config['name'])}}{waf_config['id']}")
                 sys.exit(logger.error('Exiting....'))
             else:
                 onboard_object.waf_config_name = appsec_config_exists[0]['name']
-                logger.info(f'{onboard_object.waf_config_name} {space:>{column_width-(len(onboard_object.waf_config_name))}}valid config name')
-                logger.info(f'{onboard_object.config_id} {space:>{column_width-(len(onboard_object.config_id))}}valid config id')
+                logger.info(f'{onboard_object.waf_config_name} {space:>{column_width - (len(onboard_object.waf_config_name))}}valid config name')
+                logger.info(f'{onboard_object.config_id} {space:>{column_width - (len(onboard_object.config_id))}}valid config id')
 
             # check if config id base version exists
             if valid_waf:
-                msg = f'{onboard_object.onboard_waf_prev_version}{space:>{column_width-len(onboard_object.onboard_waf_prev_version)}}'
+                msg = f'{onboard_object.onboard_waf_prev_version}{space:>{column_width - len(onboard_object.onboard_waf_prev_version)}}'
                 if onboard_object.onboard_waf_prev_version == 'latest':
                     onboard_object.onboard_waf_prev_version = appsec_config_exists[0]['latestVersion']
                     logger.info(f'{msg} using config id version {onboard_object.onboard_waf_prev_version}')
@@ -649,7 +1044,7 @@ class utility:
                     if cli_mode != 'appsec-remove':
                         unique_match_target_list = list(set(list(map(lambda x: x['matchTargetId'], onboard_object.csv_dict))))
                         for unique_match_target in unique_match_target_list:
-                            msg = f'{unique_match_target}{space:>{column_width-len(unique_match_target)}}'
+                            msg = f'{unique_match_target}{space:>{column_width - len(unique_match_target)}}'
                             if int(unique_match_target) in waf_match_target_ids:
                                 logger.info(f'{msg} valid match target id')
                             else:
@@ -678,7 +1073,7 @@ class utility:
                             if column_width - len(hostname) < 0:
                                 msg = hostname
                             else:
-                                msg = f'{hostname}{space:>{column_width-len(hostname)}}'
+                                msg = f'{hostname}{space:>{column_width - len(hostname)}}'
                             if hostname in selectable_hosts_list:
                                 logger.info(f'{msg} valid selectable hostnames')
                             elif hostname in selected_host_list:
@@ -728,6 +1123,7 @@ class utility:
                 else:
                     pass
         else:
+            logger.error(get_products_response)
             print(json.dumps(get_products_response.json(), indent=4))
             pass
 
@@ -956,7 +1352,7 @@ class utility:
             parent_rule['children'] = []
             parent_rule['comments'] = 'Route request to appropriate origin'
 
-            rows_reader = csv.reader(f, delimiter=',')
+            rows_reader = csv.reader(f, delimiter=', ')
             for row in rows_reader:
                 public_hostnames.append(row[0])
                 origin_hostnames.append(row[1])
@@ -1005,6 +1401,45 @@ class utility:
         if onboard.secure_by_default:
             onboard.edge_hostname_mode = 'secure_by_default'
 
+    def json_input_file_validator(self, onboard_object, prefix: str):
+
+        for hostname in onboard_object.csv_dict:
+            try:
+                if prefix:
+                    sub = len(prefix)
+                    filename = f'{hostname['templateName'][sub:]}.json'
+                else:
+                    filename = f'{hostname['templateName']}.json'
+            except KeyError:
+                filename = f'{hostname['hostname']}.json'
+
+            if not self.validateFile('json file', f'{onboard_object.source_directory}/{filename}'):
+                width = column_width - len(filename)
+                if width < 0:
+                    msg = f'{filename}'
+                else:
+                    msg = f'{filename}{space:>{width}}'
+                host_name = hostname['hostname']
+                logger.error(f'{space}{emoji.thumbdown} {msg}missing ruletree json file for hostname {host_name}')
+                onboard_object.all_template_json_exists = False
+            else:
+                hostname['jsonFile'] = filename
+        return onboard_object.all_template_json_exists
+
+    def load_csv_input(self, filepath: str, function: str) -> list:
+        if function == 'delete':
+            valid, output = self.csv_validator_delete(filepath)
+        elif function == 'add_hostname':
+            valid, output = self.csv_validator_addhostname(filepath)
+        elif function == 'convert':
+            valid, output = self.csv_validator_convert(filepath)
+        elif function == 'activate':
+            valid, output = self.csv_validator_activate(filepath)
+
+        if not valid:
+            sys.exit(logger.error('Invalid data found in CSV input'))
+        return output
+
     def csv_validator(self, onboard_object, csv_file_loc: str):
         csv_dict = []
         schema = {
@@ -1043,6 +1478,146 @@ class utility:
                     logger.warning(f'CSV Validation Error in row: {i} - {e}')
 
         onboard_object.csv_dict = csv_dict
+        return onboard_object.valid_csv
+
+    def csv_validator_convert(self, csv_file_loc: str) -> tuple:
+        schema = {
+            'hostname': {
+                'type': 'string',
+                'required': True,
+                'empty': False
+            },
+            'propertyName': {
+                'type': 'string',
+                'required': False,
+                'empty': True
+            },
+            'product': {
+                'type': 'string',
+                'required': False,
+                'empty': True
+            },
+            'edgeHostname': {
+                'type': 'string',
+                'required': False,
+                'regex': (r'(.*\.edgekey\.net$|.*\.edgesuite\.net$|.*\.akamaized\.net$)'),
+                'empty': True
+            },
+            'secureNetwork': {
+                'type': 'string',
+                'required': False,
+                'empty': True
+            },
+            'AN': {
+                'type': 'string',
+                'required': False,
+                'empty': True
+            },
+            'GroupID': {
+                'type': 'string',
+                'required': False,
+                'empty': True
+            },
+            'orgId': {
+                'type': 'string',
+                'required': False,
+                'empty': True
+            }
+        }
+
+        logger.warning(f'{emoji.bow} Fetching properties')
+        error_count, data_output = self.cerberus_validator(schema, csv_file_loc)
+        if error_count > 0:
+            return False, data_output
+        else:
+            return True, data_output
+
+    def csv_validator_delete(self, csv_file_loc: str) -> tuple:
+        schema = {
+            'propertyName': {
+                'type': 'string',
+                'required': True,
+                'empty': False
+            },
+            'hostname': {
+                'type': 'string',
+                'required': False,
+                'empty': False
+            },
+            'product': {
+                'type': 'string',
+                'required': False,
+                'empty': False
+            },
+            'network': {
+                'type': 'string',
+                'required': False,
+                'empty': True
+            },
+            'version': {
+                'type': 'string',
+                'required': False,
+                'empty': True
+            },
+            'propertyId': {
+                'type': 'string',
+                'required': False,
+                'empty': True
+            },
+            'activation_id': {
+                'type': 'string',
+                'required': False,
+                'empty': True
+            },
+            'activation_status': {
+                'type': 'string',
+                'required': False,
+                'empty': True
+            }
+        }
+
+        error_count, temp1 = self.cerberus_validator(schema, csv_file_loc)
+
+        temp2 = [{'propertyName': x['propertyName']} for x in temp1]
+        data_output = []
+        seen_names = set()
+        for item in temp2:
+            property_name = item['propertyName']
+            if property_name not in seen_names:
+                data_output.append({'propertyName': property_name})
+                seen_names.add(property_name)
+
+        if error_count > 0:
+            return False, data_output
+        else:
+            logger.warning(f'{emoji.bow} Fetching {len(data_output)} properties')
+            return True, data_output
+
+    def csv_validator_smoke_test(self, onboard_object, csv_file_loc: str):
+        schema = {
+            'hostname': {
+                'type': 'string',
+                'required': True,
+                'empty': False
+            },
+            'scope': {
+                'type': 'string',
+                'required': True,
+                'empty': True
+            },
+            'cpcode': {
+                'type': 'string'
+            }
+        }
+
+        logger.warning(f'{emoji.gem} Using Smoke-test input file: {csv_file_loc}')
+        error_count, onboard_object.csv_dict = self.cerberus_validator(schema, csv_file_loc)
+
+        if error_count > 0:
+            onboard_object.valid_csv = False
+        else:
+            onboard_object.valid_csv = True
+
         return onboard_object.valid_csv
 
     def csv_validator_appsec(self, onboard_object, csv_file_loc: str):
@@ -1098,7 +1673,7 @@ class utility:
                         edgeHostnameList.append(f'{hostname}{ehn_suffix}')
                         logger.debug(f'edgeHostname value is empty - using edge hostname {hostname}{ehn_suffix}')
                     else:
-                        sys.exit(logger.error(f'No edgeHostname provided for {hostname} - row:{i+1}'))
+                        sys.exit(logger.error(f'No edgeHostname provided for {hostname} - row:{i + 1}'))
                 else:
                     edgeHostnameList.append(edgeHostname)
             except KeyError:
@@ -1237,6 +1812,247 @@ class utility:
 
         return (propertyJson, hostnameList)
 
+    def insert_gtm_hostname(self, data, target, replacement, count=0):
+        """
+        Recursively replaces all occurrences of a target value in a nested JSON object.
+
+        Args:
+            data (dict, list, str): The JSON object.
+            target (str): The value to replace.
+            replacement (str): The value to replace with.
+
+        Returns:
+            dict, list, or str: The modified JSON object.
+        """
+
+        if isinstance(data, dict):
+            new_data = {}
+            for key, value in data.items():
+                new_data[key], count = self.insert_gtm_hostname(value, target, replacement, count)
+            return new_data, count
+        elif isinstance(data, list):
+            new_list = []
+            for item in data:
+                modified_item, count = self.insert_gtm_hostname(item, target, replacement, count)
+                new_list.append(modified_item)
+            return new_list, count
+        elif isinstance(data, str) and target in data:
+            count += data.count(target)
+            return data.replace(target, replacement), count
+        return data, count
+
+    def csv_2_property_array_convert(self, onboard_object, prefix) -> dict:
+        propertyJson = {}
+        for i, row in enumerate(onboard_object.csv_dict):
+            logger.debug(f'{row=}')
+            if prefix:
+                templateFile = f'{onboard_object.source_directory}/{row['templateName'][len(prefix):]}.json'
+            else:
+                templateFile = f'{onboard_object.source_directory}/{row['templateName']}.json'
+            # group by propertyName
+            propertyName = row['propertyName']
+            edgeHostname = onboard_object.edge_hostname_list[i]
+            with open(templateFile) as file:
+                templateData = json.load(file)
+
+            # replace all gtm references with GTM hostname
+
+            templateData, gtm_replacement_count = self.insert_gtm_hostname(templateData, 'gtm_edgio_replace_me.akadns.net', onboard_object.gtm_domain if onboard_object.gtm_domain else (f'{(onboard_object.ASK.replace(':', '-')).lower()}.akadns.net'))
+            onboard_object.gtm_replacement_count = onboard_object.gtm_replacement_count + gtm_replacement_count
+
+            if (propertyName is None) or (propertyName == ''):
+                logger.warning(propertyName)
+                propertyName = row['hostname']
+
+            # check to see if property already exists in dict
+            # if it does, add hostname, origins, ehns, to hostname dict and move on to next row
+            else:
+                if propertyName in propertyJson.keys():
+                    hostname = row['hostname']
+                    propertyJson[propertyName]['hostnames'].append(hostname)
+                    propertyJson[propertyName]['edgeHostnames'].append(edgeHostname)
+                    try:
+                        secureNetwork = row['secureNetwork']
+                        propertyJson[propertyName]['secureNetwork'].append(secureNetwork)
+                    except KeyError:
+                        msg = 'no secureNetwork column'
+                    continue
+
+            propertyJson[propertyName] = {}
+            propertyJson[propertyName]['ruleTree'] = templateData
+            propertyJson[propertyName]['product'] = row['product']
+            if row.get('GroupID'):
+                propertyJson[propertyName]['group'] = row['GroupID']
+            hostname = row['hostname']
+            propertyJson[propertyName]['hostnames'] = [hostname]
+            propertyJson[propertyName]['edgeHostnames'] = [edgeHostname]
+            try:
+                secureNetwork = row['secureNetwork']
+                propertyJson[propertyName]['secureNetwork'] = [secureNetwork]
+            except:
+                msg = 'no secureNetwork column'
+        '''
+        for prop, value in propertyJson.items():
+            keys = propertyJson[prop].keys()
+            for key in keys:
+                if key != 'ruleTree':
+                    data = propertyJson[prop][key]
+                    logger.debug(f'{prop:<30} {key:<20} {data}')
+        '''
+
+        return propertyJson
+
+    def csv_2_property_dict_convert(self, onboard_object) -> tuple:
+        propertyList = []
+        hostnameList = []
+        edgeHostnameList = []
+        secureNetworkList = []
+        productList = []
+        ehn_suffix = onboard_object.ehn_suffix
+        if onboard_object.secure_network == 'STANDARD_TLS':
+            ehn_suffix = '.edgesuite.net'
+
+        for i, row in enumerate(onboard_object.csv_dict):
+            try:
+                propertyName = row['propertyName']
+                row['templateName'] = row['propertyName']
+                propertyName = propertyName.replace(' ', '_')
+                row['propertyName'] = propertyName
+                if (propertyName is None) or (propertyName == ''):
+                    propertyName = row['hostname']
+                    row['propertyName'] = propertyName
+                    row['templateName'] = propertyName
+            except KeyError:
+                propertyName = row['hostname']
+                row['propertyName'] = propertyName
+                row['templateName'] = propertyName
+
+            hostname = row['hostname']
+            hostnameList.append(hostname)
+            propertyList.append(propertyName)
+            try:
+                secureNetworkList.append(row['secureNetwork'])
+            except KeyError:
+                msg = 'csv does not have KeyError column'
+
+            try:
+                product = row['product']
+                if not product.startswith('prd_'):
+                    product = f'prd_{product}'
+                    row['product'] = product
+                if (product is None) or (product == ''):
+                    product = 'prd_Site_Accel'
+                    row['product'] = product
+            except KeyError:
+                product = 'prd_Site_Accel'
+                row['product'] = product
+
+            if product not in productList:
+                productList.append(product)
+
+            try:
+                if row['secureNetwork'] == 'SHARED_CERT':
+                    ehn_suffix = '.akamaized.net'
+                elif row['secureNetwork'] == 'STANDARD_TLS':
+                    ehn_suffix = '.edgesuite.net'
+                elif row['secureNetwork'] == 'ENHANCED_TLS':
+                    ehn_suffix = '.edgekey.net'
+                else:
+                    ehn_suffix = '.edgesuite.net'  # default
+            except KeyError:
+                msg = 'csv does not have KeyError column'
+
+            try:
+                edgeHostname = row['edgeHostname']
+                if (edgeHostname is None) or (edgeHostname == ''):
+                    if onboard_object.edge_hostname_mode == 'secure_by_default':
+                        edgeHostnameList.append(f'{hostname}{ehn_suffix}')
+                        logger.debug(f'using edge hostname {hostname}{ehn_suffix}')
+                    else:
+                        sys.exit(logger.error(f'No edgeHostname provided for {hostname} - row:{i + 1}'))
+                else:
+                    edgeHostnameList.append(edgeHostname)
+            except KeyError:
+                if onboard_object.edge_hostname_mode == 'secure_by_default':
+                    edgeHostnameList.append(f'{hostname}{ehn_suffix}')
+                    logger.debug(f'using edge hostname {hostname}{ehn_suffix}')
+                else:
+                    sys.exit(logger.error('edgeHostname column must exist in input csv unless using secure-by-default mode'))
+
+        propertyList = list(set(propertyList))
+        hostnameList = list(set(hostnameList))
+
+        onboard_object.edge_hostname_list = edgeHostnameList
+        onboard_object.property_list = propertyList
+        onboard_object.public_hostnames = hostnameList
+        onboard_object.product_list = productList
+
+        logger.debug(f'{propertyList} {hostnameList}')
+        return (propertyList, hostnameList)
+
+    def csv_2_appsec_create_by_hostname(self, csv_file_loc: str):
+        schema = {'waf_config_name': {'type': 'string',
+                                      'empty': False,
+                                      'required': False},
+                  'waf_policy_name': {'type': 'string',
+                                      'empty': False,
+                                      'required': False},
+                  'hostname': {'type': 'string',
+                               'empty': False,
+                               'required': False}}
+
+        logger.warning(f'Reading customer security configuration input: {csv_file_loc}')
+        error_count, data_output = self.cerberus_validator(schema, csv_file_loc)
+
+        if error_count > 0:
+            return False, data_output
+        else:
+            return True, data_output
+
+    def csv_2_appsec_create_by_propertyname(self, csv_file_loc: str):
+        schema = {'property_name': {'type': 'string',
+                                    'empty': False,
+                                    'required': True},
+                  'waf_config_name': {'type': 'string',
+                                      'empty': False,
+                                      'required': True},
+                  'waf_policy_name': {'type': 'string',
+                                       'empty': False,
+                                       'required': True},
+                  'hostname': {'type': 'string',
+                               'nullable': True,
+                               'required': False}
+                 }
+        logger.warning(f'Reading customer security configuration input: {csv_file_loc}')
+        error_count, data_output = self.cerberus_validator(schema, csv_file_loc)
+
+        if error_count > 0:
+            return False, data_output
+        else:
+            return True, data_output
+
+    def cerberus_validator(self, schema: dict, csv_file_loc: str) -> tuple:
+        v = Validator(schema)
+        error_count = 0
+        data_output = []
+        try:
+            with open(csv_file_loc, encoding='utf-8-sig', newline='') as f:
+                for i, row in enumerate(csv.DictReader(f), 1):
+                    data_output.append(row)
+                    self.valid = v.validate(row)
+                    validation_errors = v.errors
+                    if validation_errors:
+                        self.valid = False
+                        logger.warning(f'CSV Validation Error in row: {i}...')
+                        for error in validation_errors:
+                            logger.warning(f'{error} {validation_errors[error]}')
+                            error_count += 1
+        except FileNotFoundError as e:
+            print()
+            sys.exit(logger.error(e, exc_info=False))
+
+        return error_count, data_output
+
     def validate_group_id(self, onboard, groups) -> None:
         for group in groups:
             if group['contractIds'][0] == onboard.contract_id:
@@ -1253,11 +2069,11 @@ class utility:
 
     def validate_hostnames(self, hostnames) -> int:
         # ensure hostname doesn't contain special characters and is of valid length
-        reg = re.compile(r'[^\.\-a-zA-Z0-9]')
+        reg = re.compile(r'[^\.\-\*a-zA-Z0-9]')
         error_count = 0
         for hostname in hostnames:
             if re.search(reg, hostname):
-                logger.error(f'{hostname} contains invalid character. Only alphanumeric (a-z, A-Z, 0-9) and hyphen (-) characters are supported.')
+                logger.error(f'{hostname} contains invalid character. Only alphanumeric (a-z, A-Z, 0-9), hyphen (-) and asterisk (*) characters are supported.')
                 error_count += 1
             if len(hostname) > 60 and len(hostname) < 4:
                 logger.error(f'{hostname} is invalid length. Hostname length must be between 4-60 characters')
@@ -1339,61 +2155,6 @@ class utility:
                     return None, policies
         return policy_str_id, policies
 
-    def csv_2_appsec_create_by_hostname(self, csv_file_loc: str):
-        schema = {'waf_config_name': {'type': 'string',
-                                      'empty': False,
-                                      'required': False},
-                  'waf_policy_name': {'type': 'string',
-                                      'empty': False,
-                                      'required': False},
-                  'hostname': {'type': 'string',
-                               'empty': False,
-                               'required': False},
-                 }
-
-        logger.warning(f'Reading customer security configuration input: {csv_file_loc}')
-        valid = True
-        with open(csv_file_loc, encoding='utf-8-sig', newline='') as f:
-            data = []
-            for i, row in enumerate(csv.DictReader(f), 1):
-                data.append(row)
-                try:
-                    validate(instance=row, schema=schema)
-                except ValidationError as e:
-                    valid = False
-                    logger.error(f'CSV Validation Error in row: {i} - {e}')
-
-        return valid, data
-
-    def csv_2_appsec_create_by_propertyname(self, csv_file_loc: str):
-        schema = {'property_name': {'type': 'string',
-                                    'empty': False,
-                                    'required': True},
-                  'waf_config_name': {'type': 'string',
-                                      'empty': False,
-                                      'required': True},
-                  'waf_policy_name': {'type': 'string',
-                                       'empty': False,
-                                       'required': True},
-                  'hostname': {'type': 'string',
-                               'nullable': True,
-                               'required': False}
-                 }
-
-        logger.warning(f'Reading customer security configuration input: {csv_file_loc}')
-        valid = True
-        with open(csv_file_loc, encoding='utf-8-sig', newline='') as f:
-            data = []
-            for i, row in enumerate(csv.DictReader(f), 1):
-                data.append(row)
-                try:
-                    validate(instance=row, schema=schema)
-                except ValidationError as e:
-                    valid = False
-                    logger.error(f'CSV Validation Error in row: {i} - {e}')
-
-        return valid, data
-
     def populate_waf_data(self, by: str, input: dict) -> dict:
         waf = []
 
@@ -1455,6 +2216,7 @@ class utility:
         if valid_csv is False:
             logger.error('CSV input needs to be corrected first')
             count += 1
+            sys.exit()
 
         logger.warning('Validating inputs. Please wait, may take a few moments')
         df = pd.DataFrame(data)
@@ -1496,6 +2258,8 @@ class utility:
                 logger.error(f'invalid property name {invalid_property}')
                 valid_property = list(set(all_property) - set(invalid_property))
                 logger.debug(f'{valid_property=}')
+                if len(valid_property) == 0:
+                    sys.exit(logger.info('Nothing to process'))
             df = df[df['property_name'].isin(valid_property)]
             columns = ['property_name', 'waf_config_name', 'waf_policy_name', 'hostname', 'property_id', 'property_version']
             df.sort_values(by=['waf_config_name', 'property_name'], inplace=True)
@@ -1575,3 +2339,628 @@ class utility:
             sys.exit(logger.error(f'Total {count} errors, please review'))
 
         return show_df
+
+    def write_to_csv_input(self, headers: list, rows: list, output_filepath: str, directory: str):
+        dt_string = datetime.now().strftime('%Y%m%d_%H%M_')
+        output_filepath = f'{directory}/{dt_string}{output_filepath}'
+
+        try:
+            with open(output_filepath, 'w') as f:
+                writer = csv.writer(f)
+                writer.writerow(headers)
+                writer.writerows(rows)
+        except FileNotFoundError as e:
+            print()
+            sys.exit(logger.error(e, exc_info=False))
+
+        return output_filepath
+
+    def write_to_csv_output(self, headers: list, rows: list, output_filepath: str, directory: str):
+        dt_string = datetime.now().strftime('%Y%m%d_%H%M_')
+        output_filepath = f'{directory}/{dt_string}{output_filepath}'
+
+        try:
+            with open(output_filepath, 'w') as f:
+                writer = csv.writer(f)
+                writer.writerow(headers)
+                writer.writerows(rows)
+        except FileNotFoundError as e:
+            print()
+            sys.exit(logger.error(e, exc_info=False))
+
+        return output_filepath
+
+    def make_xlsx_hyperlink_to_external_link(self, url: str, alias: str) -> str:
+        """
+        create hyperlink using excel formula
+        """
+        if alias:
+            return f'=HYPERLINK("{url}", "{alias}")'
+        else:
+            return f'{url}'
+
+    def remove_behaviors(self, json_data, target_key, target_value):
+        if isinstance(json_data, dict):
+            if target_key in json_data and json_data[target_key] == target_value:
+                return None  # Signaling to delete this dictionary
+            else:
+                keys_to_delete = []
+                for key, value in list(json_data.items()):
+                    new_value = self.remove_behaviors(value, target_key, target_value)
+                    if new_value is None:
+                        keys_to_delete.append(key)
+                    else:
+                        json_data[key] = new_value
+                for key in keys_to_delete:
+                    del json_data[key]
+
+        elif isinstance(json_data, list):
+            json_data = [self.remove_behaviors(item, target_key, target_value) for item in json_data]
+            json_data = [item for item in json_data if item is not None]  # Remove the items that are marked for deletion
+
+        return json_data
+
+    def convert_property_amd(self, propertyJson, onboard_object):
+        amd_supported_behaviors = ['adScalerCircuitBreaker', 'advanced',
+                                   'akamaizer', 'akamaizerTag',
+                                   'allHttpInCacheHierarchy',
+                                   'allowCloudletsOrigins',
+                                   'allowHTTPSCacheKeySharing',
+                                   'allowHTTPSDowngrade', 'allowOptions',
+                                   'allowTransferEncoding', 'altSvcHeader',
+                                   'apiPrioritization',
+                                   'applicationLoadBalancer',
+                                   'audienceSegmentation',
+                                   'autoDomainValidation',
+                                   'baseDirectory',
+                                   'bossBeaconing',
+                                   'breadcrumbs',
+                                   'breakConnection',
+                                   'cacheError',
+                                   'cacheKeyIgnoreCase', 'cacheKeyQueryParams', 'cacheRedirect',
+                                   'cacheTag', 'cacheTagVisible',
+                                   'caching',
+                                   'centralAuthorization',
+                                   'chaseRedirects',
+                                   'clientCertificateAuth', 'clientCharacteristics', 'cloudWrapper', 'cloudWrapperAdvanced',
+                                   'commonMediaClientData', 'constructResponse', 'contentCharacteristicsAMD',
+                                   'contentPrePosition', 'contentTargetingProtection', 'cpCode', 'customBehavior',
+                                   'datastream', 'denyAccess', 'dnsAsyncRefresh',
+                                   'downgradeProtocol', 'downstreamCache', 'dynamicAdInsertion'
+                                   'dynamicThroughtputOptimization',
+                                   'dynamicThroughtputOptimizationOverride', 'edgeConnect', 'edgeImageConversion',
+                                   'edgeOriginAuthorization', 'edgeRedirector', 'edgeScape', 'edgeWorker',
+                                   'enforceMtlsSettings',
+                                   'enhancedProxyDetection', 'epdForwardHeaderEnrichment', 'failAction', 'fastInvalidate',
+                                   'fips', 'forwardRewrite', 'g2oheader', 'globalRequestNumber',
+                                   'hdDataAdvanced', 'healthDetection', 'hsafEipBinding',
+                                   'http2', 'http3', 'httpStrictTransportSecurity', 'httpToHttpsUpgrade',
+                                   'imOverride', 'imageAndVideoManager', 'imageManager', 'imageManagerVideo',
+                                   'inputValidation', 'instantConfig', 'largeFileOptimizationAdvanced',
+                                   'limitBitRate', 'logCustom', 'mPulse', 'manifestPersonalization',
+                                   'manifestRerouting', 'mediaAcceleration',
+                                   'mediaAccelerationQuicOptout', 'mediaClient'
+                                   'mediaOriginFailover',
+                                   'modifyIncomingRequestHeader', 'modifyIncomingResponseHeader', 'modifyOutgoingRequestHeader', 'modifyOutgoingResponseHeader',
+                                   'origin', 'originCharacteristics', 'originFailureRecoveryMethod', 'originFailureRecoveryPolicy', 'originIpAcl',
+                                   'permissionsPolicy', 'persistentClientConnection', 'persistentConnection', 'personallyIdentifiableInformation', 'phasedRelease',
+                                   'predictiveContentDelivery', 'prefreshCache', 'quality', 'readTimeout', 'redirect', 'redirectplus', 'refererChecking',
+                                   'removeQueryParaeter', 'removeVary', 'report', 'requestClientHints', 'requestControl', 'responseCode', 'returnCacheStatus', 'rewriteUrl', 'salesForceCommerceCloudClient', 'salesForceCommerceCloudProvider', 'salesForceCommerceCloudProviderHostHeader', 'savePostDcaProcessing', 'scheduleInvalidation', 'segmentedContentProtection', 'segmentedMediaOptimization', 'segmentedMediaStreamingPrefetch', 'setVariable', 'simulateErrorCode', 'standardTLSMigration', 'standardTLSMigrationOverride', 'strictHeaderParsing', 'subCustomer', 'sureRoute', 'tieredDistribution', 'tieredDistributionAdvanced', 'tieredDistributionCustomization', 'timeout', 'validateEntityTag', 'verifyTokenAuthorization', 'virtualWaitingRoom', 'virtualWaitingRoomWithEdgeWorkers', 'visitorPrioritization', 'visitorPrioritizationFifo', 'visitorPrioritizationFifoStandalone', 'watermarkUrl', 'watermarking', 'akamaizertag', 'enableallmethodscacheh', 'allowoptions', 'basedir', 'breakconnect', 'negativettl', 'cachekeyignorecase', 'cachekeyqueryparams', 'cache302', 'cachetag', 'cachetagvisible', 'centralauth', 'chaseredirects', 'construct_response', 'cpcode', 'denyaccess', 'dnsasyncrefresh', 'downstreamcaching', 'edgeconnect', 'edgeoriginauth', 'failaction', 'healthdetect', 'mdc', 'bitratelimiting', 'modincomingreqheader', 'modincomingrespheader', 'modoutgoingreqheader', 'modoutgoingrespheader', 'clientpconns', 'pconns', 'pii', 'cacheprefresh', 'readtimeout', 'refererchecking', 'removeqsbyname', 'removevary', 'reporting', 'setresponsecode', 'urlrewrite', 'save_post_dca_processing', 'scheduledinvalidation', 'segmentedcontentprotection', 'segmentedmediaoptimization', 'sim_error_codes', 'strictheaderparsing', 'sureroute', 'tiereddistribution', 'connecttimeout', 'validateetag', 'token_auth_verify', 'manifestrerouting', 'mediaoriginfailover', 'hddata_advanced', 'asset_prioritization', 'conditionalOriginBehavior', 'audience_segmentation', 'edgescape', 'continuousDeployment', 'subcustomerenable', 'edge_redirector', 'forward_rewrite', 'edge_image_converter', 'watermark_tokens', 'imagemanagement', 'mediaclient', 'predictivecontentdelivery', 'protocoldowngrade', 'ip_geo_access', 'virtual_waiting_room', 'virtual_waiting_room_with_edge_workers', 'visitor_prioritization', 'visitor_prioritization_fifo', 'visitor_prioritization_fifo_standalone']
+
+        if onboard_object.ehn_option == 'LIVE':
+            segmentedMediaOptimization = json.dumps({'name': 'segmentedMediaOptimization',
+                                                     'options': {'behavior': 'LIVE'}})
+        else:
+            segmentedMediaOptimization = json.dumps({'name': 'segmentedMediaOptimization',
+                                                     'options': {'behavior': 'ON_DEMAND'}})
+        contentCharacteristicsAMD = json.dumps({'name': 'contentCharacteristicsAMD',
+                                                'options': {
+                                                    'catalogSize': 'UNKNOWN',
+                                                    'contentType': 'HD',
+                                                    'popularityDistribution': 'UNKNOWN',
+                                                    'hls': True,
+                                                    'segmentDurationHLS': 'SEGMENT_DURATION_10S',
+                                                    'segmentSizeHLS': 'UNKNOWN',
+                                                    'hds': True,
+                                                    'segmentDurationHDS': 'SEGMENT_DURATION_6S',
+                                                    'segmentSizeHDS': 'UNKNOWN',
+                                                    'dash': True,
+                                                    'segmentDurationDASH': 'SEGMENT_DURATION_6S',
+                                                    'segmentSizeDASH': 'UNKNOWN',
+                                                    'smooth': True,
+                                                    'segmentDurationSmooth': 'SEGMENT_DURATION_2S',
+                                                    'segmentSizeSmooth': 'UNKNOWN'}})
+
+        behaviors_to_add = [segmentedMediaOptimization, contentCharacteristicsAMD]
+        for behavior in behaviors_to_add:
+            propertyJson['rules']['behaviors'].append(json.loads(behavior))
+        all_behaviors = self.get_all_behaviors(propertyJson, 'behaviors')
+        behavior_names = list(set(list(map(lambda x: x['name'], all_behaviors))))
+        behaviors_to_remove = [x for x in behavior_names if x not in amd_supported_behaviors]
+        # behaviors_to_remove = [('name', 'originCharacteristics'), ('name', 'contentCharacteristicsDD')]
+        for behavior in behaviors_to_remove:
+            logger.debug(f'removing unsupported amd behavior {behavior}')
+            propertyJson = self.remove_behaviors(propertyJson, 'name', behavior)
+        propertyJson = self.remove_rule(propertyJson, 'name', 'Large Objects')
+        return propertyJson
+
+    def convert_property_dsa(self, propertyJson):
+
+        dsa_supported_behaviors = ['adaptiveImageCompression', 'advanced', 'akamaizer', 'akamaizerTag', 'allHttpInCacheHierarchy',
+                                   'allowCloudletsOrigins', 'allowDelete', 'allowOptions', 'allowPatch', 'allowPost', 'allowPut',
+                                   'allowTransferEncoding', 'altSvcHeader', 'apiPrioritization', 'applicationLoadBalancer',
+                                   'audienceSegmentation', 'autoDomainValidation', 'baseDirectory', 'breadcrumbs', 'breakConnection',
+                                   'brotli', 'cacheError', 'cacheId', 'cacheKeyIgnoreCase', 'cacheKeyQueryParams', 'cacheKeyRewrite',
+                                   'cachePost', 'cacheRedirect', 'cacheTag', 'cacheTagVisible', 'caching', 'centralAuthorization',
+                                   'chaseRedirects', 'clientCertificateAuth', 'cloudInterconnects', 'cloudWrapper', 'cloudWrapperAdvanced',
+                                   'conditionalOrigin', 'constructResponse', 'corsSupport', 'cpCode', 'customBehavior', 'datastream', 'denyAccess',
+                                   'deviceCharacteristicCacheId', 'deviceCharacteristicHeader', 'dnsAsyncRefresh', 'dnsPrefresh',
+                                   'downstreamCache', 'edgeConnect', 'edgeImageConversion', 'edgeOriginAuthorization', 'edgeRedirector',
+                                   'edgeScape', 'edgeSideIncludes', 'edgeWorker', 'enforceMtlsSettings', 'enhancedAkamaiProtocol', 'enhancedProxyDetection',
+                                   'epdForwardHeaderEnrichment', 'failAction', 'failoverBotManagerFeatureCompatibility', 'fastInvalidate', 'fips', 'firstPartyMarketing',
+                                   'firstPartyMarketingPlus', 'forwardRewrite', 'frontEndOptimization', 'globalRequestNumber', 'graphqlCaching', 'gzipResponse',
+                                   'healthDetection', 'http2', 'http3', 'httpStrictTransportSecurity', 'imOverride', 'imageAndVideoManager', 'imageManager',
+                                   'imageManagerVideo', 'include', 'inputValidation', 'instant', 'instantConfig', 'largeFileOptimization', 'logCustom', 'mPulse',
+                                   'modifyIncomingRequestHeader', 'modifyIncomingResponseHeader', 'modifyOutgoingRequestHeader', 'modifyOutgoingResponseHeader',
+                                   'networkConditionsHeader', 'origin', 'originCharacteristics', 'originIpAcl', 'permissionsPolicy', 'persistentClientConnection',
+                                   'persistentConnection', 'personallyIdentifiableInformation', 'phasedRelease', 'prefetch', 'prefetchable', 'prefreshCache',
+                                   'quicBeta', 'rapid', 'readTimeout', 'realUserMonitoring', 'redirect', 'redirectplus', 'refererChecking', 'removeQueryParameter',
+                                   'removeVary', 'report', 'requestClientHints', 'requestControl', 'responseCode', 'responseCookie', 'returnCacheStatus',
+                                   'rewriteUrl', 'rumCustom', 'salesForceCommerceCloudClient', 'salesForceCommerceCloudProvider', 'salesForceCommerceCloudProviderHostHeader',
+                                   'savePostDcaProcessing', 'scheduleInvalidation', 'setVariable', 'shutr', 'simulateErrorCode', 'siteShield', 'strictHeaderParsing',
+                                   'sureRoute', 'tcpOptimization', 'teaLeaf', 'tieredDistribution', 'tieredDistributionCustomization', 'timeout', 'validateEntityTag',
+                                   'verifyTokenAuthorization', 'virtualWaitingRoom', 'virtualWaitingRoomWithEdgeWorkers', 'visitorPrioritization', 'visitorPrioritizationFifo',
+                                   'visitorPrioritizationFifoStandalone', 'watermarkUrl', 'webApplicationFirewall', 'webSockets', 'webdav', 'akamaizertag',
+                                   'enableallmethodscacheh', 'allowdelete', 'allowoptions', 'allowpatch', 'allowpost', 'allowput', 'basedir', 'negativettl',
+                                   'cachekeyignorecase', 'cachekeyqueryparams', 'cachekeyrewrite', 'postcaching', 'cache302', 'cachetag', 'cachetagvisible',
+                                   'chaseredirects', 'construct_response', 'cpcode', 'denyaccess', 'dnsasyncrefresh', 'dnsprefresh', 'downstreamcaching',
+                                   'edgeconnect', 'edgeoriginauth', 'gzipresponse', 'largefileoptimizations', 'modincomingreqheader', 'modincomingrespheader',
+                                   'modoutgoingreqheader', 'modoutgoingrespheader', 'clientpconns', 'pconns', 'pii', 'prefetching', 'prefetchableobject', 'cacheprefresh',
+                                   'readtimeout', 'refererchecking', 'removeqsbyname', 'removevary', 'reporting', 'setresponsecode', 'setresponsecookie', 'urlrewrite',
+                                   'save_post_dca_processing', 'scheduledinvalidation', 'sim_error_codes', 'strictheaderparsing', 'sureroute', 'tcpoptimizations',
+                                   'tiereddistribution', 'connecttimeout', 'validateetag', 'centralauth', 'token_auth_verify', 'aic', 'cacheid', 'esi', 'asset_prioritization',
+                                   'conditionalOriginBehavior', 'audience_segmentation', 'conditionalorigin', 'edgescape', 'continuousDeployment', 'edge_redirector',
+                                   'edccacheid', 'edcheader', 'enhancedakamaiprotocol', 'forward_rewrite', 'feo', 'edge_image_converter', 'watermark_tokens', 'imagemanagement',
+                                   'mdc', 'networkconditionsheader', 'cloudinterconnects', 'quicbeta', 'rum', 'rumcustom', 'ip_geo_access', 'breakconnect', 'failaction', 'healthdetect',
+                                   'siteshield', 'virtual_waiting_room', 'virtual_waiting_room_with_edge_workers', 'visitor_prioritization',
+                                   'visitor_prioritization_fifo', 'visitor_prioritization_fifo_standalone', 'waf']
+
+        json2ui_dict = json2ui_behaviorNames()
+        all_behaviors = self.get_all_behaviors(propertyJson, 'behaviors')
+
+        behavior_names = list(set(list(map(lambda x: x['name'], all_behaviors))))
+        behaviors_to_remove = [x for x in behavior_names if x not in dsa_supported_behaviors]
+        comment_override = 'Removed the following behaviors when converting to DSA:'
+        for behavior in behaviors_to_remove:
+            logger.info(f'removing unsupported dsa behavior {behavior}')
+            comment_override = f'{comment_override} {json2ui_dict[behavior.lower()]}, '
+            propertyJson = self.remove_behaviors(propertyJson, 'name', behavior)
+        comment_override = f"{comment_override}\n {propertyJson['comments']}"
+        propertyJson['comments'] = comment_override
+        return propertyJson
+
+    def remove_rule(self, json_data, key, value):
+        """
+        Recursively removes an object from a nested JSON structure based on a key-value pair.
+
+        Parameters:
+        json_data (dict/list): The JSON data, represented as a nested dictionary or list.
+        key (str): The key to be matched.
+        value: The value to be matched with the key.
+
+        Returns:
+        dict/list: The modified JSON data with the specified object removed.
+        """
+
+        if isinstance(json_data, dict):
+            if json_data.get(key) == value:
+                return None  # Remove the object
+            else:
+                return {k: self.remove_rule(v, key, value) for k, v in json_data.items()}
+        elif isinstance(json_data, list):
+            return [self.remove_rule(item, key, value) for item in json_data if self.remove_rule(item, key, value) is not None]
+        else:
+            return json_data
+
+    def get_all_behaviors(self, json_data, target_key):
+        """
+        Recursively searches for all occurrences of a key in a nested JSON and returns their values.
+
+        :param json_data: The JSON object to search through.
+        :param target_key: The key to search for.
+        :return: A list of values for the occurrences of the key.
+        """
+        values_found = []
+        if isinstance(json_data, dict):
+            for key, value in json_data.items():
+                if key == target_key:
+                    values_found.extend(value)
+                if isinstance(value, (dict, list)):
+                    values_found.extend(self.get_all_behaviors(value, target_key))
+
+        elif isinstance(json_data, list):
+            for item in json_data:
+                if isinstance(item, (dict, list)):
+                    values_found.extend(self.get_all_behaviors(item, target_key))
+        return values_found
+
+    def console_hyperlink(self, uri, label=None):
+        if label is None:
+            label = uri
+        parameters = ''
+        escape_mask = '\033]8;{};{}\033\\{}\033]8;;\033\\'
+        return escape_mask.format(parameters, uri, label)
+
+
+def write_xlsx(filepath: str, dict_value: dict,
+            freeze_row: int | None = 1,
+            freeze_column: int | None = 2,
+            show_url: bool | None = True,
+            show_index: bool | None = False,
+            adjust_column_width: bool | None = True) -> None:
+    with pd.ExcelWriter(path=filepath, engine='xlsxwriter',
+                    engine_kwargs={'options': {'strings_to_urls': show_url}}) as writer:
+        writer.book.use_zip64()  # to allow excel to store files larger than 4GB
+        MAX_XLXS_ROW = 1000000   # 1 million rows per sheet
+        MAX_SHEETS = 89          # 89 sheets per excel
+        for sheetname, df in dict_value.items():
+            if df is not None:
+                if len(df.index) <= MAX_XLXS_ROW:
+                    df.to_excel(writer, sheet_name=sheetname,
+                                freeze_panes=(freeze_row, freeze_column),
+                                index=show_index)
+                    if adjust_column_width is True:
+                        auto_adjust_xlsx_column_width(df, writer, sheet_name=sheetname, margin=0,
+                                                    index=show_index)
+                    workbook = writer.book
+                    cell_format = workbook.add_format({'bold': True,
+                                                    'text_wrap': True,
+                                                    'valign': 'top',
+                                                    'align': 'left',
+                                                    'fg_color': 'blue',
+                                                    'border': 1,
+                                                    })
+                    header_format = workbook.add_format({'bold': True,
+                                                        'text_wrap': True,
+                                                        'valign': 'top',
+                                                        'align': 'middle',
+                                                        'fg_color': '#FFC588',  # orange
+                                                        'border': 1,
+                                                        })
+
+                    # Write the column headers with the defined format.
+                    ws = writer.sheets[sheetname]
+                    ws.hide_gridlines()
+                    for col_num, value in enumerate(df.columns.values):
+                        if show_index:
+                            ws.write(0, col_num + 1, value, header_format)
+                        else:
+                            ws.write(0, col_num, value, header_format)
+                    format1 = workbook.add_format({'num_format': '#,##0'})
+                    ws.set_column(2, 2, None, format1)
+                    ws.autofit()
+                else:
+                    total, last_sheet = divmod(len(df.index), MAX_XLXS_ROW)
+                    logger.debug(f'{total=} {last_sheet=} dataset={len(df.index)}')
+                    if last_sheet <= MAX_XLXS_ROW:
+                        for sheet in (n + 1 for n in range(total + 1)):
+                            logger.debug(f'Sheet{sheet}')
+
+                            sheet_no = sheet
+                            logger.info(f'{sheetname}_{sheet_no}')
+                            if sheet == 1:
+                                first_row = 0
+                                last_row = (sheet * MAX_XLXS_ROW) + 1
+                            else:
+                                first_row = last_row + 1
+                                last_row = len(df.index)
+
+                            if sheet == total + 1 and last_sheet > 0:
+                                logger.debug(f'{total=} {sheet_no=} {sheet=}')
+                                sheet_no = total + 1
+                            logger.warning(f'Sheet{sheet}: from {first_row} to {last_row}')
+                            df.iloc[first_row:last_row].to_excel(writer, sheet_name=f'{sheetname}_{sheet_no}')
+
+                            '''
+                            df.to_excel(writer, sheet_name=f'{sheetname}_{sheet_no}',
+                                        freeze_panes=(freeze_row, freeze_column),
+                                        index=show_index)
+                            '''
+                            if adjust_column_width is True:
+                                auto_adjust_xlsx_column_width(df, writer, sheet_name=f'{sheetname}_{sheet_no}',
+                                                        index=show_index)
+
+                            workbook = writer.book
+                            cell_format = workbook.add_format()
+                            cell_format.set_bold()
+                            cell_format.set_font_color('blue')
+                            cell_format.set_text_wrap()
+
+                            header_format = workbook.add_format({'bold': True,
+                                                                'text_wrap': True,
+                                                                'valign': 'top',
+                                                                'align': 'middle',
+                                                                'fg_color': '#FFC588',  # orange
+                                                                'border': 1,
+                                                                })
+
+                            # Write the column headers with the defined format.
+                            ws = writer.sheets[f'{sheetname}_{sheet_no}']
+                            for col_num, value in enumerate(df.columns.values):
+                                if show_index:
+                                    ws.write(0, col_num + 1, value, header_format)
+                                else:
+                                    ws.write(0, col_num, value, header_format)
+
+                            format1 = workbook.add_format({'num_format': '#,##0'})
+                            ws.set_column(2, 2, None, format1)
+                            ws.autofit()
+
+
+def open_excel_application(filepath: str, df: pd.DataFrame | None = None) -> None:
+    if platform.system() == 'Darwin':
+        if len(df.index) > 0:
+            subprocess.check_call(['open', '-a', 'Microsoft Excel', filepath])
+
+
+def split_elements_newline(elements):
+    if isinstance(elements, (list, tuple, dict)):
+        return '\n'.join(map(str, elements))
+    else:
+        return ''
+
+
+def split_elements_newline_withcomma(elements):
+    logger.debug(elements)
+    modified_elements = []
+
+    for i, element in enumerate(elements, start=1):
+        if isinstance(element, dict):
+            modified_elements.append(f'{i}. {json.dumps(element)}')
+        else:
+            if len(elements) == 1:
+                modified_elements.append(f'{str(element)}')
+            else:
+                modified_elements.append(f'{i}. {str(element)}')
+
+    return ',\n'.join(modified_elements)
+
+
+def json2ui_behaviorNames():
+    return (
+        {
+            'mediaclient': 'Media Client',
+            'denyaccess': 'Control Access',
+            'advanced': 'Advanced',
+            'adaptiveimagecompression': 'Adaptive Image Compression',
+            'akamaizer': 'Akamaizer',
+            'mediaacceleration': 'Media Acceleration',
+            'mediaaccelerationquicoptout': 'Media Acceleration (QUIC Protocol) Opt-Out\n',
+            'akamaizertag': 'Akamaize Tag',
+            'allowdelete': 'Allow DELETE',
+            'allowpatch': 'Allow PATCH',
+            'allowput': 'Allow PUT',
+            'allowpost': 'Allow POST',
+            'allowoptions': 'Allow OPTIONS',
+            'allowtransferencoding': 'Chunked Transfer Encoding',
+            'watermarkurl': 'Watermark Token',
+            'edgeimageconversion': 'Image Converter Settings',
+            'allhttpincachehierarchy': 'Allow All Methods on Parent Servers',
+            'cachekeyignorecase': 'Ignore Case In Cache Key',
+            'cachekeyqueryparams': 'Cache Key Query Parameters',
+            'cachekeyrewrite': 'Cache Key Path Rewrite (Beta)',
+            'caching': 'Caching',
+            'prefreshcache': 'Cache Prefreshing',
+            'cacheid': 'Cache ID Modification',
+            'cachetagvisible': 'Cache Tag Visibility',
+            'cachetag': 'Cache Tag',
+            'chaseredirects': 'Chase Redirects',
+            'devicecharacteristiccacheid': ' Device Characterization - Define Cached Content',
+            'devicecharacteristicheader': ' Device Characterization - Forward in Header',
+            'centralauthorization': 'Centralized Authorization',
+            'edgeredirector': 'Edge Redirector Cloudlet',
+            'visitorprioritization': 'Visitor Prioritization Cloudlet',
+            'requestcontrol': 'Request Control Cloudlet',
+            'forwardrewrite': 'Forward Rewrite Cloudlet',
+            'apiprioritization': 'API Prioritization Cloudlet',
+            'audiencesegmentation': 'Audience Segmentation Cloudlet',
+            'phasedrelease': 'Phased Release Cloudlet',
+            'applicationloadbalancer': 'Application Load Balancer Cloudlet',
+            'visitorprioritizationfifo': 'Virtual Waiting Room (Beta)',
+            'virtualwaitingroom': 'Virtual Waiting Room',
+            'visitorprioritizationfifostandalone': 'Virtual Waiting Room with EdgeWorkers (Beta)',
+            'virtualwaitingroomwithedgeworkers': 'Virtual Waiting Room with EdgeWorkers',
+            'cpcode': 'Content Provider Code',
+            'downstreamcache': 'Downstream Cacheability',
+            'dnsasyncrefresh': 'DNS Asynchronous Refresh',
+            'dnsprefresh': 'DNS Prefresh',
+            'edgeoriginauthorization': 'Edge Server Identification',
+            'edgeoriginsignatureauth': '',
+            'edgescape': 'Content Targeting (EdgeScape)',
+            'edgesideincludes': 'ESI (Edge Side Includes)',
+            'failaction': 'Site Failover',
+            'instantconfig': 'InstantConfig',
+            'mediafileretrievaloptimization': ' Media File Retrieval Optimization',
+            'mobilesdkperformance': 'Mobile App Performance SDK',
+            'rapid': 'Akamai API Gateway',
+            'modifyincomingrequestheader': 'Modify Incoming Request Header',
+            'modifyincomingresponseheader': 'Modify Incoming Response Header',
+            'modifyoutgoingrequestheader': 'Modify Outgoing Request Header',
+            'modifyoutgoingresponseheader': 'Modify Outgoing Response Header',
+            'gzipresponse': 'Last Mile Acceleration (Gzip Compression)',
+            'healthdetection': 'Origin Health Detection',
+            'instant': 'Akamai Instant (Prefetching)',
+            'netsession': 'NetSession',
+            'networkconditionsheader': 'Network Conditions Header',
+            'predictivecontentdelivery': 'Predictive Content Delivery',
+            'originfailurerecoverymethod': ' Origin Failure Recovery Method',
+            'originfailurerecoverypolicy': ' Origin Failure Recovery Policy',
+            'mediaoriginfailover': 'Media Origin Failover',
+            'conditionalorigin': 'Conditional Origin',
+            'origin': 'Origin Server',
+            'dummy-this-warning-should-appear-whenever-the-if-clause-is-satisfied': '',
+            'cloudwrapper': 'Cloud Wrapper',
+            'cloudwrapperadvanced': 'Cloud Wrapper Advanced',
+            'origincharacteristics': 'Origin Characteristics',
+            'clientcharacteristics': 'Client Characteristics',
+            'contentcharacteristics': 'Content Characteristics',
+            'contentcharacteristicsdd': 'Content Characteristics',
+            'contentcharacteristicsamd': 'Content Characteristics',
+            'origincharacteristicswsd': 'Origin Characteristics',
+            'dynamicwebcontent': 'Content Characteristics - Dynamic Web Content',
+            'contentcharacteristicswsdlargefile': 'Content Characteristics - Large File',
+            'contentcharacteristicswsdvod': 'Content Characteristics - Streaming Video On-demand',
+            'contentcharacteristicswsdlive': 'Content Characteristics - Streaming Video Live',
+            'persistentconnection': 'Persistent Connections: Edge to Origin',
+            'cachepost': 'Cache POST Responses',
+            'enhancedproxydetection': 'Enhanced Proxy Detection with GeoGuard',
+            'watermarking': 'Watermarking',
+            'hsafeipbinding': 'HSAF for Edge IP Binding',
+            'breadcrumbs': 'Breadcrumbs',
+            'dynamicadinsertion': 'Dynamic Ad Insertion',
+            'dynamicthroughtputoptimization': 'Quick Retry',
+            'dynamicthroughtputoptimizationoverride': 'Quick Retry Override',
+            'contenttargetingprotection': 'Content Targeting - Protection',
+            'manifestpersonalization': 'Manifest Personalization',
+            'autodomainvalidation': 'Auto Domain Validation',
+            'httptohttpsupgrade': 'HTTP to HTTPS Upgrade',
+            'standardtlsmigration': 'Standard TLS Migration',
+            'standardtlsmigrationoverride': 'Standard TLS Migration Override',
+            'allowhttpscachekeysharing': 'HTTPS Cache Key Sharing',
+            'allowhttpsdowngrade': 'Protocol Downgrade (HTTPS Downgrade to Origin)',
+            'downgradeprotocol': 'Protocol Downgrade',
+            'persistentclientconnection': 'Persistent Connections: Client to Edge',
+            'largefileoptimization': 'Large File Optimization',
+            'largefileoptimizationadvanced': 'Large File Optimization (Advanced)',
+            'logcustom': 'Log Custom Details',
+            'predictiveprefetching': 'Predictive Prefetching',
+            'prefetchable': 'Prefetchable Objects',
+            'prefetch': 'Prefetch Objects',
+            'quality': 'Delivery Optimizations',
+            'randomseek': 'Random Seek',
+            'readtimeout': 'Read Timeout',
+            'timeout': 'Connect Timeout',
+            'redirect': 'Redirect',
+            'redirectplus': 'Redirect Plus',
+            'removequeryparameter': 'Remove Outgoing Request Parameters',
+            'removevary': 'Remove Vary Header',
+            'report': 'Log Request Details',
+            'savepostdcaprocessing': 'Save POST DCA processing result',
+            'scheduleinvalidation': 'Scheduled Invalidation',
+            'responsecode': 'Set Response Code',
+            'responsecookie': 'Set Response Cookie',
+            'shutr': 'SHUTR',
+            'subcustomer': 'Subcustomer Enablement',
+            'sureroute': 'SureRoute',
+            'spdy': 'SPDY',
+            'http2': 'HTTP/2',
+            'tcpoptimization': 'TCP Optimizations',
+            'fips': 'FIPS mode - origin',
+            'http3': 'HTTP/3',
+            'requestclienthints': 'Request Client Hints',
+            'permissionspolicy': 'Permissions-Policy',
+            'altsvcheader': 'Alt-Svc Header',
+            'rmaoptimization': 'RMA Optimizations (RMA)',
+            'tiereddistribution': 'Tiered Distribution',
+            'tiereddistributionadvanced': 'Tiered Distribution (Advanced)',
+            'modifyviaheader': 'Modify Via Header',
+            'rewriteurl': 'Modify Outgoing Request Path',
+            'validateentitytag': 'Validate Entity Tag (ETag)',
+            'webapplicationfirewall': 'Web Application Firewall (WAF)',
+            'cacheerror': 'Cache HTTP Error Responses',
+            'cacheredirect': 'Cache HTTP Temporary Redirects',
+            'restrictobjectcaching': 'Object Caching',
+            'basedirectory': 'Origin Base Path',
+            'breakconnection': 'Break Forward Connection',
+            'personallyidentifiableinformation': 'Personally Identifiable Information (PII)',
+            'siteshield': 'SiteShield',
+            'frontendoptimization': 'Front-End Optimization (FEO)',
+            'brotli': 'Brotli Support',
+            'quicbeta': 'QUIC Support (Beta)',
+            'imagemanagervideo': 'Image and Video Manager (Videos)',
+            'resourceoptimizer': 'Resource Optimizer',
+            'resourceoptimizerextendedcompatibility': 'Resource Optimizer Extended Compatibility',
+            'brotlicompression': 'Brotli Compression',
+            'scriptmanagement': 'Script Management',
+            'websockets': 'WebSockets',
+            'enhancedakamaiprotocol': 'Enhanced Akamai Protocol',
+            'realusermonitoring': 'Real User Monitoring (RUM)',
+            'rumcustom': 'RUM SampleRate',
+            'edgeloadbalancingorigin': 'Edge Load Balancing: Origin Definition',
+            'edgeloadbalancingadvanced': 'Edge Load Balancing: Advanced Metadata',
+            'edgeloadbalancingdatacenter': 'Edge Load Balancing: Data Center',
+            'edgeconnect': 'Cloud Monitor Instrumentation',
+            'deliveryreceipt': 'Cloud Monitor Data Delivery',
+            'verifytokenauthorization': 'Auth Token 2.0 Verification',
+            'limitbitrate': '',
+            'refererchecking': 'Legacy Referrer Checking',
+            'webdav': 'WebDAV',
+            'simulateerrorcode': 'Simulate Error Response Code',
+            'g2oheader': 'Signature Header Authentication',
+            'segmentedmediaoptimization': 'Segmented Media Delivery Mode',
+            'segmentedcontentprotection': 'Segmented Media Protection',
+            'hddataadvanced': 'HD Data Override: Advanced Metadata',
+            'constructresponse': 'Construct Response',
+            'fastinvalidate': 'Fast Invalidate (Safe to remove)',
+            'saasdefinitions': 'SaaS Definitions',
+            'salesforcecommercecloudprovider': 'Akamai Provider for Salesforce Commerce Cloud',
+            'salesforcecommercecloudproviderhostheader': 'Akamai Provider for Salesforce Commerce Cloud Host Header Control',
+            'salesforcecommercecloudclient': 'Akamai Connector for Salesforce Commerce Cloud',
+            'manifestrerouting': 'Manifest Rerouting',
+            'adscalercircuitbreaker': 'Ad Scaler Circuit Breaker',
+            'imagemanager': 'Image and Video Manager (Images)',
+            'imoverride': 'Image and Video Manager: Set Parameter',
+            'setvariable': 'Set Variable',
+            'allowcloudletsorigins': 'Allow Conditional Origins',
+            'inputvalidation': 'Input Validation Cloudlet',
+            'firstpartymarketing': 'Cloud Marketing Cloudlet (Beta)',
+            'firstpartymarketingplus': 'Cloud Marketing Plus Cloudlet (Beta)',
+            'injectreferenceid': 'Inject Reference ID',
+            'denydirectfailoveraccess': 'Security Failover Protection',
+            'adaptiveacceleration': 'Adaptive Acceleration',
+            'preconnect': 'Manual Preconnect',
+            'manualserverpush': 'Manual Server Push',
+            'tealeaf': 'IBM Tealeaf Connector',
+            'dcp': 'IoT Edge Connect',
+            'dcpdevrelations': 'IoT Edge Connect Dev Relations',
+            'dcpdefaultauthzgroups': 'Default Authorization Groups',
+            'dcpauthhmactransformation': 'Variable Hash Transformation',
+            'dcpauthregextransformation': 'Variable Regex Transformation',
+            'dcpauthsubstringtransformation': 'Variable Substring Transformation',
+            'dcpauthvariableextractor': 'Mutual Authentication',
+            'uidconfiguration': 'UID Configuration',
+            'aggregatedreporting': 'Aggregated Reporting',
+            'requesttypemarker': 'Request Type Marker',
+            'downloadcompletemarker': 'Download Complete Marker',
+            'downloadnotification': 'Download Notification',
+            'custombehavior': 'Custom Behavior',
+            'bossbeaconing': 'Diagnostic data beacons (Ex. BOSS)',
+            'mpulse': 'mPulse',
+            'graphqlcaching': 'GraphQL Caching',
+            'httpstricttransportsecurity': 'HTTP Strict Transport Security (HSTS)',
+            'datastream': 'DataStream',
+            'verifyjsonwebtoken': 'JWT verification',
+            'verifyjsonwebtokenfordcp': 'JWT',
+            'ecmsdatabase': 'Message Store database selection',
+            'ecmsdataset': 'Message Store data set selection',
+            'ecmsobjectkey': 'Message Store object key selection',
+            'ecmsbulkupload': 'Message Store bulk upload',
+            'edgeworker': 'EdgeWorkers',
+            'segmentedmediastreamingprefetch': 'Segmented Media Streaming - Prefetch',
+            'commonmediaclientdata': 'Common Media Client Data support',
+            'enforcemtlssettings': 'Enforce mTLS settings',
+            'clientcertificateauth': 'Client Certificate Authentication',
+            'realtimereporting': 'Real-time Reporting',
+            'failoverbotmanagerfeaturecompatibility': 'Security Failover Feature Compatibility',
+            'globalrequestnumber': 'Global Request Number',
+            'returncachestatus': 'Return Cache Status',
+            'tiereddistributioncustomization': 'Tiered Distribution Customization',
+            'metadatacaching': 'Metadata Caching',
+            'dcprealtimeauth': 'Real time authentication',
+            'cloudinterconnects': 'Cloud Interconnects for Google Cloud (GCP)',
+            'originipacl': 'Origin IP Access Control List',
+            'epdforwardheaderenrichment': 'Enhanced Proxy Detection with GeoGuard - Forward Header Enrichment',
+            'include': 'Include',
+            'strictheaderparsing': 'Strict Header Parsing'
+        }
+    )

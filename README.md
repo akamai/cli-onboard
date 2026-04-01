@@ -49,6 +49,8 @@ This CLI has 4 command types for onboarding new properties:
 - [appsec-update](#appsec-update)
 - [appsec-remove](#appsec-remove)
 - [sbd-precheck](#sbd-precheck)
+- [sbd-status](#sbd-status)
+- [convert](#convert)
 
 # create
 
@@ -574,6 +576,14 @@ cdn-srv24.cdn.sample.com,property_2230960,Download_Delivery
 ```
 
 </details>
+
+# sbd-status
+
+Verify if there are any stalled or dangling Default DV certificates on the account.
+
+```bash
+akamai onboard sbd-status
+```
 
 # Contribution
 

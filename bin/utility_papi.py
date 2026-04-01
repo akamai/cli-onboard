@@ -9,11 +9,13 @@ from pathlib import Path
 from time import gmtime
 from time import strftime
 
+import util_emojis as emoji
 from exceptions import setup_logger
 from poll import pollActivation
 from rich import print_json
 
 logger = setup_logger()
+space = ' '
 
 
 class papiFunctions:
@@ -107,6 +109,32 @@ class papiFunctions:
             logger.error(json.dumps(create_cpcode_response.json(), indent=4))
             sys.exit(logger.error('Unable to create new cpcode'))
         return int(new_cpcode)
+
+    def search_for_cpcode(self, onboard_object, wrapper_object,
+                        cpcode_name, contract_id, group_id, product_id, path=None) -> int:
+        """
+        Function to create new cpcode
+        """
+        special_characters = ['"', '^', '_', ',', '#', '%', "'", '\\']
+        for i in special_characters:
+            cpcode_name = cpcode_name.replace(i, '.')
+        search_cpcode_response = wrapper_object.searchCpcode(contract_id,
+                                                             group_id, product_id, cpcode_name)
+        logger.debug(json.dumps(search_cpcode_response.json(), indent=4))
+        existing_cpcode = 0
+        if search_cpcode_response.ok:
+            existing_cpcode_count = len(search_cpcode_response.json()['cpcodes'])
+            if existing_cpcode_count > 0:
+                existing_cpcode = search_cpcode_response.json()['cpcodes'][0]['cpcodeId']
+                onboard_object.onboard_default_cpcode = int(existing_cpcode)
+                if path:
+                    logger.info(f'{space}{space}{emoji.point_right} Existing cpcode found: {existing_cpcode} for path: {path}')
+                else:
+                    logger.info(f'{space}{space}{emoji.point_right} Existing cpcode found: {existing_cpcode}')
+        else:
+            logger.error(json.dumps(search_cpcode_response.json(), indent=4))
+            sys.exit(logger.error('Unable to search for existing cpcode'))
+        return int(existing_cpcode)
 
     def create_update_pm(self, config, onboard_object, wrapper_object, utility_object, cli_mode: str | None = None):
         """
@@ -428,6 +456,246 @@ class papiFunctions:
 
         return (propertyIds)
 
+    def batch_create_update_pm_convert(self, config,
+                                       onboard_object,
+                                       papi,
+                                       propertyDict,
+                                       dryrun: bool | None = False) -> list:
+        """
+        Function with multiple goals:
+            1. Create a property
+            2. Create shared certed hostname (akamized.net)
+            3. Prep public hostname
+            4. Update property public hostname
+            5. Update the property with template rules define
+        """
+        propertyIds = []
+        skip_property = []
+        custom_solution = False
+
+        for propertyName in propertyDict:
+            propertyDict[propertyName]['error_flags'] = []
+            # set property name and hostnames the dict key value
+            '''
+            CHECK IF HOSTNAME ALREADY ON EXISTSING PROPERTY
+            '''
+            hostnames_to_onboard = []
+            onboard_object.public_hostname = propertyDict[propertyName]['hostnames']
+            for hostname in onboard_object.public_hostname:
+                hostname_exists = papi.search_property_by_hostname(hostname)
+                if hostname_exists:
+                    logger.warning(f"{emoji.pass_green} Hostname already on existing property: '{hostname_exists['propertyName']}")
+                    print()
+                    print('_' * 120)
+                    print()
+                    logger.warning('Do you want to skip this hostname? (yes/no)')
+                    print('_' * 120)
+                    string = str(input())
+                    skip_hostname_variables = ['yes', 'y', 'Y', 'YES', 'Yes']
+                    if string in skip_hostname_variables:
+                        logger.warning(f'{emoji.ok_hand} Skipping hostname')
+                        print()
+                        continue
+                    else:
+                        hostnames_to_onboard.append(hostname)
+                else:
+                    hostnames_to_onboard.append(hostname)
+
+            onboard_object.property_name = propertyName
+            # 1. Create a property
+            logger.debug(f'{propertyName=} {onboard_object.group_id=}')
+            if onboard_object.group_id is None:
+                logger.debug(f"{propertyDict[propertyName].keys()=}")
+                onboard_object.group_id = propertyDict[propertyName]['group']
+                custom_solution = True
+
+            if not dryrun:
+                create_resp = papi.createProperty(onboard_object.contract_id,
+                                                  onboard_object.group_id,
+                                                  propertyDict[propertyName]['product'],
+                                                  onboard_object.property_name)
+                if create_resp.ok:
+                    onboard_object.onboard_property_id = create_resp.json()['propertyLink'].split('?')[0].split('/')[-1]
+                    onboard_object.public_hostname = hostnames_to_onboard
+                    propertyIds.append({
+                        'propertyId': onboard_object.onboard_property_id,
+                        'propertyName': onboard_object.property_name,
+                        'hostnames': onboard_object.public_hostnames
+                    })
+
+                    logger.warning(f'{emoji.pass_green} Created property id: {onboard_object.onboard_property_id}, property name: {onboard_object.property_name}')
+                elif create_resp.status_code == 429:
+                    logger.critical('Hit rate limit when creating property, skipping property for now')
+                    propertyDict[propertyName]['error_flags'].append('rate_limit_create')
+                    skip_property.append(onboard_object.onboard_property_id)
+                    logger.critical(f'{space}{emoji.stop}{emoji.stop} Property requires manual intervention! {space}{emoji.stop}{emoji.stop}')
+                    logger.info(f'{space}{emoji.pencil} Unable to create property due to rate limit')
+                    continue
+
+                else:
+                    # branch
+                    logger.debug(create_resp.json().keys())
+                    print_json(data=create_resp.json())
+                    logger.critical('Unable to create property')
+
+                    try:
+                        errors = [err for err in create_resp.json()['errors']]
+                    except:
+                        errors = ['unknown error during create']
+
+                    propertyDict[propertyName]['error_flags'].extend(errors)
+                    skip_property.append(onboard_object.onboard_property_id)
+                    logger.critical(f'{space}{emoji.stop}{emoji.stop} Property requires manual intervention! {space}{emoji.stop}{emoji.stop}')
+                    logger.info(f'{space}{emoji.pencil} Unable to create property')
+                    continue
+
+                # 2. Create shared certed hostname (akamized.net)
+                onboard_object.public_hostnames = propertyDict[propertyName]['hostnames']
+                logger.debug(onboard_object.public_hostnames)
+                logger.debug(propertyDict[propertyName]['edgeHostnames'])
+
+                try:
+                    x = propertyDict[propertyName]['secureNetwork']
+                except:
+                    x = 0
+
+                if x == 0:
+                    secure_by_default = False
+                    secure_by_default_create_ehn = False
+                    if onboard_object.edge_hostname_mode == 'secure_by_default':
+                        secure_by_default = True
+                    edgehostname_list = papi.bulkCreateEdgehostnameArray(onboard_object.public_hostnames,
+                                                                         propertyDict[propertyName]['edgeHostnames'],
+                                                                         secure_by_default,
+                                                                         secure_by_default_create_ehn)
+                else:
+                    shared_ehn_list, all_edgehostnames = papi.create_edge_hostname(onboard_object.public_hostnames,
+                                                                                   propertyDict[propertyName]['product'],
+                                                                                   onboard_object.contract_id,
+                                                                                   onboard_object.group_id,
+                                                                                   onboard_object.secure_network,
+                                                                                   propertyDict[propertyName]['secureNetwork'],
+                                                                                   option=onboard_object.ehn_option)
+                    shared_ehns = []
+                    for ehn in shared_ehn_list:
+                        for key, value in ehn.items():
+                            try:
+                                ehn_id = value['edgeHostnameId']
+                                if ehn_id != -1:
+                                    shared_ehns.append(
+                                        papi.get_edge_hostname(ehn_id,
+                                                               onboard_object.contract_id,
+                                                               onboard_object.group_id))
+                            except KeyError:
+                                logger.error(print_json(data=ehn))
+                    if len(shared_ehns) > 0:
+                        shared = [x['edgeHostnameDomain'] for x in shared_ehns]
+                        if len(shared) > 0:
+                            logger.debug('create shared cert edge hostname')
+                            logger.debug(shared)
+                            for i, each_share in enumerate(shared, start=1):
+                                logger.info(f'{space}{emoji.blue_globe} akamaized: {i:>3}. {each_share}')
+
+                    # 3. Prep public hostname
+                    edgehostname_list = [x for x in all_edgehostnames if x['certProvisioningType'] == 'DEFAULT']
+                    logger.debug('edge hostname to be created with property manager activation')
+                    # print_json(data=edgehostname_list)
+
+                    for edge in edgehostname_list:
+                        del edge['productId']
+                        del edge['ipVersionBehavior']
+                        edge_copy = edge.copy()
+                        for key, value in edge_copy.items():
+                            if key == 'domainPrefix':
+                                edge['cnameFrom'] = edge.pop('domainPrefix')
+                            if key == 'domainSuffix':
+                                edge['cnameTo'] = edge.pop('domainSuffix')
+                                edge['cnameTo'] = f"{edge['cnameFrom']}.{edge['cnameTo']}"
+                    logger.debug('rename dictionary key')
+                    # print_json(data=edgehostname_list)
+
+                # 4. Update the property public hostname
+                hostname_resp = papi.updatePropertyHostname(onboard_object.contract_id,
+                                                            onboard_object.group_id,
+                                                            onboard_object.onboard_property_id,
+                                                            json.dumps(edgehostname_list))
+                if hostname_resp.ok:
+                    update_resp = hostname_resp.json()
+                    if onboard_object.edge_hostname_mode == 'secure_by_default':
+                        for hostname in update_resp['hostnames']['items']:
+                            property_update_response_sbd_token = hostname['certStatus']['validationCname']
+                            logger.info(f'{space}{emoji.home} hostname:    {hostname['cnameFrom']}')  # noqa
+                            logger.info(f'{space}{emoji.key} sbd_record:  {property_update_response_sbd_token['hostname']}')   # noqa
+                            logger.info(f'{space}{emoji.dart} sbd_target:  {property_update_response_sbd_token['target']}')   # noqa
+                            print()
+                    else:
+                        logger.info(f'Updated public hostname {onboard_object.public_hostnames}')
+                        logger.info(f"Updated edge hostname   {propertyDict[propertyName]['edgeHostnames']}")
+                else:
+                    # branch
+                    try:
+                        errors = [err for err in hostname_resp.json()['errors']]
+                    except:
+                        errors = ['unknown error during property update']
+
+                    propertyDict[propertyName]['error_flags'].extend(errors)
+                    skip_property.append(onboard_object.onboard_property_id)
+                    logger.critical(f'{space}{emoji.stop}{emoji.stop} Property requires manual intervention! {space}{emoji.stop}{emoji.stop}')
+                    logger.info(f'{space}{emoji.pencil} Unable to update public hostname {onboard_object.public_hostnames}, '
+                                f"and edge hostname '{propertyDict[propertyName]['edgeHostnames']}'")
+                    print()
+                    continue
+
+                # 5. Update the property with template rules define
+                updateContent = propertyDict[propertyName]['ruleTree']
+
+                if onboard_object.secure_network == 'ENHANCED_TLS':
+                    updateContent['rules']['options'] = dict()
+                    updateContent['rules']['options']['is_secure'] = True
+                else:
+                    # This is a non-secure configuration
+                    updateContent['rules']['options'] = dict()
+                    updateContent['rules']['options']['is_secure'] = False
+                updateContent['comments'] = propertyDict[propertyName]['comments']
+                updateContent['ruleFormat'] = onboard_object.rule_format
+
+                comment_flags = ['secret key', 'non-converted', 'contains stage incompatible behaviors and criteria']
+                for comment in comment_flags:
+                    if comment in updateContent['comments']:
+                        logger.critical(f'{space}{emoji.stop}{emoji.stop} Property requires manual intervention! {space}{emoji.stop}{emoji.stop}')
+                        logger.info(f'{space}{emoji.pencil} Comment: {updateContent['comments']}')
+                        propertyDict[propertyName]['error_flags'].append(comment)
+                        skip_property.append(onboard_object.onboard_property_id)
+                        continue
+
+                rules_resp = papi.updatePropertyRules(onboard_object.contract_id,
+                                                      onboard_object.group_id,
+                                                      onboard_object.onboard_property_id,
+                                                      onboard_object.rule_format,
+                                                      ruletree=json.dumps(updateContent))
+                if not rules_resp.ok:
+                    logger.error(f'{rules_resp} {rules_resp.text}')
+                errors = []
+                if not rules_resp.ok:
+                    try:
+                        errors = [err['detail'] for err in rules_resp.json()['errors']]
+                    except KeyError:
+                        errors = ['unknown error during property rule update']
+                    unique_error = list(set(errors))
+                    print(*unique_error, sep='\n')
+                    propertyDict[propertyName]['error_flags'].extend(list(set(errors)))
+                    skip_property.append(onboard_object.onboard_property_id)
+                    logger.debug(propertyDict[propertyName]['error_flags'])
+                    logger.critical(f'{space}{emoji.stop}{emoji.stop} Property requires manual intervention! {space}{emoji.stop}{emoji.stop}')
+                    logger.info(f'{space}{emoji.pencil} Unable to update rules')
+                    print()
+
+            # reset
+            if custom_solution:
+                onboard_object.group_id = None
+
+        return (propertyIds, skip_property)
+
     def reset_level_0_rules(self, onboard_object):
         home = str(Path.home())
         cli_path = f'{home}/.akamai-cli/src/cli-onboard/templates/akamai_product_templates/behaviors'
@@ -449,3 +717,92 @@ class papiFunctions:
         for i, chunk in enumerate(chunks):
             logger.debug(chunk)
             onboard_object.acme_challenges.extend(wrapper_object.get_acme_tokens(chunk))
+
+    def get_level1_rulename(self, current_rule: dict) -> list:
+        rule_name = [rule['name'] for rule in current_rule['rules']['children']]
+        return rule_name
+
+    def inject_cpcode_behavior(self, single_rule: dict, cpcode_value: int) -> dict:
+        """
+        inject cpcode behavior to a single rule
+        """
+        cpcode_behavior = self.get_behavior_template('cpCode')
+        cpcode_behavior['options']['value']['id'] = cpcode_value
+        original_behavior = single_rule['behaviors']
+        found = False
+        for i, behave in enumerate(original_behavior):
+            if behave['name'] == 'cpCode':
+                original_behavior[i] = cpcode_behavior
+                found = True
+        if not found:
+            original_behavior.insert(0, cpcode_behavior)
+        single_rule['behaviors'] = original_behavior
+        return single_rule
+
+    def get_path_value(self, single_rule: dict) -> str:
+        if len(single_rule['criteria']) > 0:
+            for each_criteria in single_rule['criteria']:
+                if each_criteria['name'] == 'path':
+                    return each_criteria['options']['values'][0]
+        return None
+
+    def get_level1_rule(self, current_rule: dict, rulename: str) -> list:
+        for member in current_rule['rules']['children']:
+            if member['name'] == rulename:
+                return member
+
+    def get_level1_rule_count(self, current_rule: dict) -> list:
+        rule_name = [rule['name'] for rule in current_rule['rules']['children']]
+        return len(rule_name)
+
+    def rebuild_level1_ruletree(self, ruletree_template: dict, behavior: str) -> dict:
+        level1_rulename = self.get_level1_rulename(ruletree_template)
+        all_child_rules = []
+        template = self.get_behavior_template_location(behavior)
+        for each_rulename in level1_rulename:
+            single_rule_json = self.get_level1_rule(ruletree_template, each_rulename)
+            path = self.get_path_value(single_rule_json)
+            if path:
+                # cpcode = # create cpcode
+                update_single_rule_json = self.inject_cpcode_behavior(single_rule_json, 1235, template)
+                all_child_rules.append(update_single_rule_json)
+        ruletree_template['children'] = all_child_rules
+        return ruletree_template
+
+    def get_behavior_template(self, behavior_name: str):
+        home = str(Path.home())
+        cli_path = f'{home}/.akamai-cli/src/cli-onboard/templates/akamai_product_templates/behaviors'
+
+        if not Path(cli_path).exists():
+            cli_path = 'templates/akamai_product_templates/behaviors'
+        template_file = f'{cli_path}/{behavior_name}.json'
+        behavior_json = {}
+        try:
+            with open(template_file) as file:
+                behavior_json = json.load(file)
+        except FileNotFoundError as e:
+            print(e)
+        return behavior_json
+
+    def get_behavior_template_location(self, behavior_name: str):
+        home = str(Path.home())
+        cli_path = f'{home}/.akamai-cli/src/cli-onboard/templates/akamai_product_templates/behaviors'
+        if not Path(cli_path).exists():
+            cli_path = 'templates/akamai_product_templates/behaviors'
+        template_file = f'{cli_path}/{behavior_name}.json'
+        if Path(template_file).exists():
+            return template_file
+        else:
+            return ''
+
+    def get_active_staging_version(self, versions: list):
+        for version in versions:
+            if version['stagingStatus'] == 'ACTIVE':
+                version = version['propertyVersion']
+                return version
+
+    def get_active_production_version(self, versions: list):
+        for version in versions:
+            if version['productionStatus'] == 'ACTIVE':
+                version = version['propertyVersion']
+                return version
