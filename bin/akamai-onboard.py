@@ -56,7 +56,7 @@ from rich import print
 from rich.console import Console
 from tabulate import tabulate
 
-PACKAGE_VERSION = '2.5.0'
+PACKAGE_VERSION = '2.5.1'
 logger = setup_logger()
 root = get_cli_root_directory()
 dir = get_cli_execution_directory()
@@ -130,7 +130,7 @@ def init_config(config):
 @pass_config
 def cli(config, edgerc, section, account_key):
     '''
-    Akamai CLI for onboarding properties v2.5.0
+    Akamai CLI for onboarding properties v2.5.1
     '''
     config.edgerc = edgerc
     config.section = section
