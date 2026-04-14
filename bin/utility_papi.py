@@ -94,17 +94,23 @@ class papiFunctions:
         return (all_properties_active, success_onboarded_hostnames, failed_activations, activationDict)
 
     def create_new_cpcode(self, onboard_object, wrapper_object,
-                        cpcode_name, contract_id, group_id, product_id) -> int:
+                        cpcode_name, contract_id, group_id, product_id, path=None) -> int:
         """
         Function to create new cpcode
         """
+        special_characters = ['"', '^', '_', ',', '#', '%', "'", '\\']
+        for i in special_characters:
+            cpcode_name = cpcode_name.replace(i, '.')
         create_cpcode_response = wrapper_object.createCpcode(contract_id,
                                                              group_id, product_id, cpcode_name)
         logger.debug(json.dumps(create_cpcode_response.json(), indent=4))
-        if create_cpcode_response.status_code == 201:
+        if create_cpcode_response.ok:
             new_cpcode = create_cpcode_response.json()['cpcodeLink'].split('?')[0].split('/')[-1].replace('cpc_', '')
             onboard_object.onboard_default_cpcode = int(new_cpcode)
-            logger.info(f"Created new cpcode: '{cpcode_name}', id: {new_cpcode}")
+            if path:
+                logger.info(f'{space}{space}{emoji.point_right} New cpcode: {new_cpcode:<37}{path}')
+            else:
+                logger.info(f'{space}{space}{emoji.point_right} New cpcode: {new_cpcode:<37}{cpcode_name}')
         else:
             logger.error(json.dumps(create_cpcode_response.json(), indent=4))
             sys.exit(logger.error('Unable to create new cpcode'))
@@ -673,6 +679,7 @@ class papiFunctions:
                                                       ruletree=json.dumps(updateContent))
                 if not rules_resp.ok:
                     logger.error(f'{rules_resp} {rules_resp.text}')
+                    print(rules_resp.headers)
                 errors = []
                 if not rules_resp.ok:
                     try:

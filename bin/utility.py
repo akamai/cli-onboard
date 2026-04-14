@@ -16,11 +16,9 @@ from time import gmtime
 from time import strftime
 from urllib import parse
 
-import openpyxl
 import pandas as pd
 import util_emojis as emoji
 from cerberus import Validator
-from distutils.dir_util import copy_tree
 from exceptions import get_cli_root_directory
 from exceptions import setup_logger
 from jsonschema import validate
