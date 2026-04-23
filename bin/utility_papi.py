@@ -481,25 +481,23 @@ class papiFunctions:
             '''
             hostnames_to_onboard = []
             onboard_object.public_hostname = propertyDict[propertyName]['hostnames']
-            for hostname in onboard_object.public_hostname:
-                hostname_exists = papi.search_property_by_hostname(hostname)
-                if hostname_exists:
-                    logger.warning(f"{emoji.pass_green} Hostname already on existing property: '{hostname_exists['propertyName']}")
+            # Check if property name already exists (single API call per property
+            # instead of per-hostname search_property_by_hostname calls)
+            property_exists = papi.property_exists(propertyName)
+            if property_exists:
+                logger.warning(f"{emoji.pass_green} Property already exists: '{propertyName}'")
+                print()
+                print('_' * 120)
+                print()
+                logger.warning('Do you want to skip this property? (yes/no)')
+                print('_' * 120)
+                string = str(input())
+                skip_hostname_variables = ['yes', 'y', 'Y', 'YES', 'Yes']
+                if string in skip_hostname_variables:
+                    logger.warning(f'{emoji.ok_hand} Skipping property')
                     print()
-                    print('_' * 120)
-                    print()
-                    logger.warning('Do you want to skip this hostname? (yes/no)')
-                    print('_' * 120)
-                    string = str(input())
-                    skip_hostname_variables = ['yes', 'y', 'Y', 'YES', 'Yes']
-                    if string in skip_hostname_variables:
-                        logger.warning(f'{emoji.ok_hand} Skipping hostname')
-                        print()
-                        continue
-                    else:
-                        hostnames_to_onboard.append(hostname)
-                else:
-                    hostnames_to_onboard.append(hostname)
+                    continue
+            hostnames_to_onboard = list(onboard_object.public_hostname)
 
             onboard_object.property_name = propertyName
             # 1. Create a property

@@ -592,53 +592,33 @@ class utility:
         msg = f'{onboard_object.edge_hostname_mode}{space:>{width}}'
         logger.info(f'{space}{emoji.pushpin} {msg}edge hostname mode')
 
+        # Validate edge hostname format locally (no HAPI API calls)
+        # PAPI will validate on hostname assignment, and SBD creates missing edge hostnames on activation
         if onboard_object.edge_hostname_mode == 'use_existing_edgehostname':
-            ehn_id = 0
-            # check to see if specified edge hostname exists
             for edgeHostname in edgeHostnameList:
-
                 edgeHostname_log = column_width - len(edgeHostname) - 1
                 if edgeHostname_log < 0:
                     edgeHostname_log = f'{edgeHostname}'
                 else:
                     edgeHostname_log = f'{edgeHostname}{space:>{edgeHostname_log}}'
 
-                ehn_id = self.validateEdgeHostnameExists(wrapper_object, str(edgeHostname))
-                public_hostname_str = ', '.join(onboard_object.public_hostnames)
-                if ehn_id != 0:
-                    logger.info(f'{space}{emoji.thumbup} {edgeHostname_log} valid edge hostname (ehn_{ehn_id})')
-                # logger.info(f'{public_hostname_str:<30}{space:>20}valid public hostname')
-                    # onboard_object.edge_hostname_id = ehn_id
+                if edgeHostname.endswith(('edgekey.net', 'edgesuite.net', 'akamaized.net')):
+                    logger.info(f'{space}{emoji.thumbup} {edgeHostname_log} edge hostname format valid')
                 else:
-                    logger.error(f'{space}{emoji.thumbdown} {edgeHostname_log} invalid edge hostname')
+                    logger.error(f'{space}{emoji.thumbdown} {edgeHostname_log} invalid edge hostname suffix')
                     count += 1
         elif onboard_object.edge_hostname_mode == 'secure_by_default':
-            ehn_id = 0
-            for i, edgeHostname in enumerate(edgeHostnameList):
-                # check to see if specified edge hostname exists
-                ehn_id = self.validateEdgeHostnameExists(wrapper_object, str(edgeHostname))
-                public_hostname_str = ', '.join(onboard_object.public_hostnames)
-
+            for edgeHostname in edgeHostnameList:
                 edgeHostname_log = column_width - len(edgeHostname) - 1
-
                 if edgeHostname_log < 0:
                     edgeHostname_log = f'{edgeHostname}'
                 else:
                     edgeHostname_log = f'{edgeHostname}{space:>{edgeHostname_log}}'
 
-                if ehn_id != 0:
-                    if not edgeHostname.endswith(('edgekey.net', 'edgesuite.net')):
-                        logger.info(f'{space}{emoji.thumbdown} {edgeHostname_log} already exist (ehn_{ehn_id}) {edgeHostname}')
-                        count += 1
-                    else:
-                        logger.info(f'{space}{emoji.thumbup} {edgeHostname_log} valid edge hostname (ehn_{ehn_id})')
-                    # logger.info(f'{public_hostname_str:<30}{space:>20}valid public hostname')
-                    # onboard_object.edge_hostname_id = ehn_id
+                if edgeHostname.endswith(('edgekey.net', 'edgesuite.net')):
+                    logger.info(f'{space}{emoji.thumbup} {edgeHostname_log} will be created upon property activation')
                 else:
-                    if edgeHostname.endswith(('edgekey.net', 'edgesuite.net')):
-                        logger.info(f'{space}{emoji.thumbup} {edgeHostname_log} does not exist, will be created upon property activation')
-                    else:
-                        logger.warning(f'{space}{emoji.construction} {edgeHostname_log} does not end with edgekey.net or edgesuite.net, using {edgeHostname}')
+                    logger.warning(f'{space}{emoji.construction} {edgeHostname_log} does not end with edgekey.net or edgesuite.net, using {edgeHostname}')
 
         # valid notify_emails is required
         emails = onboard_object.notification_emails
