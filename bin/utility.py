@@ -585,7 +585,7 @@ class utility:
         logger.warning(f'{emoji.looking} Validating edge hostname setup')
         # must be one of three valid modes
         edgeHostnameList = onboard_object.edge_hostname_list
-        valid_modes = ['use_existing_edgehostname', 'secure_by_default']
+        valid_modes = ['use_existing_edgehostname', 'secure_by_default', 'create_cps_edgehostname', 'cps_placeholder']
         width = column_width - len(onboard_object.edge_hostname_mode)
         msg = f'{onboard_object.edge_hostname_mode}{space:>{width}}'
         logger.info(f'{space}{emoji.pushpin} {msg}edge hostname mode')
@@ -617,6 +617,10 @@ class utility:
                     logger.info(f'{space}{emoji.thumbup} {edgeHostname_log} will be created upon property activation')
                 else:
                     logger.warning(f'{space}{emoji.construction} {edgeHostname_log} does not end with edgekey.net or edgesuite.net, using {edgeHostname}')
+        elif onboard_object.edge_hostname_mode == 'create_cps_edgehostname':
+            logger.info(f'{space}{emoji.pushpin} CPS_MANAGED: edge hostnames will be created per property using enrollment ID {onboard_object.enrollment_id}')
+        elif onboard_object.edge_hostname_mode == 'cps_placeholder':
+            logger.info(f'{space}{emoji.pushpin} CPS_MANAGED: placeholder edge hostnames will be assigned (no enrollment ID provided)')
 
         # valid notify_emails is required
         emails = onboard_object.notification_emails
@@ -1101,9 +1105,11 @@ class utility:
                 else:
                     pass
         else:
-            logger.error(get_products_response)
-            print(json.dumps(get_products_response.json(), indent=4))
-            pass
+            logger.error(f'Product validation failed with status {get_products_response.status_code}')
+            try:
+                logger.debug(json.dumps(get_products_response.json(), indent=4))
+            except Exception:
+                logger.debug(get_products_response.text[:500])
 
         return products
 
@@ -1943,7 +1949,7 @@ class utility:
             try:
                 edgeHostname = row['edgeHostname']
                 if (edgeHostname is None) or (edgeHostname == ''):
-                    if onboard_object.edge_hostname_mode == 'secure_by_default':
+                    if onboard_object.edge_hostname_mode in ('secure_by_default', 'create_cps_edgehostname', 'cps_placeholder'):
                         edgeHostnameList.append(f'{hostname}{ehn_suffix}')
                         logger.debug(f'using edge hostname {hostname}{ehn_suffix}')
                     else:
@@ -1951,11 +1957,11 @@ class utility:
                 else:
                     edgeHostnameList.append(edgeHostname)
             except KeyError:
-                if onboard_object.edge_hostname_mode == 'secure_by_default':
+                if onboard_object.edge_hostname_mode in ('secure_by_default', 'create_cps_edgehostname', 'cps_placeholder'):
                     edgeHostnameList.append(f'{hostname}{ehn_suffix}')
                     logger.debug(f'using edge hostname {hostname}{ehn_suffix}')
                 else:
-                    sys.exit(logger.error('edgeHostname column must exist in input csv unless using secure-by-default mode'))
+                    sys.exit(logger.error('edgeHostname column must exist in input csv unless using secure-by-default or CPS mode'))
 
         propertyList = list(set(propertyList))
         hostnameList = list(set(hostnameList))

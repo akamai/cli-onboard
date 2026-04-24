@@ -103,16 +103,25 @@ class papiFunctions:
             cpcode_name = cpcode_name.replace(i, '.')
         create_cpcode_response = wrapper_object.createCpcode(contract_id,
                                                              group_id, product_id, cpcode_name)
-        logger.debug(json.dumps(create_cpcode_response.json(), indent=4))
-        if create_cpcode_response.ok:
-            new_cpcode = create_cpcode_response.json()['cpcodeLink'].split('?')[0].split('/')[-1].replace('cpc_', '')
+        try:
+            resp_body = create_cpcode_response.json()
+        except Exception:
+            resp_body = None
+            logger.debug(f'cpcode create response status={create_cpcode_response.status_code} body={create_cpcode_response.text[:500]}')
+
+        if create_cpcode_response.ok and resp_body:
+            logger.debug(json.dumps(resp_body, indent=4))
+            new_cpcode = resp_body['cpcodeLink'].split('?')[0].split('/')[-1].replace('cpc_', '')
             onboard_object.onboard_default_cpcode = int(new_cpcode)
             if path:
                 logger.info(f'{space}{space}{emoji.point_right} New cpcode: {new_cpcode:<37}{path}')
             else:
                 logger.info(f'{space}{space}{emoji.point_right} New cpcode: {new_cpcode:<37}{cpcode_name}')
         else:
-            logger.error(json.dumps(create_cpcode_response.json(), indent=4))
+            if resp_body:
+                logger.debug(json.dumps(resp_body, indent=4))
+            else:
+                logger.debug(f'cpcode create response status={create_cpcode_response.status_code} body={create_cpcode_response.text[:500]}')
             sys.exit(logger.error('Unable to create new cpcode'))
         return int(new_cpcode)
 
@@ -126,19 +135,28 @@ class papiFunctions:
             cpcode_name = cpcode_name.replace(i, '.')
         search_cpcode_response = wrapper_object.searchCpcode(contract_id,
                                                              group_id, product_id, cpcode_name)
-        logger.debug(json.dumps(search_cpcode_response.json(), indent=4))
+        try:
+            resp_body = search_cpcode_response.json()
+        except Exception:
+            resp_body = None
+            logger.debug(f'cpcode search response status={search_cpcode_response.status_code} body={search_cpcode_response.text[:500]}')
+
         existing_cpcode = 0
-        if search_cpcode_response.ok:
-            existing_cpcode_count = len(search_cpcode_response.json()['cpcodes'])
+        if search_cpcode_response.ok and resp_body:
+            logger.debug(json.dumps(resp_body, indent=4))
+            existing_cpcode_count = len(resp_body['cpcodes'])
             if existing_cpcode_count > 0:
-                existing_cpcode = search_cpcode_response.json()['cpcodes'][0]['cpcodeId']
+                existing_cpcode = resp_body['cpcodes'][0]['cpcodeId']
                 onboard_object.onboard_default_cpcode = int(existing_cpcode)
                 if path:
                     logger.info(f'{space}{space}{emoji.point_right} Existing cpcode found: {existing_cpcode} for path: {path}')
                 else:
                     logger.info(f'{space}{space}{emoji.point_right} Existing cpcode found: {existing_cpcode}')
         else:
-            logger.error(json.dumps(search_cpcode_response.json(), indent=4))
+            if resp_body:
+                logger.debug(json.dumps(resp_body, indent=4))
+            else:
+                logger.debug(f'cpcode search response status={search_cpcode_response.status_code} body={search_cpcode_response.text[:500]}')
             sys.exit(logger.error('Unable to search for existing cpcode'))
         return int(existing_cpcode)
 
@@ -553,70 +571,142 @@ class papiFunctions:
                     logger.info(f'{space}{emoji.pencil} Unable to create property')
                     continue
 
-                # 2. Create shared certed hostname (akamized.net)
+                # 2. Create/assign edge hostnames
                 onboard_object.public_hostnames = propertyDict[propertyName]['hostnames']
                 logger.debug(onboard_object.public_hostnames)
                 logger.debug(propertyDict[propertyName]['edgeHostnames'])
 
-                try:
-                    x = propertyDict[propertyName]['secureNetwork']
-                except:
-                    x = 0
+                if onboard_object.edge_hostname_mode == 'create_cps_edgehostname':
+                    # --cert-mode CPS --enrollment-id N: create one EHN per property
+                    domain_prefix = propertyName
+                    domain_suffix = 'edgekey.net' if onboard_object.secure_network == 'ENHANCED_TLS' else 'edgesuite.net'
+                    cname_to = f'{domain_prefix}.{domain_suffix}'
 
-                if x == 0:
-                    secure_by_default = False
-                    secure_by_default_create_ehn = False
-                    if onboard_object.edge_hostname_mode == 'secure_by_default':
-                        secure_by_default = True
-                    edgehostname_list = papi.bulkCreateEdgehostnameArray(onboard_object.public_hostnames,
-                                                                         propertyDict[propertyName]['edgeHostnames'],
-                                                                         secure_by_default,
-                                                                         secure_by_default_create_ehn)
+                    ehn_id = papi.findExistingEdgeHostname(domain_prefix, domain_suffix)
+                    if ehn_id is None:
+                        ehn_id = papi.createEdgehostname(
+                            propertyDict[propertyName]['product'], domain_prefix,
+                            onboard_object.secure_network, onboard_object.enrollment_id,
+                            onboard_object.contract_id, onboard_object.group_id)
+                        if ehn_id == -1:
+                            propertyDict[propertyName]['error_flags'].append('ehn_create_failed')
+                            skip_property.append(onboard_object.onboard_property_id)
+                            logger.critical(f'{space}{emoji.stop}{emoji.stop} Failed to create edge hostname {cname_to}')
+                            continue
+                        logger.info(f'{space}{emoji.blue_globe} Created CPS_MANAGED EHN: {cname_to} (id: {ehn_id})')
+                    else:
+                        logger.info(f'{space}{emoji.blue_globe} Reusing CPS_MANAGED EHN: {cname_to} (id: {ehn_id})')
+
+                    edgehostname_list = papi.buildCpsManagedHostnameArray(
+                        onboard_object.public_hostnames, cname_to, edge_hostname_id=ehn_id)
+
+                elif onboard_object.edge_hostname_mode == 'cps_placeholder':
+                    # --cert-mode CPS, no enrollment-id, no use-existing: create a real placeholder EHN
+                    account_id = onboard_object.ASK.split(':')[0] if onboard_object.ASK else 'unknown'
+                    domain_prefix = f'{account_id}-placeholder'
+                    domain_suffix = 'edgekey.net' if onboard_object.secure_network == 'ENHANCED_TLS' else 'edgesuite.net'
+                    cname_to = f'{domain_prefix}.{domain_suffix}'
+
+                    ehn_id = papi.findExistingEdgeHostname(domain_prefix, domain_suffix)
+                    if ehn_id is None:
+                        # Create a real STANDARD_TLS EHN (no enrollment needed)
+                        ehn_id = papi.createEdgehostname(
+                            propertyDict[propertyName]['product'], domain_prefix,
+                            onboard_object.secure_network, '',
+                            onboard_object.contract_id, onboard_object.group_id)
+                        if ehn_id == -1:
+                            propertyDict[propertyName]['error_flags'].append('placeholder_ehn_create_failed')
+                            skip_property.append(onboard_object.onboard_property_id)
+                            logger.critical(f'{space}{emoji.stop}{emoji.stop} Failed to create placeholder edge hostname {cname_to}')
+                            continue
+                        logger.info(f'{space}{emoji.construction} Created placeholder EHN: {cname_to} (id: {ehn_id})')
+                    else:
+                        logger.info(f'{space}{emoji.construction} Reusing placeholder EHN: {cname_to} (id: {ehn_id})')
+
+                    edgehostname_list = papi.buildCpsManagedHostnameArray(
+                        onboard_object.public_hostnames, cname_to, edge_hostname_id=ehn_id)
+
+                elif onboard_object.edge_hostname_mode == 'use_existing_edgehostname' and onboard_object.use_existing_ehn != 'CSV':
+                    # --use-existing-edgehostname <ehn-value>: single EHN for all hostnames
+                    cname_to = onboard_object.use_existing_ehn
+                    cert_prov_type = 'CPS_MANAGED' if onboard_object.cert_mode == 'CPS' else 'DEFAULT'
+
+                    # Look up EHN ID via HAPI
+                    parts = cname_to.rsplit('.', 2)
+                    domain_prefix = '.'.join(parts[:-2]) if len(parts) > 2 else parts[0]
+                    domain_suffix = '.'.join(parts[-2:]) if len(parts) >= 2 else ''
+                    ehn_id = papi.findExistingEdgeHostname(domain_prefix, domain_suffix)
+
+                    edgehostname_list = []
+                    for hostname in onboard_object.public_hostnames:
+                        entry = {'cnameType': 'EDGE_HOSTNAME',
+                                 'cnameFrom': hostname,
+                                 'cnameTo': cname_to,
+                                 'certProvisioningType': cert_prov_type}
+                        if ehn_id is not None:
+                            entry['edgeHostnameId'] = ehn_id
+                        edgehostname_list.append(entry)
+                    logger.info(f'{space}{emoji.blue_globe} Using existing EHN: {cname_to} (cert: {cert_prov_type})')
+
                 else:
-                    shared_ehn_list, all_edgehostnames = papi.create_edge_hostname(onboard_object.public_hostnames,
-                                                                                   propertyDict[propertyName]['product'],
-                                                                                   onboard_object.contract_id,
-                                                                                   onboard_object.group_id,
-                                                                                   onboard_object.secure_network,
-                                                                                   propertyDict[propertyName]['secureNetwork'],
-                                                                                   option=onboard_object.ehn_option)
-                    shared_ehns = []
-                    for ehn in shared_ehn_list:
-                        for key, value in ehn.items():
-                            try:
-                                ehn_id = value['edgeHostnameId']
-                                if ehn_id != -1:
-                                    shared_ehns.append(
-                                        papi.get_edge_hostname(ehn_id,
-                                                               onboard_object.contract_id,
-                                                               onboard_object.group_id))
-                            except KeyError:
-                                logger.error(print_json(data=ehn))
-                    if len(shared_ehns) > 0:
-                        shared = [x['edgeHostnameDomain'] for x in shared_ehns]
-                        if len(shared) > 0:
-                            logger.debug('create shared cert edge hostname')
-                            logger.debug(shared)
-                            for i, each_share in enumerate(shared, start=1):
-                                logger.info(f'{space}{emoji.blue_globe} akamaized: {i:>3}. {each_share}')
+                    # Existing logic: SBD or use-existing from CSV
+                    try:
+                        x = propertyDict[propertyName]['secureNetwork']
+                    except:
+                        x = 0
 
-                    # 3. Prep public hostname
-                    edgehostname_list = [x for x in all_edgehostnames if x['certProvisioningType'] == 'DEFAULT']
-                    logger.debug('edge hostname to be created with property manager activation')
-                    # print_json(data=edgehostname_list)
+                    if x == 0:
+                        secure_by_default = False
+                        secure_by_default_create_ehn = False
+                        if onboard_object.edge_hostname_mode == 'secure_by_default':
+                            secure_by_default = True
+                        edgehostname_list = papi.bulkCreateEdgehostnameArray(onboard_object.public_hostnames,
+                                                                             propertyDict[propertyName]['edgeHostnames'],
+                                                                             secure_by_default,
+                                                                             secure_by_default_create_ehn)
+                    else:
+                        shared_ehn_list, all_edgehostnames = papi.create_edge_hostname(onboard_object.public_hostnames,
+                                                                                       propertyDict[propertyName]['product'],
+                                                                                       onboard_object.contract_id,
+                                                                                       onboard_object.group_id,
+                                                                                       onboard_object.secure_network,
+                                                                                       propertyDict[propertyName]['secureNetwork'],
+                                                                                       option=onboard_object.ehn_option)
+                        shared_ehns = []
+                        for ehn in shared_ehn_list:
+                            for key, value in ehn.items():
+                                try:
+                                    ehn_id = value['edgeHostnameId']
+                                    if ehn_id != -1:
+                                        shared_ehns.append(
+                                            papi.get_edge_hostname(ehn_id,
+                                                                   onboard_object.contract_id,
+                                                                   onboard_object.group_id))
+                                except KeyError:
+                                    logger.error(print_json(data=ehn))
+                        if len(shared_ehns) > 0:
+                            shared = [x['edgeHostnameDomain'] for x in shared_ehns]
+                            if len(shared) > 0:
+                                logger.debug('create shared cert edge hostname')
+                                logger.debug(shared)
+                                for i, each_share in enumerate(shared, start=1):
+                                    logger.info(f'{space}{emoji.blue_globe} akamaized: {i:>3}. {each_share}')
 
-                    for edge in edgehostname_list:
-                        del edge['productId']
-                        del edge['ipVersionBehavior']
-                        edge_copy = edge.copy()
-                        for key, value in edge_copy.items():
-                            if key == 'domainPrefix':
-                                edge['cnameFrom'] = edge.pop('domainPrefix')
-                            if key == 'domainSuffix':
-                                edge['cnameTo'] = edge.pop('domainSuffix')
-                                edge['cnameTo'] = f"{edge['cnameFrom']}.{edge['cnameTo']}"
-                    logger.debug('rename dictionary key')
-                    # print_json(data=edgehostname_list)
+                        # 3. Prep public hostname
+                        edgehostname_list = [x for x in all_edgehostnames if x['certProvisioningType'] in ('DEFAULT', 'CPS_MANAGED')]
+                        logger.debug('edge hostname to be created with property manager activation')
+
+                        for edge in edgehostname_list:
+                            del edge['productId']
+                            del edge['ipVersionBehavior']
+                            edge_copy = edge.copy()
+                            for key, value in edge_copy.items():
+                                if key == 'domainPrefix':
+                                    edge['cnameFrom'] = edge.pop('domainPrefix')
+                                if key == 'domainSuffix':
+                                    edge['cnameTo'] = edge.pop('domainSuffix')
+                                    edge['cnameTo'] = f"{edge['cnameFrom']}.{edge['cnameTo']}"
+                        logger.debug('rename dictionary key')
 
                 # 4. Update the property public hostname
                 hostname_resp = papi.updatePropertyHostname(onboard_object.contract_id,
@@ -638,9 +728,18 @@ class papiFunctions:
                 else:
                     # branch
                     try:
-                        errors = [err for err in hostname_resp.json()['errors']]
-                    except:
+                        resp_body = hostname_resp.json()
+                        errors = [err for err in resp_body.get('errors', [])]
+                    except Exception:
+                        resp_body = None
                         errors = ['unknown error during property update']
+
+                    logger.debug(f'Hostname update failed with status {hostname_resp.status_code}')
+                    if resp_body:
+                        logger.debug(json.dumps(resp_body, indent=2))
+                    else:
+                        logger.debug(hostname_resp.text[:500])
+                    logger.debug(f'edgehostname_list sent: {json.dumps(edgehostname_list, indent=2)}')
 
                     propertyDict[propertyName]['error_flags'].extend(errors)
                     skip_property.append(onboard_object.onboard_property_id)

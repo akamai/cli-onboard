@@ -18,11 +18,11 @@
     },
     "file_handler": {
       "class": "logging.FileHandler",
-      "level": "INFO",
+      "level": "DEBUG",
       "filename": "logs/onboard.log",
       "formatter": "long",
       "delay": true,
-      "mode": "w",
+      "mode": "a",
       "encoding": "utf8"
     }
   },

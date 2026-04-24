@@ -59,10 +59,16 @@ class onboard:
             self.onboard_default_cpcode = 0
             self.edge_hostname_id = 0
             self.edge_hostname_list = []
-            self.edge_hostname_mode = 'secure_by_default'
-            # Edge hostname values
-            if click_args['use_existing_edgehostname']:
+            self.cert_mode = click_args.get('cert_mode', 'SBD').upper()
+            self.enrollment_id = click_args.get('enrollment_id')
+            self.use_existing_ehn = click_args.get('use_existing_edgehostname')
+
+            if self.use_existing_ehn:
                 self.edge_hostname_mode = 'use_existing_edgehostname'
+            elif self.cert_mode == 'CPS' and self.enrollment_id:
+                self.edge_hostname_mode = 'create_cps_edgehostname'
+            elif self.cert_mode == 'CPS':
+                self.edge_hostname_mode = 'cps_placeholder'
             else:
                 self.edge_hostname_mode = 'secure_by_default'
 

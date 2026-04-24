@@ -295,6 +295,22 @@ class apiCallsWrapper:
             edgehostname_array.append(edgehostnameDetails)
         return edgehostname_array
 
+    def buildCpsManagedHostnameArray(self, hostname_list, cname_to, edge_hostname_id=None):
+        """
+        Build hostname array where all hostnames share one CPS_MANAGED edge hostname.
+        edge_hostname_id is optional — omitted for placeholder mode.
+        """
+        edgehostname_list = []
+        for hostname in hostname_list:
+            entry = {'cnameType': 'EDGE_HOSTNAME',
+                     'cnameFrom': hostname,
+                     'cnameTo': cname_to,
+                     'certProvisioningType': 'CPS_MANAGED'}
+            if edge_hostname_id is not None:
+                entry['edgeHostnameId'] = edge_hostname_id
+            edgehostname_list.append(entry)
+        return edgehostname_list
+
     def checkEdgeHostname(self, edge_hostname):
         """
         Function to check the validity of edge_hostname
@@ -315,6 +331,17 @@ class apiCallsWrapper:
         resp = self.session.get(self.formUrl(url))
         return resp
 
+    def findExistingEdgeHostname(self, domainPrefix, domainSuffix):
+        """Check if an edge hostname exists via HAPI. Returns edgeHostnameId or None."""
+        ehn_fqdn = f'{domainPrefix}.{domainSuffix}'
+        resp = self.checkEdgeHostname(ehn_fqdn)
+        if resp.ok:
+            for ehn in resp.json().get('edgeHostnames', []):
+                if ehn.get('recordName') == domainPrefix and ehn.get('dnsZone') == domainSuffix:
+                    logger.info(f'Found existing edge hostname: {ehn_fqdn} (id: {ehn["edgeHostnameId"]})')
+                    return ehn['edgeHostnameId']
+        return None
+
     def updatePropertyHostname(self, contractId, groupId, propertyId, edgehostnamedata):
         """
         Function to update property hostnames and edgehostname
@@ -322,6 +349,19 @@ class apiCallsWrapper:
         url = f'https://{self.access_hostname}/papi/v1/properties/{propertyId}'
         url = f'{url}/versions/1/hostnames?contractId={contractId}&groupId={groupId}'
         url = f'{url}&validateHostnames=true&includeCertStatus=true'
+
+        url = self.formUrl(url)
+        logger.debug(f'{url} {edgehostnamedata}')
+        hostname_resp = self.session.put(url, headers=headers, data=edgehostnamedata)
+        return hostname_resp
+
+    def updatePropertyHostnameNoValidation(self, contractId, groupId, propertyId, edgehostnamedata):
+        """
+        Update property hostnames without hostname validation (for placeholder edge hostnames).
+        """
+        url = f'https://{self.access_hostname}/papi/v1/properties/{propertyId}'
+        url = f'{url}/versions/1/hostnames?contractId={contractId}&groupId={groupId}'
+        url = f'{url}&validateHostnames=false&includeCertStatus=false'
 
         url = self.formUrl(url)
         logger.debug(f'{url} {edgehostnamedata}')
@@ -440,6 +480,8 @@ class apiCallsWrapper:
             edgehostname_content['domainSuffix'] = 'edgesuite.net'
             edgehostname_content['secureNetwork'] = secureNetwork
             edgehostname_content['ipVersionBehavior'] = 'IPV4'
+            if certEnrollmentId:
+                edgehostname_content['certEnrollmentId'] = certEnrollmentId
             logger.warning(f'Trying to create edge_hostname: {domainPrefix}.edgesuite.net')
         else:
             if productId not in ['prd_SPM',
@@ -457,13 +499,13 @@ class apiCallsWrapper:
                 logger.warning(f'Trying to create edge_hostname: {domainPrefix}.akamaized.net')
 
         # Create a edgehostname
-        url = f'https://{self.access_hostname}/papi/v1/edgehostnames?contractId=f{contractId}&groupId={groupId}'
+        url = f'https://{self.access_hostname}/papi/v1/edgehostnames?contractId={contractId}&groupId={groupId}'
         url = self.formUrl(url)
         ehn_resp = self.session.post(url,
                                      headers=headers,
                                      json=edgehostname_content)
 
-        logger.info(json.dumps(edgehostname_content, indent=4))
+        logger.debug(json.dumps(edgehostname_content, indent=4))
         if ehn_resp.ok:
             ehn_id = ehn_resp.json()['edgeHostnameLink'].split('?')[0].split('/')[4]
             logger.info(f'Successfully created edge_hostname: {ehn_id}')
@@ -919,7 +961,7 @@ class apiCallsWrapper:
                     single_host['domainSuffix'] = 'edgekey.net'
                     single_host['secureNetwork'] = tls
             elif network == 'CPS_MANAGED':
-                single_host['certProvisioningType'] = 'CPS_MANAGED',
+                single_host['certProvisioningType'] = 'CPS_MANAGED'
                 if tls == 'STANDARD_TLS':
                     single_host['domainSuffix'] = 'edgesuite.net'
                     single_host['secureNetwork'] = tls

@@ -160,7 +160,12 @@ def help(ctx):
 @click.option('--media-ehn', metavar='', type=click.Choice(['VOD', 'LIVE']), default='VOD', multiple=False, help='AMD Edge Hostname option (VOD, LIVE)', show_default=True)
 @click.option('--gtm-domain', metavar='', multiple=False, default=None, help='gtm domain to use in properties', show_default=True)
 @click.option('--use-cpcode', metavar='', help='existing CP Code (numeric) that will be used for all hostnames')
-@click.option('--use-existing-edgehostname', metavar='', is_flag=True, default=False, help='use existing edge hostnames.  CSV requires edgeHostname header')
+@click.option('--use-existing-edgehostname', metavar='', default=None, is_flag=False,
+              flag_value='CSV', help='Use existing edge hostnames. Pass EHN name for single EHN, or omit value for CSV column.')
+@click.option('--cert-mode', type=click.Choice(['SBD', 'CPS'], case_sensitive=False),
+              default='SBD', show_default=True, help='Certificate mode: SBD (Secure by Default) or CPS (CPS Managed)')
+@click.option('--enrollment-id', metavar='', type=int, default=None,
+              help='CPS enrollment ID for creating CPS_MANAGED edge hostnames (one per property)')
 @click.option('--activate', metavar='', type=click.Choice(['staging', 'production']), multiple=True, help='Options: staging, production')
 @click.option('--email', metavar='', multiple=True, help='email(s) for activation notifications')
 @click.option('--csv', metavar='', help='csv file with headers hostname,propertyName (at minimum)', required=True)
@@ -184,6 +189,9 @@ def convert(config, **kwargs):
 
     onboard_object = onboard_convert.onboard(config, click_args)
     onboard_object.ASK = config.account_key
+
+    if click_args['enrollment_id'] and click_args['cert_mode'].upper() != 'CPS':
+        sys.exit(logger.error('--enrollment-id requires --cert-mode CPS'))
 
     # Validate setup and akamai cli and cli pipeline are installed
     util_papi = utility_papi.papiFunctions()
@@ -224,7 +232,7 @@ def convert(config, **kwargs):
         _properties['hostname'] = _prop['hostname']
         _properties['propertyName'] = _prop['propertyName']
         _properties['product'] = click_args['product'] if click_args['product'] else _prop['product']
-        if 'edgeHostname' in _prop and click_args['use_existing_edgehostname']:
+        if 'edgeHostname' in _prop and click_args['use_existing_edgehostname'] == 'CSV':
             _properties['edgeHostname'] = _prop['edgeHostname']
         replace_properties.append(_properties)
     onboard_object.csv_dict = replace_properties
@@ -233,7 +241,7 @@ def convert(config, **kwargs):
     property_dict = util.csv_2_property_array_convert(onboard_object, click_args['prefix'])
 
     # validate if account has enough SBD to proceed
-    if not click_args['use_existing_edgehostname']:
+    if click_args['cert_mode'].upper() == 'SBD' and not click_args['use_existing_edgehostname']:
         valid_quota = util.check_sbd_quota(papi, click_args, len(onboard_object.property_list))
         if valid_quota is not None and not valid_quota:
             akam = []
