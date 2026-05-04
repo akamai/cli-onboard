@@ -2470,7 +2470,8 @@ class utility:
 
     def convert_property_dsa(self, propertyJson):
 
-        dsa_supported_behaviors = ['adaptiveImageCompression', 'advanced', 'akamaizer', 'akamaizerTag', 'allHttpInCacheHierarchy',
+        dsa_supported_behaviors = ['enhancedDebug',
+                                   'adaptiveImageCompression', 'advanced', 'akamaizer', 'akamaizerTag', 'allHttpInCacheHierarchy',
                                    'allowCloudletsOrigins', 'allowDelete', 'allowOptions', 'allowPatch', 'allowPost', 'allowPut',
                                    'allowTransferEncoding', 'altSvcHeader', 'apiPrioritization', 'applicationLoadBalancer',
                                    'audienceSegmentation', 'autoDomainValidation', 'baseDirectory', 'breadcrumbs', 'breakConnection',
@@ -2713,6 +2714,7 @@ def split_elements_newline_withcomma(elements):
 def json2ui_behaviorNames():
     return (
         {
+            'enhanceddebug': 'Enhanced Debug',
             'mediaclient': 'Media Client',
             'denyaccess': 'Control Access',
             'advanced': 'Advanced',
