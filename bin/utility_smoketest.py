@@ -398,7 +398,7 @@ class smoketestFunctions:
                 acme_hostname = f'_acme-status.{hostname}'
                 logger.error(f'{emoji.fail} {msg} Error! Token not returned from PAPI')
 
-            '''
+
             dnsResp = self.dns_lookup(acme_record['validationCname']['hostname'])
             try:
                 acme_status = self.status_mappings[int(dnsResp['Status'])]
@@ -423,7 +423,7 @@ class smoketestFunctions:
             else:
                 acme_target = acme_record['validationCname']['target']
                 logger.error(f'{emoji.fail} {msg} ACME record does not exist')
-            '''
+
             hostnameDict[hostname]['acmeStatus'] = acme_status
             hostnameDict[hostname]['acme_hostname'] = acme_hostname
             hostnameDict[hostname]['acme_record'] = acme_target
