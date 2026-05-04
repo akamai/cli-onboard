@@ -37,7 +37,7 @@ client_token = [CLIENT_TOKEN_HERE]
 
 # Onboard Types
 
-This CLI has 4 command types for onboarding new properties:
+This CLI provides the following commands for onboarding and related workflows:
 
 - [create](#create)
 - [single-host](#single-host)
@@ -57,13 +57,13 @@ This CLI has 4 command types for onboarding new properties:
 ### Usage
 
 ```bash
-akamai onboard create --file /templates/sample_setup_files/create.json
+akamai onboard create --file sample_templates/create.json
 akamai onboard create --file ~/path/to/create.json
 ```
 
 ## Setup JSON File Documentation
 
-Sample **templates/sample_setup_files/create.json** for an initial empty setup file.
+Sample **templates/sample_setup_files/create.json** in the repo, or **sample_templates/create.json** after running `fetch-sample-templates`.
 
 <details>
     <summary>Click me</summary>
@@ -194,12 +194,12 @@ Sample **templates/sample_setup_files/create.json** for an initial empty setup f
 - **use_existing_enrollment_id**: Set to `true` if you want to create a new edge hostname from an existing certificate enrollment. If true, you must also put in value for the existing_enrollment_id.
 - **existing_enrollment_id**: Enrollment ID of the existing certificate
 
-**new_enhanced_tls_edgehostname -- create new enrollment**
+**new_enhanced_tls_edgehostname -- legacy create new enrollment fields**
 
-- **create_new_ssl_cert**: Set to `true` if you want to brand new certificate enrollment. If true, you must also put in values for the ssl_cert_template_file, ssl_cert_template_values, and use_temp_existing_edge_hostname_id **(NOT USED ANYMORE)**
-- **ssl_cert_template_file**: File path to ssl certificate template json file. This can be for any certificate type (NOT USED ANYMORE)
-- **ssl_cert_template_values**: Values for the ssl certificate template to be used **(NOT USED ANYMORE)**
-- **temp_existing_edge_hostname**: Due to backend api limitations, a new edge hostname cannot be immediately made that references a newly created certificate enrollment for a brief period of time. Rather than be blocked by this process, specify a temporary edge hostname to use as a placeholder. This value is not really used and just a place holder to proceed with the property manager configuration creation. If using `ENHANCED_TLS`, use an existing edge hostname ends with `edgekey.net` ; otherwise if using `STANDARD_TLS`, use an existing edge hostname that ends with `edgesuite.net` **(NOT USED ANYMORE)**
+- **create_new_ssl_cert**: Legacy field. New certificate enrollment creation is not supported by the current code path. Keep this set to `false` and use `use_existing_enrollment_id: true` instead.
+- **ssl_cert_template_file**: Legacy field, not used by the current code path.
+- **ssl_cert_template_values**: Legacy field, not used by the current code path.
+- **temp_existing_edge_hostname**: Legacy field, not used by the current code path.
 
 **secure_by_default -- provision secure by default certificates**
 
@@ -209,7 +209,7 @@ Sample **templates/sample_setup_files/create.json** for an initial empty setup f
 **update_waf_info**
 
 - **add_selected_host**: Set to `true` if you want to add specified public_hostnames to WAF selected hosts
-- **waf_config-name**: Name of security configuration
+- **waf_config_name**: Name of security configuration
 - **update_match_target**: Set to `true` if you want to add specified public_hostnames to specified waf_match_target_id
 - **waf_match_target_id**: waf match target id to add hostnames to (use numeric waf match target id)
 - NOTE: If you do not know the match target id, leave the value as `0` and execute the onboarding. The validation steps will print out the existing match target IDs for the WAF config selected.
@@ -235,8 +235,8 @@ single-host creates a property with one public hostname at the top level of the 
 ### Usage
 
 ```bash
-akamai onboard single-host --file /templates/sample_setup_files/single.json
-akamai onboard single-host --file ~/path/to/single.json
+akamai onboard single-host --file sample_templates/single-host.json
+akamai onboard single-host --file ~/path/to/single-host.json
 ```
 
 ```bash
@@ -305,7 +305,7 @@ multi-hosts creates a property with multiple public hostnames at the top level o
 ### Usage
 
 ```bash
-akamai onboard multi-hosts -f path-to/multiple.json --csv path-to/multi-hosts-input.csv
+akamai onboard multi-hosts -f sample_templates/multiple-hosts.json --csv sample_templates/multi-hosts-input.csv
 ```
 
 ```bash
@@ -357,7 +357,7 @@ akamai onboard batch-create --template ~/path/to/ruletree.json --csv ~/path/to/c
 
 ## CSV Input File Documentation
 
-Sample **templates/sample_setup_files/batch-activation.csv** for an initial empty setup file.
+Sample **templates/sample_setup_files/batch-create.csv** for an initial empty setup file.
 
 <details>
     <summary>Click me</summary>
@@ -399,7 +399,7 @@ www.example.com,origin.example.com,new_property_1,ORIGIN_HOSTNAME,www.example.co
 
 # fetch-sample-templates
 
-This will create a folder called `sample_setup_files` locally so you will have sample setups in both JSON and CSV format depending on the command you choose the onboard.
+This will create a folder called `sample_templates` locally so you will have sample setups in both JSON and CSV format depending on the command you choose to onboard.
 
 | command         | Required JSON      | Required CSV       |
 | --------------- | ------------------ | ------------------ |
@@ -410,6 +410,7 @@ This will create a folder called `sample_setup_files` locally so you will have s
 | `appsec-create` |                    | :heavy_check_mark: |
 | `appsec-update` |                    | :heavy_check_mark: |
 | `appsec-remove` |                    | :heavy_check_mark: |
+| `sbd-precheck`  |                    | :heavy_check_mark: |
 
 # appsec-policy
 
@@ -487,7 +488,7 @@ ah_onboard_appsec_h1,Default,demo-hostname.com
 Sample **templates/sample_setup_files/appsec-create-by-propertyname.csv** for an initial empty setup file.
 
 ```
-property_name,waf_config_name,waf_policy_name,hostname
+propertyname,waf_config_name,waf_policy_name,hostname
 sample,appsec_X,policy_1
 sample,appsec_X,policy_2,sample-hostname-1.com
 sample,appsec_X,policy_2,sample-hostname-2.com
@@ -550,13 +551,39 @@ You can remove multiple hostnames to an <u>**existing**</u> security configurati
 
 Use [fetch-sample-templates](#fetch-sample-templates) command to get sample templates
 
+```bash
+# remove only
+akamai onboard appsec-remove --config-id 9999 --csv appsec-remove.csv
+
+# remove and activate
+akamai onboard appsec-remove --config-id 9999 --csv appsec-remove.csv --activate staging --email noreply@akamai.com --version-notes "remove 3 hostnames"
+```
+
+### CSV Input File Documentation
+
+<details>
+    <summary>Click me</summary>
+
+Sample **templates/sample_setup_files/appsec-remove.csv** for an initial empty setup file.
+
+```
+hostname
+www.example-1.com
+www.example-2.com
+www.example-3.com
+```
+
+- The sample file contains hostnames to remove from the selected hosts list.
+- Existing policy match targets referencing those hostnames are also updated during removal.
+</details>
+
 # sbd-precheck
 
 Generate acme_challenge token for hostnames you want to onboard into Akamai.
 [More detail on Default Domain Validation Certificate](https://techdocs.akamai.com/domain-validation/docs/validate-a-domain-using-dns-cname-record#use-this-method-when)
 
 ```bash
-akamai onboard sbd-precheck --csv batch-create.csv
+akamai onboard sbd-precheck --csv sample_templates/SBD.csv
 ```
 
 ### CSV Input File Documentation
