@@ -26,7 +26,6 @@ from time import gmtime
 from time import strftime
 
 import _logging as lg
-import click
 import onboard
 import onboard_appsec_update
 import onboard_batch_create
@@ -36,6 +35,7 @@ import onboard_single_host
 import onboard_smoke_test
 import pandas as pd
 import requests
+import rich_click as click
 import steps
 import util_emojis as emoji
 import utility
@@ -62,6 +62,21 @@ PACKAGE_VERSION = '2.5.2'
 logger = setup_logger()
 root = get_cli_root_directory()
 dir = get_cli_execution_directory()
+
+click.rich_click.MAX_WIDTH = 120
+click.rich_click.STYLE_USAGE = 'bold white'
+click.rich_click.STYLE_USAGE_COMMAND = 'bold dark_orange'
+click.rich_click.STYLE_OPTION_DEFAULT = 'bold dark_orange'
+
+click.rich_click.SHOW_REQUIRED_OPTIONS = True
+click.rich_click.STYLE_REQUIRED_LONG = 'bold red'
+click.rich_click.STYLE_REQUIRED_SHORT = 'bold red'
+
+click.rich_click.USE_RICH_MARKUP = True
+click.rich_click.USE_CLICK_SHORT_HELP = True
+click.rich_click.SHOW_METAVARS_COLUMN = False
+click.rich_click.STYLE_HELPTEXT_FIRST_LINE = 'light_goldenrod2'
+click.rich_click.STYLE_HELPTEXT = 'light_goldenrod2'
 
 
 class Config:
@@ -149,26 +164,26 @@ def help(ctx):
 
 
 @cli.command(short_help=f'{emoji.rainbow} Bring over delivery configs from Competitors {emoji.rainbow}')
-@click.option('-n', '--network', metavar='', type=click.Choice(['ENHANCED_TLS', 'STANDARD_TLS']), help='use either ENHANCED_TLS or STANDARD_TLS',
+@click.option('-c', '--contract', metavar='', help='contract ID')
+@click.option('-g', '--group', metavar='', help='group ID')
+@click.option('-p', '--product', metavar='', help='one of prd_SPM, prd_Fresca, prd_Site_Accel, prd_Download_Delivery (case sensitive)')
+@click.option('-n', '--network', type=click.Choice(['ENHANCED_TLS', 'STANDARD_TLS']),
+              help='network to use for edge hostnames (ENHANCED_TLS or STANDARD_TLS)',
               show_default=True, default='STANDARD_TLS')
-@click.option('-c', '--contract', metavar='', help='contract ID  (starts with ctr)')
-@click.option('-g', '--group', metavar='', help='group ID     (starts with grp)')
-@click.option('-p', '--product', metavar='', help='one of prd_SPM, prd_Fresca, prd_Site_Accel, prd_Download_Delivery (case sensitive)',
-              required=False)
 @click.option('-d', '--directory', metavar='', help='directory where ruletree json files are', required=True)
+@click.option('--csv', metavar='', help='csv file with headers hostname,propertyName', required=True)
 @click.option('-f', '--rule-format', metavar='', help='rule format (typically latest, but can use frozen rule format if desired)', default='latest', show_default=True)
-@click.option('--media-ehn', metavar='', type=click.Choice(['VOD', 'LIVE']), default='VOD', multiple=False, help='AMD Edge Hostname option (VOD, LIVE)', show_default=True)
-@click.option('--gtm-domain', metavar='', multiple=False, default=None, help='gtm domain to use in properties', show_default=True)
-@click.option('--use-cpcode', metavar='', help='existing CP Code (numeric) that will be used for all hostnames')
+@click.option('--use-cpcode', metavar='', help='reuse existing numeric CP Code')
+@click.option('--cert-mode', type=click.Choice(['SBD', 'CPS'], case_sensitive=False),
+              default='SBD', show_default=True, help='Certificate mode')
 @click.option('--use-existing-edgehostname', metavar='', default=None, is_flag=False,
               flag_value='CSV', help='Use existing edge hostnames. Pass EHN name for single EHN, or omit value for CSV column.')
-@click.option('--cert-mode', type=click.Choice(['SBD', 'CPS'], case_sensitive=False),
-              default='SBD', show_default=True, help='Certificate mode: SBD (Secure by Default) or CPS (CPS Managed)')
 @click.option('--enrollment-id', metavar='', type=int, default=None,
-              help='CPS enrollment ID for creating CPS_MANAGED edge hostnames (one per property)')
+              help='Existing CPS enrollment ID for creating CPS_MANAGED edge hostnames (one per property)')
+@click.option('--media-ehn', type=click.Choice(['VOD', 'LIVE']), default='VOD', multiple=False, help='AMD Edge Hostname option (VOD, LIVE)', show_default=True)
+@click.option('--gtm-domain', metavar='', multiple=False, default=None, help='gtm domain to use in properties', show_default=True)
 @click.option('--activate', metavar='', type=click.Choice(['staging', 'production']), multiple=True, help='Options: staging, production')
 @click.option('--email', metavar='', multiple=True, help='email(s) for activation notifications')
-@click.option('--csv', metavar='', help='csv file with headers hostname,propertyName (at minimum)', required=True)
 @click.option('--force', metavar='', is_flag=True, default=False, help='skip user confirmation prompt')
 @click.option('--dryrun', metavar='', is_flag=True, default=False, help='admin - test config')
 @click.option('--prefix', metavar='', help='admin - required for dryrun.')
@@ -457,16 +472,13 @@ def fetch_sample_templates():
 
 @cli.command(short_help='Create a delivery configuration with mutltiple hostnames and security configuration with one WAF policy')
 @click.option('--csv', metavar='', required=True,
-              help='File containing hostname and origin servername values in format testwebsite.com,origin-testwebsite.com')
+              help='CSV input file without headers.  Data in format hostname,origin-hostname')
 @click.option('-f', '--file', metavar='', required=True,
               help='File containing setup/onboard config key-value pairs in JSON')
 @pass_config
 def multi_hosts(config, csv, file):
     """
     Simplify onboarding ONE property with multiple hostnames and optionally multiple CPCodes
-
-    \b
-    CSV input file without headers.  Just data in format hostname,origin-hostname
     """
     logger.info('Start Akamai CLI onboard')
     try:
@@ -1442,17 +1454,19 @@ class Fake:
 @pass_config
 def appsec_create(config, contract_id, group_id, by, activate, csv, email, note):
     """
-    \b
     Batch create new security configuration, security policy, and policy match target
 
+    \b
     Security config will not be activated, unless --activate is specified.
 
+    \b
     CSV input file options
 
       \b
-      Option 1 by hostname [default]: Headers contain waf_config_name,waf_policy_name,hostname
+      Option 1 by hostname <default>: Headers contain waf_config_name,waf_policy_name,hostname
+
       \b
-      Option 2 by propertyname:       Headers contain propertyname,waf_config_name,waf_policy_name,hostname
+      Option 2 by propertyname: Headers contain propertyname,waf_config_name,waf_policy_name,hostname
     """
     logger.info('Start Akamai CLI onboard')
     try:
