@@ -6,10 +6,10 @@
 
 ## Quick navigation:
 
-- [Start with the tutorial](#tutorial-onboard-your-first-property-)
-- [Jump to task guides](#how-to-guides-)
-- [Look up commands](#reference-)
-- [Understand the workflow model](#explanation-)
+- [Start with the tutorial](#tutorial-onboard-your-first-property)
+- [How-to guides](#how-to-guides)
+- [Commands Reference](#commands-reference)
+- [Explanation](#explanation)
 
 ## Requirements
 
@@ -44,7 +44,7 @@ akamai install property-manager onboard
 
 This tutorial walks through the safest first run: create a new property from a JSON template without activating production.
 
-If you already know what you need, skip to [How-to guides](#how-to-guides-) or [Reference](#reference-).
+If you already know what you need, skip to [How-to guides](#how-to-guides) or [Commands Reference](#commands-reference).
 
 ### 1. Fetch the sample templates
 
@@ -98,7 +98,7 @@ After the command succeeds, you can enable staging activation in the JSON file a
 
 ## 🧭 How-to guides
 
-These are task-oriented entry points. If you are learning the tool for the first time, start with the [tutorial](#tutorial-onboard-your-first-property-).
+These are task-oriented entry points. If you are learning the tool for the first time, start with the [tutorial](#tutorial-onboard-your-first-property).
 
 1. [Create one hostname quickly](#1-create-one-hostname-quickly)
 2. [Create one property with multiple hostnames](#2-create-one-property-with-multiple-hostnames)
@@ -124,7 +124,7 @@ akamai onboard single-host --file sample_templates/single-host.json
 - fast onboarding for one hostname
 - simple property creation
 - optional secure-by-default edge hostname handling
-- see also: [Reference](#reference-) for the command catalog
+- see also: [Commands Reference](#commands-reference) for the command catalog
 
 ### 2. Create one property with multiple hostnames
 
@@ -158,7 +158,7 @@ akamai onboard batch-create \
 
 Add `--secure-by-default` if you want Secure by Default certificate workflows.
 
-If you are migrating from another CDN rather than stamping out a common template, use [Convert competitor CDN artifacts into Akamai properties](#convert-competitor-cdn-artifacts-into-akamai-properties).
+If you are migrating from another CDN rather than stamping out a common template, use [Convert competitor CDN artifacts into Akamai properties](#9-convert-competitor-cdn-artifacts-into-akamai-properties).
 
 
 ### 4. Work with Default DV certificates (Secure by Default / SBD)
@@ -238,9 +238,9 @@ For the full option list, see [Convert command options](#convert-command-options
 
 [↑ Back to top](#top)
 
-## 📚 Reference
+## 📚 Commands Reference
 
-Use this section when you need facts rather than guidance. If you need a recommended path, go back to [🧭 How-to guides](#how-to-guides-).
+Use this section when you need facts rather than guidance. If you need a recommended path, go back to [🧭 How-to guides](#how-to-guides).
 
 ### Global options
 
