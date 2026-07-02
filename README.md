@@ -6,10 +6,10 @@
 
 ## Quick navigation:
 
-- [Start with the tutorial](#tutorial-onboard-your-first-property)
-- [How-to guides](#how-to-guides)
-- [Commands Reference](#commands-reference)
-- [Explanation](#explanation)
+- [Start with the tutorial](#-tutorial-onboard-your-first-property)
+- [How-to guides](#-how-to-guides)
+- [Commands Reference](#-commands-reference)
+- [Explanation](#-explanation)
 
 ## Requirements
 
@@ -44,7 +44,7 @@ akamai install property-manager onboard
 
 This tutorial walks through the safest first run: create a new property from a JSON template without activating production.
 
-If you already know what you need, skip to [How-to guides](#how-to-guides) or [Commands Reference](#commands-reference).
+If you already know what you need, skip to [How-to guides](#-how-to-guides) or [Commands Reference](#-commands-reference).
 
 ### 1. Fetch the sample templates
 
@@ -98,18 +98,17 @@ After the command succeeds, you can enable staging activation in the JSON file a
 
 ## 🧭 How-to guides
 
-These are task-oriented entry points. If you are learning the tool for the first time, start with the [tutorial](#tutorial-onboard-your-first-property).
+These are task-oriented entry points. If you are learning the tool for the first time, start with the [tutorial](#-tutorial-onboard-your-first-property).
 
-1. [Create one hostname quickly](#1-create-one-hostname-quickly)
-2. [Create one property with multiple hostnames](#2-create-one-property-with-multiple-hostnames)
-3. [Create many properties from a template and CSV](#3-create-many-properties-from-a-template-and-csv)
-4. [Work with Default DV certificates (Secure by Default / SBD)](#4-work-with-default-dv-certificates-secure-by-defaultsbd)
-5. [Create new AppSec configurations in bulk](#5-create-new-appsec-configurations-in-bulk)
-6. [Add hostnames to an existing AppSec configuration](#6-add-hostnames-to-an-existing-appsec-configuration)
-7. [Remove hostnames from an existing AppSec configuration](#7-remove-hostnames-from-an-existing-appsec-configuration)
-8. [Inspect existing AppSec policies before updating them](#8-inspect-existing-appsec-policies-before-updating-them)
-9. [Convert competitor CDN artifacts into Akamai properties](#9-convert-competitor-cdn-artifacts-into-akamai-properties)
-
+[1. Create one hostname quickly](#1-create-one-hostname-quickly)
+[2. Create one property with multiple hostnames](#2-create-one-property-with-multiple-hostnames)
+[3. Create many properties from a template and CSV](#3-create-many-properties-from-a-template-and-csv)
+[4. Work with Default DV certificates (Secure by Default / SBD)](#4-work-with-default-dv-certificates-secure-by-default--sbd)
+[5. Create new AppSec configurations in bulk](#5-create-new-appsec-configurations-in-bulk)
+[6. Add hostnames to an existing AppSec configuration](#6-add-hostnames-to-an-existing-appsec-configuration)
+[7. Remove hostnames from an existing AppSec configuration](#7-remove-hostnames-from-an-existing-appsec-configuration)
+[8. Inspect existing AppSec policies before updating them](#8-inspect-existing-appsec-policies-before-updating-them)
+[9. Convert competitor CDN artifacts into Akamai properties](#9-convert-competitor-cdn-artifacts-into-akamai-properties)
 
 ### 1. Create one hostname quickly
 
@@ -124,7 +123,7 @@ akamai onboard single-host --file sample_templates/single-host.json
 - fast onboarding for one hostname
 - simple property creation
 - optional secure-by-default edge hostname handling
-- see also: [Commands Reference](#commands-reference) for the command catalog
+- see also: [Commands Reference](#-commands-reference) for the command catalog
 
 ### 2. Create one property with multiple hostnames
 
@@ -240,75 +239,91 @@ For the full option list, see [Convert command options](#convert-command-options
 
 ## 📚 Commands Reference
 
-Use this section when you need facts rather than guidance. If you need a recommended path, go back to [🧭 How-to guides](#how-to-guides).
+Use this section when you need facts rather than guidance. If you need a recommended path, go back to [🧭 How-to guides](#-how-to-guides).
 
 ### Global options
 
 These options apply before the subcommand:
 
-| Option | Description |
-| --- | --- |
-| `--edgerc` | Path to the credentials file. Defaults to `~/.edgerc`. |
-| `--section`, `-s` | Section name in `.edgerc`. Defaults to `onboard`. |
-| `--account-key` | Account switch key for Akamai internal workflows. |
-| `--help`, `-h` | Show command help. |
+| Option            | Description                                            |
+| ----------------- | ------------------------------------------------------ |
+| `--edgerc`        | Path to the credentials file. Defaults to `~/.edgerc`. |
+| `--section`, `-s` | Section name in `.edgerc`. Defaults to `onboard`.      |
+| `--account-key`   | Account switch key for Akamai internal workflows.      |
+| `--help`, `-h`    | Show command help.                                     |
 
 ### Command catalog
 
-| Command | Purpose |
-| --- | --- |
-| `create` | Create a property and optionally update WAF from a JSON definition |
-| `single-host` | Create one property for one hostname |
-| `multi-hosts` | Create one property for many hostnames |
-| `batch-create` | Create multiple properties from a common template |
-| `fetch-sample-templates` | Copy example setup files locally |
-| `appsec-policy` | List security configurations, policies, and match targets |
-| `appsec-create` | Create AppSec configurations in bulk |
-| `appsec-update` | Add hostnames to existing AppSec config |
-| `appsec-remove` | Remove hostnames from existing AppSec config |
-| `sbd-precheck` | Generate token data for Secure by Default validation |
-| `sbd-status` | Report Secure by Default certificate status |
-| `convert` | Convert competitor CDN artifacts into Akamai delivery configs |
+| Command                  | Purpose                                                            |
+| ------------------------ | ------------------------------------------------------------------ |
+| `create`                 | Create a property and optionally update WAF from a JSON definition |
+| `single-host`            | Create one property for one hostname                               |
+| `multi-hosts`            | Create one property for many hostnames                             |
+| `batch-create`           | Create multiple properties from a common template                  |
+| `fetch-sample-templates` | Copy example setup files locally                                   |
+| `appsec-policy`          | List security configurations, policies, and match targets          |
+| `appsec-create`          | Create AppSec configurations in bulk                               |
+| `appsec-update`          | Add hostnames to existing AppSec config                            |
+| `appsec-remove`          | Remove hostnames from existing AppSec config                       |
+| `sbd-precheck`           | Generate token data for Secure by Default validation               |
+| `sbd-status`             | Report Secure by Default certificate status                        |
+| `convert`                | Convert competitor CDN artifacts into Akamai delivery configs      |
 
 ### Common input types
 
 > For `batch-create` and `convert`, the JSON input is a rule-tree JSON template (delivery configuration rules) rather than a setup JSON file.
 
-| Command | CSV | JSON |
-| --- | --- | --- |
-| `create` |  | :heavy_check_mark: |
-| `single-host` |  | :heavy_check_mark: |
-| `multi-hosts` | :heavy_check_mark: | :heavy_check_mark: |
-| `batch-create` | :heavy_check_mark: | :heavy_check_mark: |
-| `appsec-create` | :heavy_check_mark: |  |
-| `appsec-update` | :heavy_check_mark: |  |
-| `appsec-remove` | :heavy_check_mark: |  |
-| `sbd-precheck` | :heavy_check_mark: |  |
-| `convert` | :heavy_check_mark: | :heavy_check_mark: |
+| Command         | CSV                | JSON               |
+| --------------- | ------------------ | ------------------ |
+| `create`        |                    | :heavy_check_mark: |
+| `single-host`   |                    | :heavy_check_mark: |
+| `multi-hosts`   | :heavy_check_mark: | :heavy_check_mark: |
+| `batch-create`  | :heavy_check_mark: | :heavy_check_mark: |
+| `appsec-create` | :heavy_check_mark: |                    |
+| `appsec-update` | :heavy_check_mark: |                    |
+| `appsec-remove` | :heavy_check_mark: |                    |
+| `sbd-precheck`  | :heavy_check_mark: |                    |
+| `convert`       | :heavy_check_mark: | :heavy_check_mark: |
 
 
 
 ### Convert command options
 
-| Option | Required | Description |
-| --- | --- | --- |
-| `--csv` | Yes | CSV file with `hostname` and `propertyName` at minimum |
-| `--directory` | Yes | Directory containing per-property rule-tree JSON files |
-| `--contract` | Yes | Contract ID |
-| `--group` | Yes | Group ID |
-| `--network` | No | `ENHANCED_TLS` or `STANDARD_TLS` |
-| `--product` | No | Product override when not supplied in CSV |
-| `--cert-mode` | No | `SBD` or `CPS` |
-| `--enrollment-id` | No | CPS enrollment ID used with `--cert-mode CPS` |
-| `--use-existing-edgehostname` | No | Reuse a provided edge hostname or CSV column values |
-| `--rule-format` | No | Rule format version, default `latest` |
-| `--use-cpcode` | No | Reuse one CP code property manager config |
-| `--gtm-domain` | No | Global Traffic Management (GTM) domain replacement target |
-| `--media-ehn` | No | Adaptive Media Delivery (AMD) edge hostname mode: `VOD` or `LIVE` |
-| `--activate` | No | Activation target: `staging` or `production` |
-| `--email` | No | Notification emails for activation |
-| `--force` | No | Skip confirmation prompt |
-| `--launch/--no-launch` | No | Automatically open the Excel report |
+```console
+$ akamai onboard convert --help
+
+ Usage: akamai onboard convert [OPTIONS]
+
+ Bring over Cloudflare/Cloudfront/Imperva/Fastly configs to Akamai platform
+
+╭─ Options ────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
+│    --contract                   -c  contract ID                                                                      │
+│    --group                      -g  group ID                                                                         │
+│    --product                    -p  one of prd_SPM, prd_Fresca, prd_Site_Accel, prd_Download_Delivery (case          │
+│                                     sensitive)                                                                       │
+│    --network                    -n  network to use for edge hostnames (ENHANCED_TLS or STANDARD_TLS)                 │
+│                                     [default: STANDARD_TLS]                                                          │
+│ *  --directory                  -d  directory where ruletree json files are [required]                               │
+│ *  --csv                            csv file with headers hostname,propertyName [required]                           │
+│    --rule-format                -f  rule format (typically latest, but can use frozen rule format if desired)        │
+│                                     [default: latest]                                                                │
+│    --use-cpcode                     reuse existing numeric CP Code                                                   │
+│    --cert-mode                      Certificate mode [default: SBD]                                                  │
+│    --use-existing-edgehostname      Use existing edge hostnames. Pass EHN name for single EHN, or omit value for CSV │
+│                                     column.                                                                          │
+│    --enrollment-id                  Existing CPS enrollment ID for creating CPS_MANAGED edge hostnames (one per      │
+│                                     property)                                                                        │
+│    --media-ehn                      AMD Edge Hostname option (VOD, LIVE) [default: VOD]                              │
+│    --gtm-domain                     gtm domain to use in properties                                                  │
+│    --activate                       Options: staging, production                                                     │
+│    --email                          email(s) for activation notifications                                            │
+│    --force                          skip user confirmation prompt                                                    │
+│    --launch/--no-launch             automatically open excel application                                             │
+│    --help                       -h  Show this message and exit.                                                      │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+```
+
+`*` marks a required option.
 
 [↑ Back to top](#top)
 
@@ -346,6 +361,8 @@ Many commands support activation, but a staging-first rollout is the lower-risk 
 
 ## Contribution guidelines
 
+By submitting a contribution to this project, you assign the contribution and associated copyright rights to the repository owner.
+
 ### Local development
 
 The plugin metadata requires Python 3.12.
@@ -369,7 +386,41 @@ To test a different branch:
 
 Local artifacts are written to folders such as `logs/`, and `convert` writes an Excel workbook under `output/{account_name}/`.
 
-By submitting a contribution to this project, you assign the contribution and associated copyright rights to the repository owner.
+#### Troubleshooting `akamai install`
+
+If the install command fails, find the error message below and follow the fix.
+
+**Error: `venv python package not found`**
+
+What's happening: your computer's Python is a very new version (3.14), and your copy of `akamai-cli` is too old to work with it — this is a known bug ([akamai/cli#214](https://github.com/akamai/cli/issues/214)) that's already been fixed in newer releases.
+
+Fix: update `akamai-cli`, then try installing again.
+
+```bash
+akamai upgrade
+```
+
+**Error: `externally-managed-environment`**
+
+What's happening: modern versions of Python (3.11+) protect themselves from having packages installed into them by outside tools, to avoid breaking your system. The install command trips this protection.
+
+Fix: run the install with two extra settings that tell it "this one install is safe to allow":
+
+```bash
+PIP_BREAK_SYSTEM_PACKAGES=1 PIP_IGNORE_INSTALLED=1 akamai install file:///path/to/cli-onboard
+```
+
+**Need to use a specific Python version (e.g. 3.12) instead of your default one?**
+
+What's happening: `akamai-cli` always uses whatever program is named `python` on your computer. If you have multiple Python versions and need a particular one just for this install, you can temporarily point `python` at it.
+
+Fix (using `uv`, a Python version manager):
+
+```bash
+uv python install 3.12 --default   # installs Python 3.12 and makes it the default (skipped if already installed)
+PATH="$HOME/.local/bin:$PATH" PIP_BREAK_SYSTEM_PACKAGES=1 PIP_IGNORE_INSTALLED=1 \
+  akamai install file:///path/to/cli-onboard
+```
 
 ## Notice
 
