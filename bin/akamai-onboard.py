@@ -19,6 +19,7 @@ import logging.config
 import os
 import sys
 import time
+import tomllib
 from datetime import datetime
 from pathlib import Path
 from shutil import copytree
@@ -58,10 +59,26 @@ from rich import print
 from rich.console import Console
 from tabulate import tabulate
 
-PACKAGE_VERSION = '2.5.2'
 logger = setup_logger()
 root = get_cli_root_directory()
 dir = get_cli_execution_directory()
+
+
+def _load_package_metadata():
+    """pyproject.toml is the single source of truth for the CLI's version/description.
+
+    Resolved from this file's own location (not get_cli_root_directory()), so it always
+    reflects the code that's actually running - the dev checkout under `uv run`, or the
+    installed copy under `~/.akamai-cli/src/cli-onboard` - rather than whichever install
+    happens to exist on disk.
+    """
+    package_root = Path(__file__).resolve().parent.parent
+    with open(Path(package_root, 'pyproject.toml'), 'rb') as f:
+        project = tomllib.load(f)['project']
+    return project['version'], project['description']
+
+
+PACKAGE_VERSION, PACKAGE_DESCRIPTION = _load_package_metadata()
 
 click.rich_click.MAX_WIDTH = 120
 click.rich_click.STYLE_USAGE = 'bold white'
@@ -135,7 +152,8 @@ def init_config(config):
     return session, wrap_api, account_input_folder, account_output_folder
 
 
-@click.group(context_settings={'help_option_names': ['-h', '--help']})
+@click.group(context_settings={'help_option_names': ['-h', '--help']},
+             help=f'{PACKAGE_DESCRIPTION} (v{PACKAGE_VERSION})')
 @click.option('--edgerc', metavar='', default=os.path.join(os.path.expanduser('~'), '.edgerc'),
               help='Location of the credentials file [$AKAMAI_EDGERC]', required=False)
 @click.option('-s', '--section', metavar='', default='onboard',
@@ -146,9 +164,6 @@ def init_config(config):
 @click.version_option(version=PACKAGE_VERSION)
 @pass_config
 def cli(config, edgerc, section, account_key):
-    '''
-    Akamai CLI for onboarding properties v2.5.2
-    '''
     config.edgerc = edgerc
     config.section = section
     config.account_key = account_key
