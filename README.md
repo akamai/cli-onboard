@@ -309,8 +309,8 @@ $ akamai onboard convert --help
 │                                     [default: latest]                                                                │
 │    --use-cpcode                     reuse existing numeric CP Code                                                   │
 │    --cert-mode                      Certificate mode [default: SBD]                                                  │
-│    --use-existing-edgehostname      Use existing edge hostnames. Pass EHN name for single EHN, or omit value for CSV │
-│                                     column.                                                                          │
+│    --use-existing-edgehostname      Use existing edge hostnames. Pass an EHN name for a single EHN, or pass 'CSV' to │
+│                                     use the edgeHostname column from the CSV.                                        │
 │    --enrollment-id                  Existing CPS enrollment ID for creating CPS_MANAGED edge hostnames (one per      │
 │                                     property)                                                                        │
 │    --media-ehn                      AMD Edge Hostname option (VOD, LIVE) [default: VOD]                              │

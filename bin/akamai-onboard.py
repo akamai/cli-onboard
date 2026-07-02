@@ -192,7 +192,7 @@ def help(ctx):
 @click.option('--cert-mode', type=click.Choice(['SBD', 'CPS'], case_sensitive=False),
               default='SBD', show_default=True, help='Certificate mode')
 @click.option('--use-existing-edgehostname', metavar='', default=None, is_flag=False,
-              flag_value='CSV', help='Use existing edge hostnames. Pass EHN name for single EHN, or omit value for CSV column.')
+              flag_value='CSV', help="Use existing edge hostnames. Pass an EHN name for a single EHN, or pass 'CSV' to use the edgeHostname column from the CSV.")
 @click.option('--enrollment-id', metavar='', type=int, default=None,
               help='Existing CPS enrollment ID for creating CPS_MANAGED edge hostnames (one per property)')
 @click.option('--media-ehn', type=click.Choice(['VOD', 'LIVE']), default='VOD', multiple=False, help='AMD Edge Hostname option (VOD, LIVE)', show_default=True)
