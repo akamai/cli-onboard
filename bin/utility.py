@@ -1836,8 +1836,12 @@ class utility:
             # group by propertyName
             propertyName = row['propertyName']
             edgeHostname = onboard_object.edge_hostname_list[i]
-            with open(templateFile) as file:
-                templateData = json.load(file)
+            try:
+                with open(templateFile) as file:
+                    templateData = json.load(file)
+            except FileNotFoundError:
+                logger.error(f"Template file not found: {templateFile}")
+                continue
 
             # replace all gtm references with GTM hostname
 

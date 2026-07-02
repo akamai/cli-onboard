@@ -202,17 +202,19 @@ class apiCallsWrapper:
     def searchCpcode(self, contractId, groupId, productId, cpcode_name):
         """
         Function to search cpcode
-        """
-        if productId.startswith('prd_'):
-            productId = productId[4:]
-        if productId in ['Download_Delivery', 'Adaptive_Media_Delivery']:
-            productId = productId.replace('_', '')
 
-        contractId = contractId.lstrip('ctr_')
-        groupId = groupId.lstrip('grp_')
+        NOTE: productId is intentionally NOT sent as a filter here. The cprg/v1/cpcodes
+        productId values (e.g. 'AdvSite::Reporter') don't line up with the PAPI-style
+        productId (e.g. 'prd_Fresca') this codebase passes in, so filtering on it caused
+        every search to come back empty and fall through to create_new_cpcode, silently
+        creating duplicate cpcodes for names that already existed.
+        """
+        if contractId.startswith('ctr_'):
+            contractId = contractId[4:]
+        if groupId.startswith('grp_'):
+            groupId = groupId[4:]
         params = {'contractId': contractId,
                   'groupId': groupId,
-                  'productId': f'{productId}::{productId}',
                   'cpcodeName': cpcode_name}
 
         search_cpcode_url = f'https://{self.access_hostname}/cprg/v1/cpcodes'
@@ -220,7 +222,6 @@ class apiCallsWrapper:
         resp = self.session.get(search_cpcode_url, headers=headers, params=params)
         logger.debug(f'Original cpcode: {cpcode_name}')
         logger.debug(resp.url)
-        found = len(resp.json()['cpcodes'])
         return resp
 
     def createProperty(self, contractId, groupId, productId, property_name):
