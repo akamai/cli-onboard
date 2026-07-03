@@ -37,16 +37,20 @@ column_width = 50
 
 
 class utility:
-    def __init__(self):
+    def __init__(self, check_prereqs: bool = True):
         """
         Function to initialize a common status indicator,
         This variable should be updated by every function
         defined in validation modules to indicate validation status.
         This avoid usage of too many IF Conditions.
+
+        check_prereqs=False skips the `akamai`/pipeline shell-out below - used by
+        tests that need a real utility() instance without a live `akamai` CLI on PATH.
         """
         # Initialize the variable to true
         self.valid = True
-        self.validate_prerequisite_cli()
+        if check_prereqs:
+            self.validate_prerequisite_cli()
         self.start_time = time.perf_counter()
 
     def check_cli_prereq(self, click_args, config) -> None:
@@ -437,7 +441,7 @@ class utility:
 
         return self.valid
 
-    def validateSetupStepsConvert(self, onboard_object, wrapper_object, prefix, cli_mode='convert') -> bool:
+    def validateSetupStepsConvert(self, onboard_object, wrapper_object, prefix, cli_mode='convert', confirm_input=input) -> bool:
         """
         Function to validate the input values of {hostname}.json when in convert mode
         """
@@ -649,7 +653,7 @@ class utility:
                 print()
                 logger.warning('Please review all settings. Do you want to proceed? (yes/no)')
                 print('_' * 120)
-                string = str(input())
+                string = str(confirm_input())
                 proceed_variations = ['yes', 'y', 'Y', 'YES', 'Yes']
                 if string in proceed_variations:
                     logger.warning(f'{emoji.ok_hand} Proceeding with Onboarding')

@@ -97,8 +97,13 @@ click.rich_click.STYLE_HELPTEXT = 'light_goldenrod2'
 
 
 class Config:
-    def __init__(self):
-        pass
+    def __init__(self, utility_cls=None):
+        # Injection seam for tests: convert() builds `utility.utility()` off of this
+        # instead of importing the class directly, so tests can substitute a
+        # subclass (e.g. one that skips the `akamai` CLI prereq shell-out and stubs
+        # network calls) by constructing Config(utility_cls=...) and passing it as
+        # `obj=` to CliRunner.invoke(), rather than monkeypatching utility.utility.
+        self.utility_cls = utility_cls
 
 
 pass_config = click.make_pass_decorator(Config, ensure=True)
@@ -225,7 +230,7 @@ def convert(config, **kwargs):
 
     # Validate setup and akamai cli and cli pipeline are installed
     util_papi = utility_papi.papiFunctions()
-    util = utility.utility()
+    util = (config.utility_cls or utility.utility)()
     util.check_cli_prereq(click_args, config)
 
     if util.check_api_access(papi):
