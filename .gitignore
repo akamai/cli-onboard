@@ -10,3 +10,6 @@ sample_templates
 .sh
 *.csv
 !templates/**/*.csv
+.claude/
+output/
+docker-run.log
