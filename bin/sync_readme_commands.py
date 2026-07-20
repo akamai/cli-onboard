@@ -63,20 +63,10 @@ def render_catalog(cli) -> str:
     removed = {name: cli.commands.pop(name) for name in EXCLUDED_COMMANDS if name in cli.commands}
     try:
         result = CliRunner().invoke(cli, ['--help'], env={'COLUMNS': HELP_COLUMNS})
-        output = result.output
-        try:
-            start = output.index('╭─ Commands')
-        except ValueError:
-            # TEMPORARY DIAGNOSTIC (2026-07-20): CI fails here on all OS/Python
-            # combos with the same ValueError while every local repro passes.
-            # Dump enough context in the exception message to see the real
-            # cause from the CI log instead of guessing blind. Remove once
-            # root-caused.
-            raise ValueError(
-                'substring not found -- DIAGNOSTIC: '
-                f'exit_code={result.exit_code!r} exception={result.exception!r} '
-                f'output_len={len(output)} output_repr={output[:1000]!r}'
-            ) from None
+        output = re.sub(r'\x1b\[[0-9;?]*[ -/]*[@-~]', '', result.output)
+        start = output.index('╭')
+        commands_start = output.index('Commands', start)
+        start = output.rfind('╭', 0, commands_start)
         end = output.index('╯', start) + 1
         commands_panel = output[start:end]
     finally:
