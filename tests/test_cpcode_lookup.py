@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import logging
+
 import pytest
 
 
@@ -83,3 +85,55 @@ def test_search_for_cpcode_survives_non_json_response(papi, click_args_factory, 
 
     with pytest.raises(SystemExit):
         papi.search_for_cpcode(onboard_object, wrapper, 'my-cpcode', 'ctr_1', 'grp_1', 'prd_1')
+
+
+def test_create_new_cpcode_logs_path_when_given(papi, click_args_factory, config_stub, caplog):
+    response = _FakeResponse(ok=True, status_code=201, json_body={'cpcodeLink': '/papi/v1/cpcodes/cpc_12345?x'})
+    wrapper = _FakeWrapper(response)
+    onboard_object = _onboard_object(click_args_factory, config_stub)
+
+    with caplog.at_level(logging.INFO):
+        papi.create_new_cpcode(onboard_object, wrapper, 'my-cpcode', 'ctr_1', 'grp_1', 'prd_1', path='/some/path')
+
+    assert 'New cpcode: 12345' in caplog.text
+    assert '/some/path' in caplog.text
+    assert 'my-cpcode' not in caplog.text
+
+
+def test_create_new_cpcode_logs_cpcode_name_when_no_path(papi, click_args_factory, config_stub, caplog):
+    response = _FakeResponse(ok=True, status_code=200, json_body={'cpcodeLink': '/papi/v1/cpcodes/cpc_12345?x'})
+    wrapper = _FakeWrapper(response)
+    onboard_object = _onboard_object(click_args_factory, config_stub)
+
+    with caplog.at_level(logging.INFO):
+        papi.create_new_cpcode(onboard_object, wrapper, 'my-cpcode', 'ctr_1', 'grp_1', 'prd_1')
+
+    assert 'Reused existing cpcode: 12345' in caplog.text
+    assert 'my-cpcode' in caplog.text
+
+
+def test_search_for_cpcode_logs_path_when_given(papi, click_args_factory, config_stub, caplog):
+    response = _FakeResponse(ok=True, status_code=200, json_body={
+        'cpcodes': [{'cpcodeName': 'my-cpcode', 'cpcodeId': 67890}],
+    })
+    wrapper = _FakeWrapper(response)
+    onboard_object = _onboard_object(click_args_factory, config_stub)
+
+    with caplog.at_level(logging.INFO):
+        papi.search_for_cpcode(onboard_object, wrapper, 'my-cpcode', 'ctr_1', 'grp_1', 'prd_1', path='/some/path')
+
+    assert 'Existing cpcode found: 67890 for path: /some/path' in caplog.text
+
+
+def test_search_for_cpcode_logs_without_path(papi, click_args_factory, config_stub, caplog):
+    response = _FakeResponse(ok=True, status_code=200, json_body={
+        'cpcodes': [{'cpcodeName': 'my-cpcode', 'cpcodeId': 67890}],
+    })
+    wrapper = _FakeWrapper(response)
+    onboard_object = _onboard_object(click_args_factory, config_stub)
+
+    with caplog.at_level(logging.INFO):
+        papi.search_for_cpcode(onboard_object, wrapper, 'my-cpcode', 'ctr_1', 'grp_1', 'prd_1')
+
+    assert 'Existing cpcode found: 67890' in caplog.text
+    assert 'for path' not in caplog.text

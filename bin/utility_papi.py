@@ -123,6 +123,14 @@ class papiFunctions:
             logger.debug(f'cpcode {action} response status={response.status_code} body={response.text[:500]}')
         sys.exit(logger.error(error_message))
 
+    def _log_cpcode_result(self, message_with_path, message_without_path, path):
+        """
+        Shared shape behind create_new_cpcode and search_for_cpcode: both log
+        one result line, with a trailing path suffix if the caller passed one
+        and a fallback message otherwise.
+        """
+        logger.info(message_with_path if path else message_without_path)
+
     def create_new_cpcode(self, onboard_object, wrapper_object,
                         cpcode_name, contract_id, group_id, product_id, path=None) -> int:
         """
@@ -138,10 +146,11 @@ class papiFunctions:
         # PAPI returns 201 when it actually creates a cpcode, and 200 when a
         # cpcode with this name already exists and it's just handing back that one
         cpcode_verb = 'New' if create_cpcode_response.status_code == 201 else 'Reused existing'
-        if path:
-            logger.info(f'{space}{space}{emoji.point_right} {cpcode_verb} cpcode: {new_cpcode:<28}{path}')
-        else:
-            logger.info(f'{space}{space}{emoji.point_right} {cpcode_verb} cpcode: {new_cpcode:<28}{cpcode_name}')
+        self._log_cpcode_result(
+            f'{space}{space}{emoji.point_right} {cpcode_verb} cpcode: {new_cpcode:<28}{path}',
+            f'{space}{space}{emoji.point_right} {cpcode_verb} cpcode: {new_cpcode:<28}{cpcode_name}',
+            path,
+        )
         return int(new_cpcode)
 
     def search_for_cpcode(self, onboard_object, wrapper_object,
@@ -165,10 +174,11 @@ class papiFunctions:
         if matches:
             existing_cpcode = matches[0]['cpcodeId']
             onboard_object.onboard_default_cpcode = int(existing_cpcode)
-            if path:
-                logger.info(f'{space}{space}{emoji.point_right} Existing cpcode found: {existing_cpcode} for path: {path}')
-            else:
-                logger.info(f'{space}{space}{emoji.point_right} Existing cpcode found: {existing_cpcode}')
+            self._log_cpcode_result(
+                f'{space}{space}{emoji.point_right} Existing cpcode found: {existing_cpcode} for path: {path}',
+                f'{space}{space}{emoji.point_right} Existing cpcode found: {existing_cpcode}',
+                path,
+            )
         return int(existing_cpcode)
 
     def create_update_pm(self, config, onboard_object, wrapper_object, utility_object, cli_mode: str | None = None):
