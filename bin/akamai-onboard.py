@@ -59,6 +59,13 @@ from rich import print
 from rich.console import Console
 from tabulate import tabulate
 
+if sys.platform == 'win32':
+    # Windows consoles default to a non-UTF-8 codepage (e.g. cp1252) when stdout/stderr
+    # aren't attached to a real terminal, which breaks the emoji used throughout the CLI's
+    # help text and output (UnicodeEncodeError).
+    sys.stdout.reconfigure(encoding='utf-8')
+    sys.stderr.reconfigure(encoding='utf-8')
+
 logger = setup_logger()
 root = get_cli_root_directory()
 dir = get_cli_execution_directory()

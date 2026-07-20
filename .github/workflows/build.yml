@@ -51,3 +51,4 @@ jobs:
         run: python bin/akamai-onboard.py --help
         env:
           COLUMNS: "120"
+          PYTHONUTF8: "1"
