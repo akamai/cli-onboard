@@ -627,7 +627,7 @@ class papiFunctions:
 
                 elif onboard_object.edge_hostname_mode == EdgeHostnameMode.CPS_PLACEHOLDER:
                     # --cert-mode CPS, no enrollment-id, no use-existing: create a real placeholder EHN
-                    account_id = onboard_object.ASK.split(':')[0] if onboard_object.ASK else 'unknown'
+                    account_id = onboard_object.account_switch_key.split(':')[0] if onboard_object.account_switch_key else 'unknown'
                     domain_prefix = f'{account_id}-placeholder'
                     domain_suffix = 'edgekey.net' if onboard_object.secure_network == 'ENHANCED_TLS' else 'edgesuite.net'
                     cname_to = f'{domain_prefix}.{domain_suffix}'

@@ -522,7 +522,7 @@ class utility:
         gtm_domain_error_count = 0
         if not onboard_object.gtm_domain:
             if onboard_object.gtm_replacement_count > 0:
-                onboard_object.gtm_domain = f'{((onboard_object.ASK).replace(':', '-')).lower()}.akadns.net'
+                onboard_object.gtm_domain = f'{((onboard_object.account_switch_key).replace(':', '-')).lower()}.akadns.net'
                 logger.error(f'{space}{emoji.thumbdown} No --gtm-domain input ---> properties have [{onboard_object.gtm_replacement_count}] references to gtm. Using {onboard_object.gtm_domain}')
 
         else:
@@ -1908,7 +1908,7 @@ class utility:
 
             # replace all gtm references with GTM hostname
 
-            templateData, gtm_replacement_count = self.insert_gtm_hostname(templateData, 'gtm_edgio_replace_me.akadns.net', onboard_object.gtm_domain if onboard_object.gtm_domain else (f'{(onboard_object.ASK.replace(':', '-')).lower()}.akadns.net'))
+            templateData, gtm_replacement_count = self.insert_gtm_hostname(templateData, 'gtm_edgio_replace_me.akadns.net', onboard_object.gtm_domain if onboard_object.gtm_domain else (f'{(onboard_object.account_switch_key.replace(':', '-')).lower()}.akadns.net'))
             onboard_object.gtm_replacement_count = onboard_object.gtm_replacement_count + gtm_replacement_count
 
             if (propertyName is None) or (propertyName == ''):

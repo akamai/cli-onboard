@@ -28,7 +28,7 @@ class onboard:
         # Certain values (onboard_) are updated in main processing later
         try:
             self.property_name = []
-            self.ASK = ''
+            self.account_switch_key = ''
             self.csv_loc = click_args['csv']
             self.csv_loc = self.get_actual_location(self.csv_loc)
             self.iteractive_mode = click_args['force']

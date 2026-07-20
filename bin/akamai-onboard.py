@@ -223,7 +223,7 @@ def convert(config, **kwargs):
     click_args = kwargs
 
     onboard_object = onboard_convert.onboard(config, click_args)
-    onboard_object.ASK = config.account_key
+    onboard_object.account_switch_key = config.account_key
 
     if click_args['enrollment_id'] and click_args['cert_mode'].upper() != 'CPS':
         sys.exit(logger.error('--enrollment-id requires --cert-mode CPS'))
