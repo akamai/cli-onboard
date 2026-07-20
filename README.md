@@ -159,7 +159,6 @@ Add `--secure-by-default` if you want Secure by Default certificate workflows.
 
 If you are migrating from another CDN rather than stamping out a common template, use [Convert competitor CDN artifacts into Akamai properties](#9-convert-competitor-cdn-artifacts-into-akamai-properties).
 
-
 ### 4. Work with Default DV certificates (Secure by Default / SBD)
 
 Use **`sbd-precheck`** to generate DNS token data before onboarding hostnames with default DV certificates.
@@ -245,29 +244,35 @@ Use this section when you need facts rather than guidance. If you need a recomme
 
 These options apply before the subcommand:
 
-| Option            | Description                                            |
-| ----------------- | ------------------------------------------------------ |
-| `--edgerc`        | Path to the credentials file. Defaults to `~/.edgerc`. |
-| `--section`, `-s` | Section name in `.edgerc`. Defaults to `onboard`.      |
-| `--account-key`   | Account switch key for Akamai internal workflows.      |
-| `--help`, `-h`    | Show command help.                                     |
+```shell
+ --edgerc                                                     Path to the credentials file [$AKAMAI_EDGERC]
+ --section                                                -s  Section name in the credentials file
+                                                              [$AKAMAI_EDGERC_SECTION]
+ --account-key,--accountkey,--accountSwitchKey,--account  -a  Account Switch Key (Akamai Internal Only)
+ switchkey
+ --version                                                    Show akamai onboard CLI version
+ --help                                                   -h  Show command help
+```
 
 ### Command catalog
 
-| Command                  | Purpose                                                            |
-| ------------------------ | ------------------------------------------------------------------ |
-| `create`                 | Create a property and optionally update WAF from a JSON definition |
-| `single-host`            | Create one property for one hostname                               |
-| `multi-hosts`            | Create one property for many hostnames                             |
-| `batch-create`           | Create multiple properties from a common template                  |
-| `fetch-sample-templates` | Copy example setup files locally                                   |
-| `appsec-policy`          | List security configurations, policies, and match targets          |
-| `appsec-create`          | Create AppSec configurations in bulk                               |
-| `appsec-update`          | Add hostnames to existing AppSec config                            |
-| `appsec-remove`          | Remove hostnames from existing AppSec config                       |
-| `sbd-precheck`           | Generate token data for Secure by Default validation               |
-| `sbd-status`             | Report Secure by Default certificate status                        |
-| `convert`                | Convert competitor CDN artifacts into Akamai delivery configs      |
+```shell
+ appsec-create           Create new security configuration, security policy, and policy match target
+ appsec-policy           List available security configuration policy
+ appsec-remove           Remove hostnames from selected hosts and any policy match targets
+ appsec-update           Add hostnames as selected hosts to existing security configuration and optionally add to
+                         policy match target
+ batch-create            Create a 1 or more delivery configurations using a csv input and optionally update WAF
+                         policy
+ convert                 🌈 Bring over delivery configs from Competitors 🌈
+ create                  Create a delivery configuration and update existing WAF policy
+ fetch-sample-templates  Pull sample templates
+ multi-hosts             Create a delivery configuration with mutltiple hostnames and security configuration with one
+                         WAF policy
+ sbd-precheck            ✔️ Precheck Default DV (SBD) hostnames for token placement
+ sbd-status              ✔️ View Default DV (SBD) certificate deployment status
+ single-host             Create a simple delivery and security configuration with one hostname and one WAF policy
+```
 
 ### Common input types
 
@@ -284,8 +289,6 @@ These options apply before the subcommand:
 | `appsec-remove` | :heavy_check_mark: |                    |
 | `sbd-precheck`  | :heavy_check_mark: |                    |
 | `convert`       | :heavy_check_mark: | :heavy_check_mark: |
-
-
 
 ### Convert command options
 
@@ -365,7 +368,7 @@ By submitting a contribution to this project, you assign the contribution and as
 
 ### Local development
 
-The plugin metadata requires Python 3.12.
+The plugin metadata requires a minimum of Python 3.12.
 
 ```bash
 git clone https://github.com/akamai/cli-onboard.git
