@@ -1387,7 +1387,7 @@ def appsec_remove(config, **kwargs):
     Remove hostnames from selected hosts and any policy match targets
     """
     logger.info('Start Akamai CLI onboard')
-    _, wrapper_object = init_config(config)
+    _, wrapper_object, account_input, account_output = init_config(config)
     util = utility.utility()
     click_args = kwargs
 

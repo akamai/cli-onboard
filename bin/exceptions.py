@@ -14,13 +14,13 @@ Copyright 2022 Akamai Technologies, Inc. All Rights Reserved.
 from __future__ import annotations
 
 import json
-import logging
+import logging.config
 import os
 import shutil
 import time
 from pathlib import Path
 
-import coloredlogs
+from rich.logging import RichHandler
 
 
 def setup_logger():
@@ -49,7 +49,11 @@ def setup_logger():
     logging.config.dictConfig(log_cfg)
     logging.Formatter.converter = time.gmtime
     logger = logging.getLogger(__name__)
-    coloredlogs.install(logger=logger, fmt='%(levelname)-8s: %(message)s')
+    logger.setLevel(logging.INFO)
+    for handler in logger.handlers[:]:
+        if isinstance(handler, RichHandler):
+            logger.removeHandler(handler)
+    logger.addHandler(RichHandler(show_level=False, show_time=False, rich_tracebacks=True))
     return logger
 
 

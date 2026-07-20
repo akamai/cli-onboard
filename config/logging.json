@@ -2,20 +2,12 @@
   "version": 1,
   "disable_existing_loggers": false,
   "formatters": {
-    "short": {
-      "format": "%(levelname)-8s: %(message)s"
-    },
     "long": {
       "format": "%(asctime)s %(process)d %(filename)-17s %(lineno)-5d %(levelname)-8s: %(message)s",
       "datefmt": "%Y-%m-%d %H:%M:%S"
     }
   },
   "handlers": {
-    "console": {
-      "class": "logging.StreamHandler",
-      "level": "INFO",
-      "formatter": "short"
-    },
     "file_handler": {
       "class": "logging.FileHandler",
       "level": "DEBUG",
@@ -28,7 +20,6 @@
   },
   "root": {
     "handlers": [
-      "console",
       "file_handler"
     ]
   }
