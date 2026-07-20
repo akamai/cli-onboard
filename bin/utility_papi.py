@@ -329,10 +329,10 @@ class papiFunctions:
         Return edge hostname id should start with ehn_ because that's what subsequent apis calls need
         By time this method is called, onboard_object should already have edge_hostname_id set by validate steps up front
         """
-        if onboard_object.edge_hostname_mode == EdgeHostnameMode.USE_EXISTING_EDGEHOSTNAME:
-            edgeHostnameId = f'ehn_{onboard_object.edge_hostname_id}'
-            return edgeHostnameId
-        elif onboard_object.edge_hostname_mode == EdgeHostnameMode.NEW_STANDARD_TLS_EDGEHOSTNAME:
+        def _use_existing_edgehostname():
+            return f'ehn_{onboard_object.edge_hostname_id}'
+
+        def _new_standard_tls_edgehostname():
             domain_prefix = onboard_object.public_hostnames[0]
             # use property name for all edge hostname when no cpcode is created for all hostnames
             if cli_mode == 'multi-hosts' and not onboard_object.individual_cpcode:
@@ -345,7 +345,8 @@ class papiFunctions:
                                                                 onboard_object.group_id)
             # Response will be either the edgeHostnameId of -1 in case of failure
             return edgehostname_id
-        elif onboard_object.edge_hostname_mode == EdgeHostnameMode.NEW_ENHANCED_TLS_EDGEHOSTNAME:
+
+        def _new_enhanced_tls_edgehostname():
             if onboard_object.use_existing_enrollment_id > 0:
                 domain_prefix = onboard_object.public_hostnames[0]
                 if cli_mode == 'multi-hosts':
@@ -359,13 +360,22 @@ class papiFunctions:
                                                                     onboard_object.group_id)
                 # Response will be either the edgeHostnameId of -1 in case of failure
                 return edgehostname_id
+            return None
 
-        elif onboard_object.edge_hostname_mode == EdgeHostnameMode.SECURE_BY_DEFAULT:
-            edgeHostnameId = f'ehn_{onboard_object.edge_hostname_id}'
-            return edgeHostnameId
-        else:
+        def _secure_by_default():
+            return f'ehn_{onboard_object.edge_hostname_id}'
+
+        handlers = {
+            EdgeHostnameMode.USE_EXISTING_EDGEHOSTNAME: _use_existing_edgehostname,
+            EdgeHostnameMode.NEW_STANDARD_TLS_EDGEHOSTNAME: _new_standard_tls_edgehostname,
+            EdgeHostnameMode.NEW_ENHANCED_TLS_EDGEHOSTNAME: _new_enhanced_tls_edgehostname,
+            EdgeHostnameMode.SECURE_BY_DEFAULT: _secure_by_default,
+        }
+        handler = handlers.get(onboard_object.edge_hostname_mode)
+        if handler is None:
             logger.error(f'Unknown edge_hostname_mode: {onboard_object.edge_hostname_mode}')
             return (-1)
+        return handler()
 
     def batch_process_ehn(self, onboard_object, wrapper_object, utility_object):
         """
@@ -373,17 +383,11 @@ class papiFunctions:
         Return edge hostname ids should start with ehn_ because that's what subsequent apis calls need
         By time this method is called, onboard_object should already have edge_hostname_id set by validate steps up front
         """
-        if onboard_object.edge_hostname_mode == EdgeHostnameMode.USE_EXISTING_EDGEHOSTNAME:
-            edgeHostnameId = f'ehn_{onboard_object.edge_hostname_id}'
-            return edgeHostnameId
+        if onboard_object.edge_hostname_mode in (EdgeHostnameMode.USE_EXISTING_EDGEHOSTNAME, EdgeHostnameMode.SECURE_BY_DEFAULT):
+            return f'ehn_{onboard_object.edge_hostname_id}'
 
-        elif onboard_object.edge_hostname_mode == EdgeHostnameMode.SECURE_BY_DEFAULT:
-            edgeHostnameId = f'ehn_{onboard_object.edge_hostname_id}'
-            return edgeHostnameId
-
-        else:
-            logger.error(f'Unknown edge_hostname_mode: {onboard_object.edge_hostname_mode}')
-            return (-1)
+        logger.error(f'Unknown edge_hostname_mode: {onboard_object.edge_hostname_mode}')
+        return (-1)
 
     def batch_create_update_pm(self, config, onboard_object, wrapper_object, utility_object, propertyDict, cpcodeList):
         """

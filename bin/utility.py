@@ -337,7 +337,9 @@ class utility:
         edgeHostnameList = onboard_object.edge_hostname_list
         valid_modes = [EdgeHostnameMode.USE_EXISTING_EDGEHOSTNAME, EdgeHostnameMode.SECURE_BY_DEFAULT]
         logger.info(f'{onboard_object.edge_hostname_mode}{space:>{column_width - len(onboard_object.edge_hostname_mode)}}edge hostname mode')
-        if onboard_object.edge_hostname_mode == EdgeHostnameMode.USE_EXISTING_EDGEHOSTNAME:
+
+        def _validate_use_existing_edgehostname():
+            nonlocal count
             ehn_id = 0
             # check to see if specified edge hostname exists
             for edgeHostname in edgeHostnameList:
@@ -350,7 +352,8 @@ class utility:
                 else:
                     logger.error(f'{edgeHostname} invalid edge hostname')
                     count += 1
-        elif onboard_object.edge_hostname_mode == EdgeHostnameMode.SECURE_BY_DEFAULT:
+
+        def _validate_secure_by_default():
             ehn_id = 0
             for i, edgeHostname in enumerate(edgeHostnameList):
                 # check to see if specified edge hostname exists
@@ -364,9 +367,20 @@ class utility:
                     if edgeHostname.endswith(('edgekey.net', 'edgesuite.net')):
                         logger.warning(f'{edgeHostname} does not exist, will be created upon property activation')
                     else:
+                        # `hostname` here is intentionally the last value from the public-hostname
+                        # validation loop earlier in this function, not the current edgeHostname -
+                        # preserved as-is from before this dispatch refactor.
                         logger.warning(f'{edgeHostname} does not end with edgekey.net or edgesuite.net, using {hostname}.{onboard_object.ehn_suffix}')
                         # no need to error out if ehn doesn't exist for SBD - ehn will get created with property activation
                         # count += 1
+
+        edge_hostname_mode_handlers = {
+            EdgeHostnameMode.USE_EXISTING_EDGEHOSTNAME: _validate_use_existing_edgehostname,
+            EdgeHostnameMode.SECURE_BY_DEFAULT: _validate_secure_by_default,
+        }
+        handler = edge_hostname_mode_handlers.get(onboard_object.edge_hostname_mode)
+        if handler:
+            handler()
 
         # If supposed to something with WAF, can we find waf_config_id for the specifed name
         if cli_mode == 'batch-create':
@@ -612,7 +626,8 @@ class utility:
 
         # Validate edge hostname format locally (no HAPI API calls)
         # PAPI will validate on hostname assignment, and SBD creates missing edge hostnames on activation
-        if onboard_object.edge_hostname_mode == EdgeHostnameMode.USE_EXISTING_EDGEHOSTNAME:
+        def _validate_use_existing_edgehostname():
+            nonlocal count
             for edgeHostname in edgeHostnameList:
                 edgeHostname_log = column_width - len(edgeHostname) - 1
                 if edgeHostname_log < 0:
@@ -625,7 +640,8 @@ class utility:
                 else:
                     logger.error(f'{space}{emoji.thumbdown} {edgeHostname_log} invalid edge hostname suffix')
                     count += 1
-        elif onboard_object.edge_hostname_mode == EdgeHostnameMode.SECURE_BY_DEFAULT:
+
+        def _validate_secure_by_default():
             for edgeHostname in edgeHostnameList:
                 edgeHostname_log = column_width - len(edgeHostname) - 1
                 if edgeHostname_log < 0:
@@ -637,10 +653,22 @@ class utility:
                     logger.info(f'{space}{emoji.thumbup} {edgeHostname_log} will be created upon property activation')
                 else:
                     logger.warning(f'{space}{emoji.construction} {edgeHostname_log} does not end with edgekey.net or edgesuite.net, using {edgeHostname}')
-        elif onboard_object.edge_hostname_mode == EdgeHostnameMode.CREATE_CPS_EDGEHOSTNAME:
+
+        def _validate_create_cps_edgehostname():
             logger.info(f'{space}{emoji.pushpin} CPS_MANAGED: edge hostnames will be created per property using enrollment ID {onboard_object.enrollment_id}')
-        elif onboard_object.edge_hostname_mode == EdgeHostnameMode.CPS_PLACEHOLDER:
+
+        def _validate_cps_placeholder():
             logger.info(f'{space}{emoji.pushpin} CPS_MANAGED: placeholder edge hostnames will be assigned (no enrollment ID provided)')
+
+        edge_hostname_mode_handlers = {
+            EdgeHostnameMode.USE_EXISTING_EDGEHOSTNAME: _validate_use_existing_edgehostname,
+            EdgeHostnameMode.SECURE_BY_DEFAULT: _validate_secure_by_default,
+            EdgeHostnameMode.CREATE_CPS_EDGEHOSTNAME: _validate_create_cps_edgehostname,
+            EdgeHostnameMode.CPS_PLACEHOLDER: _validate_cps_placeholder,
+        }
+        handler = edge_hostname_mode_handlers.get(onboard_object.edge_hostname_mode)
+        if handler:
+            handler()
 
         # valid notify_emails is required
         emails = onboard_object.notification_emails
@@ -770,13 +798,8 @@ class utility:
         count = self.validate_hostnames(onboard_object.public_hostnames)
 
         # must be one of three valid modes
-        valid_modes = [EdgeHostnameMode.USE_EXISTING_EDGEHOSTNAME, EdgeHostnameMode.NEW_STANDARD_TLS_EDGEHOSTNAME, EdgeHostnameMode.NEW_ENHANCED_TLS_EDGEHOSTNAME, EdgeHostnameMode.SECURE_BY_DEFAULT]
-        logger.info(f'{onboard_object.edge_hostname_mode}{space:>{column_width - len(onboard_object.edge_hostname_mode)}}edge hostname mode')
-        if onboard_object.edge_hostname_mode not in valid_modes:
-            logger.error(f'{onboard_object.edge_hostname_mode}{space:>{column_width - len(onboard_object.edge_hostname_mode)}}invalid edge_hostname_mode')
-            count += 1
-            logger.info('valid options: use_existing_edgehostname, new_standard_tls_edgehostname, new_enhanced_tls_edgehostname')
-        elif onboard_object.edge_hostname_mode == EdgeHostnameMode.USE_EXISTING_EDGEHOSTNAME:
+        def _validate_use_existing_edgehostname():
+            nonlocal count
             ehn_id = 0
             if onboard_object.edge_hostname == '':
                 logger.error(f'{onboard_object.edge_hostname}{space:>{column_width - len(onboard_object.edge_hostname)}}missing edge hostname')
@@ -796,11 +819,15 @@ class utility:
                 except:
                     logger.error(f'{onboard_object.edge_hostname}{space:>{column_width - len(onboard_object.edge_hostname)}}invalid edge hostname')
                     count += 1
-        elif onboard_object.edge_hostname_mode == EdgeHostnameMode.NEW_STANDARD_TLS_EDGEHOSTNAME:
+
+        def _validate_new_standard_tls_edgehostname():
+            nonlocal count
             if onboard_object.secure_network != 'STANDARD_TLS':
                 logger.error('For new_standard_tls_edgehostname, secure_network must be STANDARD_TLS')
                 count += 1
-        elif onboard_object.edge_hostname_mode == EdgeHostnameMode.NEW_ENHANCED_TLS_EDGEHOSTNAME:
+
+        def _validate_new_enhanced_tls_edgehostname():
+            nonlocal count
             if onboard_object.secure_network != 'ENHANCED_TLS':
                 logger.error('For new_enhanced_tls_edgehostname, secure_network must be ENHANCED_TLS')
                 count += 1
@@ -819,7 +846,9 @@ class utility:
             if onboard_object.create_new_ssl_cert is True:
                 logger.error('Unable to create_new_ssl_cert enrollment, please use existing_enrollment_id instead')
                 count += 1
-        elif onboard_object.edge_hostname_mode == EdgeHostnameMode.SECURE_BY_DEFAULT:
+
+        def _validate_secure_by_default():
+            nonlocal count
             ehn_id = 0
             if onboard_object.secure_by_default_use_existing_ehn == '' and (not onboard_object.secure_by_default_new_ehn):
                 logger.error(f'{onboard_object.edge_hostname}{space:>{column_width - len(onboard_object.edge_hostname)}}missing edge hostname')
@@ -839,6 +868,21 @@ class utility:
                 except:
                     logger.error(f'{onboard_object.secure_by_default_use_existing_ehn}{space:>{column_width - len(onboard_object.secure_by_default_use_existing_ehn)}}invalid edge hostname')
                     count += 1
+
+        edge_hostname_mode_handlers = {
+            EdgeHostnameMode.USE_EXISTING_EDGEHOSTNAME: _validate_use_existing_edgehostname,
+            EdgeHostnameMode.NEW_STANDARD_TLS_EDGEHOSTNAME: _validate_new_standard_tls_edgehostname,
+            EdgeHostnameMode.NEW_ENHANCED_TLS_EDGEHOSTNAME: _validate_new_enhanced_tls_edgehostname,
+            EdgeHostnameMode.SECURE_BY_DEFAULT: _validate_secure_by_default,
+        }
+        valid_modes = list(edge_hostname_mode_handlers)
+        logger.info(f'{onboard_object.edge_hostname_mode}{space:>{column_width - len(onboard_object.edge_hostname_mode)}}edge hostname mode')
+        if onboard_object.edge_hostname_mode not in valid_modes:
+            logger.error(f'{onboard_object.edge_hostname_mode}{space:>{column_width - len(onboard_object.edge_hostname_mode)}}invalid edge_hostname_mode')
+            count += 1
+            logger.info('valid options: use_existing_edgehostname, new_standard_tls_edgehostname, new_enhanced_tls_edgehostname')
+        else:
+            edge_hostname_mode_handlers[onboard_object.edge_hostname_mode]()
 
         # validate source and variable file is use_file mode (create only)
         if onboard_object.use_file:
