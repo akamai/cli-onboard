@@ -17,6 +17,7 @@ import os
 from pathlib import Path
 
 from exceptions import setup_logger
+from model.edge_hostname_mode import EdgeHostnameMode
 logger = setup_logger()
 
 
@@ -52,9 +53,9 @@ class onboard:
             self.edge_hostname_list = []
             # Edge hostname values
             if click_args['secure_by_default']:
-                self.edge_hostname_mode = 'secure_by_default'
+                self.edge_hostname_mode = EdgeHostnameMode.SECURE_BY_DEFAULT
             else:
-                self.edge_hostname_mode = 'use_existing_edgehostname'
+                self.edge_hostname_mode = EdgeHostnameMode.USE_EXISTING_EDGEHOSTNAME
 
             # WAF values
             if click_args['waf_config']:

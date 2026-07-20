@@ -11,6 +11,7 @@ from time import strftime
 
 import util_emojis as emoji
 from exceptions import setup_logger
+from model.edge_hostname_mode import EdgeHostnameMode
 from poll import pollActivation
 from rich import print_json
 
@@ -192,7 +193,7 @@ class papiFunctions:
         if edgeHostname_id != -1:
             secure_by_default = False
             secure_by_default_create_ehn = False
-            if onboard_object.edge_hostname_mode == 'secure_by_default':
+            if onboard_object.edge_hostname_mode == EdgeHostnameMode.SECURE_BY_DEFAULT:
                 secure_by_default = True
                 if onboard_object.secure_by_default_use_existing_ehn == '':
                     secure_by_default_create_ehn = True
@@ -209,7 +210,7 @@ class papiFunctions:
                                                                         onboard_object.onboard_property_id,
                                                                         json.dumps(edgehostname_list))
         if property_update_reponse.status_code == 200:
-            if onboard_object.edge_hostname_mode == 'secure_by_default':
+            if onboard_object.edge_hostname_mode == EdgeHostnameMode.SECURE_BY_DEFAULT:
                 logger.warning('Secure by default Tokens')
                 property_update_response_json = property_update_reponse.json()
                 for hostname in property_update_response_json['hostnames']['items']:
@@ -318,10 +319,10 @@ class papiFunctions:
         Return edge hostname id should start with ehn_ because that's what subsequent apis calls need
         By time this method is called, onboard_object should already have edge_hostname_id set by validate steps up front
         """
-        if onboard_object.edge_hostname_mode == 'use_existing_edgehostname':
+        if onboard_object.edge_hostname_mode == EdgeHostnameMode.USE_EXISTING_EDGEHOSTNAME:
             edgeHostnameId = f'ehn_{onboard_object.edge_hostname_id}'
             return edgeHostnameId
-        elif onboard_object.edge_hostname_mode == 'new_standard_tls_edgehostname':
+        elif onboard_object.edge_hostname_mode == EdgeHostnameMode.NEW_STANDARD_TLS_EDGEHOSTNAME:
             domain_prefix = onboard_object.public_hostnames[0]
             # use property name for all edge hostname when no cpcode is created for all hostnames
             if cli_mode == 'multi-hosts' and not onboard_object.individual_cpcode:
@@ -334,7 +335,7 @@ class papiFunctions:
                                                                 onboard_object.group_id)
             # Response will be either the edgeHostnameId of -1 in case of failure
             return edgehostname_id
-        elif onboard_object.edge_hostname_mode == 'new_enhanced_tls_edgehostname':
+        elif onboard_object.edge_hostname_mode == EdgeHostnameMode.NEW_ENHANCED_TLS_EDGEHOSTNAME:
             if onboard_object.use_existing_enrollment_id > 0:
                 domain_prefix = onboard_object.public_hostnames[0]
                 if cli_mode == 'multi-hosts':
@@ -349,7 +350,7 @@ class papiFunctions:
                 # Response will be either the edgeHostnameId of -1 in case of failure
                 return edgehostname_id
 
-        elif onboard_object.edge_hostname_mode == 'secure_by_default':
+        elif onboard_object.edge_hostname_mode == EdgeHostnameMode.SECURE_BY_DEFAULT:
             edgeHostnameId = f'ehn_{onboard_object.edge_hostname_id}'
             return edgeHostnameId
         else:
@@ -362,11 +363,11 @@ class papiFunctions:
         Return edge hostname ids should start with ehn_ because that's what subsequent apis calls need
         By time this method is called, onboard_object should already have edge_hostname_id set by validate steps up front
         """
-        if onboard_object.edge_hostname_mode == 'use_existing_edgehostname':
+        if onboard_object.edge_hostname_mode == EdgeHostnameMode.USE_EXISTING_EDGEHOSTNAME:
             edgeHostnameId = f'ehn_{onboard_object.edge_hostname_id}'
             return edgeHostnameId
 
-        elif onboard_object.edge_hostname_mode == 'secure_by_default':
+        elif onboard_object.edge_hostname_mode == EdgeHostnameMode.SECURE_BY_DEFAULT:
             edgeHostnameId = f'ehn_{onboard_object.edge_hostname_id}'
             return edgeHostnameId
 
@@ -407,7 +408,7 @@ class papiFunctions:
 
             secure_by_default = False
             secure_by_default_create_ehn = False
-            if onboard_object.edge_hostname_mode == 'secure_by_default':
+            if onboard_object.edge_hostname_mode == EdgeHostnameMode.SECURE_BY_DEFAULT:
                 secure_by_default = True
             edgehostname_list = wrapper_object.bulkCreateEdgehostnameArray(onboard_object.public_hostnames,
                                                                     propertyDict[propertyName]['edgeHostnames'],
@@ -420,7 +421,7 @@ class papiFunctions:
                                                                             onboard_object.onboard_property_id,
                                                                             json.dumps(edgehostname_list))
             if property_update_reponse.status_code == 200:
-                if onboard_object.edge_hostname_mode == 'secure_by_default':
+                if onboard_object.edge_hostname_mode == EdgeHostnameMode.SECURE_BY_DEFAULT:
                     logger.warning('Secure by default Tokens')
                     property_update_response_json = property_update_reponse.json()
                     for hostname in property_update_response_json['hostnames']['items']:
@@ -586,7 +587,7 @@ class papiFunctions:
                 logger.debug(onboard_object.public_hostnames)
                 logger.debug(propertyDict[propertyName]['edgeHostnames'])
 
-                if onboard_object.edge_hostname_mode == 'create_cps_edgehostname':
+                if onboard_object.edge_hostname_mode == EdgeHostnameMode.CREATE_CPS_EDGEHOSTNAME:
                     # --cert-mode CPS --enrollment-id N: create one EHN per property
                     domain_prefix = propertyName
                     domain_suffix = 'edgekey.net' if onboard_object.secure_network == 'ENHANCED_TLS' else 'edgesuite.net'
@@ -610,7 +611,7 @@ class papiFunctions:
                     edgehostname_list = papi.buildCpsManagedHostnameArray(
                         onboard_object.public_hostnames, cname_to, edge_hostname_id=ehn_id)
 
-                elif onboard_object.edge_hostname_mode == 'cps_placeholder':
+                elif onboard_object.edge_hostname_mode == EdgeHostnameMode.CPS_PLACEHOLDER:
                     # --cert-mode CPS, no enrollment-id, no use-existing: create a real placeholder EHN
                     account_id = onboard_object.ASK.split(':')[0] if onboard_object.ASK else 'unknown'
                     domain_prefix = f'{account_id}-placeholder'
@@ -636,7 +637,7 @@ class papiFunctions:
                     edgehostname_list = papi.buildCpsManagedHostnameArray(
                         onboard_object.public_hostnames, cname_to, edge_hostname_id=ehn_id)
 
-                elif onboard_object.edge_hostname_mode == 'use_existing_edgehostname' and onboard_object.use_existing_ehn != 'CSV':
+                elif onboard_object.edge_hostname_mode == EdgeHostnameMode.USE_EXISTING_EDGEHOSTNAME and onboard_object.use_existing_ehn != 'CSV':
                     # --use-existing-edgehostname <ehn-value>: single EHN for all hostnames
                     cname_to = onboard_object.use_existing_ehn
                     cert_prov_type = 'CPS_MANAGED' if onboard_object.cert_mode == 'CPS' else 'DEFAULT'
@@ -668,7 +669,7 @@ class papiFunctions:
                     if x == 0:
                         secure_by_default = False
                         secure_by_default_create_ehn = False
-                        if onboard_object.edge_hostname_mode == 'secure_by_default':
+                        if onboard_object.edge_hostname_mode == EdgeHostnameMode.SECURE_BY_DEFAULT:
                             secure_by_default = True
                         edgehostname_list = papi.bulkCreateEdgehostnameArray(onboard_object.public_hostnames,
                                                                              propertyDict[propertyName]['edgeHostnames'],
@@ -725,7 +726,7 @@ class papiFunctions:
                                                             json.dumps(edgehostname_list))
                 if hostname_resp.ok:
                     update_resp = hostname_resp.json()
-                    if onboard_object.edge_hostname_mode == 'secure_by_default':
+                    if onboard_object.edge_hostname_mode == EdgeHostnameMode.SECURE_BY_DEFAULT:
                         for hostname in update_resp['hostnames']['items']:
                             property_update_response_sbd_token = hostname['certStatus']['validationCname']
                             logger.info(f'{space}{emoji.home} hostname:    {hostname['cnameFrom']}')  # noqa

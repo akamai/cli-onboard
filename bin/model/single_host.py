@@ -16,6 +16,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from exceptions import setup_logger
+from model.edge_hostname_mode import EdgeHostnameMode
 
 
 logger = setup_logger()
@@ -32,7 +33,7 @@ class SingleHost:
     notification_emails: list
 
     group_id: str = ''
-    edge_hostname_mode: str = 'use_existing_edgehostname'
+    edge_hostname_mode: EdgeHostnameMode = EdgeHostnameMode.USE_EXISTING_EDGEHOSTNAME
     edge_hostname_id: int = 0
 
     # general

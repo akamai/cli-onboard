@@ -17,6 +17,7 @@ import os
 from pathlib import Path
 
 from exceptions import setup_logger
+from model.edge_hostname_mode import EdgeHostnameMode
 logger = setup_logger()
 
 
@@ -64,13 +65,13 @@ class onboard:
             self.use_existing_ehn = click_args.get('use_existing_edgehostname')
 
             if self.use_existing_ehn:
-                self.edge_hostname_mode = 'use_existing_edgehostname'
+                self.edge_hostname_mode = EdgeHostnameMode.USE_EXISTING_EDGEHOSTNAME
             elif self.cert_mode == 'CPS' and self.enrollment_id:
-                self.edge_hostname_mode = 'create_cps_edgehostname'
+                self.edge_hostname_mode = EdgeHostnameMode.CREATE_CPS_EDGEHOSTNAME
             elif self.cert_mode == 'CPS':
-                self.edge_hostname_mode = 'cps_placeholder'
+                self.edge_hostname_mode = EdgeHostnameMode.CPS_PLACEHOLDER
             else:
-                self.edge_hostname_mode = 'secure_by_default'
+                self.edge_hostname_mode = EdgeHostnameMode.SECURE_BY_DEFAULT
 
             self.activate_property_production = False
             self.activate_property_staging = False

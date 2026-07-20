@@ -52,6 +52,9 @@ class onboard:
             self.edge_hostname_id = 0
 
             # Edge hostname values
+            # Left as the raw string from setup.json (not wrapped in EdgeHostnameMode) since it's
+            # untrusted external input; downstream `== EdgeHostnameMode.X` checks still validate it
+            # correctly because EdgeHostnameMode is a StrEnum, without changing the error path for a typo.
             self.edge_hostname_mode = setup_json_content['edge_hostname']['mode']
             self.edge_hostname = setup_json_content['edge_hostname']['use_existing_edgehostname']['edge_hostname']
             self.use_existing_enrollment_id = setup_json_content['edge_hostname']['new_enhanced_tls_edgehostname']['ssl_cert_info']['use_existing_enrollment_id']

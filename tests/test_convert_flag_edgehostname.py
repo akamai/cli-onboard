@@ -11,6 +11,7 @@ import logging
 
 import onboard_convert
 import pytest
+from model.edge_hostname_mode import EdgeHostnameMode
 
 
 def test_csv_mode_with_edgehostname_column_uses_csv_values(util, click_args_factory, config_stub):
@@ -21,6 +22,33 @@ def test_csv_mode_with_edgehostname_column_uses_csv_values(util, click_args_fact
     ]
     util.csv_2_property_dict_convert(onboard_object)
     assert onboard_object.edge_hostname_list == ['www.example.com.edgekey.net']
+
+
+def test_secure_by_default_mode_synthesizes_edgehostname_when_column_missing(util, click_args_factory, config_stub):
+    click_args = click_args_factory(cert_mode='SBD', enrollment_id=None, use_existing_edgehostname=None)
+    onboard_object = onboard_convert.onboard(config_stub, click_args)
+    assert onboard_object.edge_hostname_mode == EdgeHostnameMode.SECURE_BY_DEFAULT
+    onboard_object.csv_dict = [{'hostname': 'www.example.com'}]  # no edgeHostname column
+    util.csv_2_property_dict_convert(onboard_object)
+    assert onboard_object.edge_hostname_list == ['www.example.com.edgesuite.net']
+
+
+def test_create_cps_edgehostname_mode_synthesizes_edgehostname_when_column_missing(util, click_args_factory, config_stub):
+    click_args = click_args_factory(cert_mode='CPS', enrollment_id=12345)
+    onboard_object = onboard_convert.onboard(config_stub, click_args)
+    assert onboard_object.edge_hostname_mode == EdgeHostnameMode.CREATE_CPS_EDGEHOSTNAME
+    onboard_object.csv_dict = [{'hostname': 'www.example.com'}]  # no edgeHostname column
+    util.csv_2_property_dict_convert(onboard_object)
+    assert onboard_object.edge_hostname_list == ['www.example.com.edgesuite.net']
+
+
+def test_cps_placeholder_mode_synthesizes_edgehostname_when_column_missing(util, click_args_factory, config_stub):
+    click_args = click_args_factory(cert_mode='CPS', enrollment_id=None)
+    onboard_object = onboard_convert.onboard(config_stub, click_args)
+    assert onboard_object.edge_hostname_mode == EdgeHostnameMode.CPS_PLACEHOLDER
+    onboard_object.csv_dict = [{'hostname': 'www.example.com'}]  # no edgeHostname column
+    util.csv_2_property_dict_convert(onboard_object)
+    assert onboard_object.edge_hostname_list == ['www.example.com.edgesuite.net']
 
 
 def test_csv_mode_missing_edgehostname_column_errors(util, click_args_factory, config_stub, caplog):
