@@ -68,16 +68,12 @@ def test_missing_edgerc_file_exits(runner, cli, tmp_path):
     assert 'Unable to read edgerc file' in result.output
 
 
-def test_edgerc_missing_section_surfaces_nameerror_bug(runner, cli, tmp_path):
-    """Documents a real bug, not desired behavior.
-
-    When the edgerc file exists but the requested section is absent,
-    init_config()'s except/finally interaction in bin/akamai-onboard.py raises a bare
-    NameError (session/base_url are never assigned before the `finally` block runs)
-    instead of the intended "Edgerc section ... not found" message. Convert()'s
-    `except Exception` catches it and exits 0 anyway, so this doesn't crash the CLI —
-    it just prints the wrong, confusing error. Left here so a future fix flips this
-    assertion rather than the bug going unnoticed.
+def test_edgerc_missing_section_surfaces_clean_error(runner, cli, tmp_path):
+    """init_config() used to leak a bare NameError here (session/base_url were never
+    assigned before the `except`/`finally` interaction in bin/akamai-onboard.py ran the
+    `finally` block anyway), masking the real "Edgerc section ... not found" message.
+    The `finally` was replaced with plain sequential code so `_log_error`'s sys.exit()
+    stops execution before those variables are ever referenced.
     """
     edgerc = tmp_path / 'good-file-bad-section.edgerc'
     edgerc.write_text('[default]\nhost = example.com\nclient_token = a\nclient_secret = b\naccess_token = c\n')
@@ -87,4 +83,6 @@ def test_edgerc_missing_section_surfaces_nameerror_bug(runner, cli, tmp_path):
         'convert', '--csv', 'x.csv', '-d', 'x',
     ])
     assert result.exit_code == 0
-    assert 'session' in result.output or 'NameError' in result.output
+    assert 'Edgerc section onboard not found' in result.output
+    assert 'session' not in result.output
+    assert 'NameError' not in result.output

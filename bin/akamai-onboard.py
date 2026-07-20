@@ -145,22 +145,22 @@ def init_config(config):
         lg._log_error(f'Edgerc section {section} not found')
     except Exception:
         lg._log_error(f'Unknown error occurred trying to read edgerc file {edgerc_file}')
-    finally:
-        wrap_api = wrapper_api.apiCallsWrapper(session, base_url, config.account_key)
-        if config.account_key:
-            account_name = wrap_api.get_account_name(config.account_key)
-            logger.warning(f'Account Name: {account_name} {config.account_key}')
-            account_name = account_name.replace(' ', '_')  # replace empty space with underscore
-            Path(f'input/{account_name}').mkdir(parents=True, exist_ok=True)
-            Path(f'output/{account_name}').mkdir(parents=True, exist_ok=True)
-            account_input_folder = f'input/{account_name}'
-            account_output_folder = f'output/{account_name}'
-        else:
-            account_input_folder = ''
-            account_output_folder = ''
 
-        print('_' * 120)
-        print()
+    wrap_api = wrapper_api.apiCallsWrapper(session, base_url, config.account_key)
+    if config.account_key:
+        account_name = wrap_api.get_account_name(config.account_key)
+        logger.warning(f'Account Name: {account_name} {config.account_key}')
+        account_name = account_name.replace(' ', '_')  # replace empty space with underscore
+        Path(f'input/{account_name}').mkdir(parents=True, exist_ok=True)
+        Path(f'output/{account_name}').mkdir(parents=True, exist_ok=True)
+        account_input_folder = f'input/{account_name}'
+        account_output_folder = f'output/{account_name}'
+    else:
+        account_input_folder = ''
+        account_output_folder = ''
+
+    print('_' * 120)
+    print()
     return session, wrap_api, account_input_folder, account_output_folder
 
 
@@ -169,7 +169,7 @@ def init_config(config):
              invoke_without_command=True, no_args_is_help=False)
 @click.option('--edgerc', metavar='', default=os.path.join(os.path.expanduser('~'), '.edgerc'),
               help='Location of the credentials file [$AKAMAI_EDGERC]', required=False)
-@click.option('-s', '--section', metavar='', default='onboard',
+@click.option('-s', '--section', metavar='', default='default',
               help='Section of the credentials file [$AKAMAI_EDGERC_SECTION]', required=False)
 @click.option('-a', '--account-key', '--accountkey', '--accountSwitchKey', '--accountswitchkey',
               metavar='',

@@ -15,6 +15,8 @@
 - Rename `ASK` to `account_switch_key` for clarity
 - Simplify internal logic for handling edge hostname modes (no behavior change)
 - Extract shared CP code result-logging helper
+- Default `--section` to `default` (matching a stock `.edgerc`) instead of `onboard`
+- Fix crash (`cannot access local variable 'session'`) that masked the real "Edgerc section ... not found" error
 
 ## 2.4.0
 

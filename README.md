@@ -83,10 +83,10 @@ For a first run, keep activations disabled until validation succeeds:
 akamai onboard create --file sample_templates/create.json
 ```
 
-If your credentials live in a different `.edgerc` file or section:
+If your credentials live in a different `.edgerc` file or section (the CLI uses the `default` section unless you override it):
 
 ```bash
-akamai onboard --edgerc ~/.edgerc --section onboard create --file sample_templates/create.json
+akamai onboard --edgerc ~/.edgerc --section mysection create --file sample_templates/create.json
 ```
 
 ### 4. Review the result

@@ -112,7 +112,7 @@ class onboard:
 
             if not config.section:
                 if not os.getenv('AKAMAI_EDGERC_SECTION'):
-                    self.section = 'onboard'
+                    self.section = 'default'
                 else:
                     self.section = os.getenv('AKAMAI_EDGERC_SECTION')
             else:

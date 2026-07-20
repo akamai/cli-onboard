@@ -258,14 +258,14 @@ def fake_convert_utility_cls():
 
 @pytest.fixture
 def fake_edgerc(tmp_path):
-    """A syntactically valid .edgerc with a real [onboard] section.
+    """A syntactically valid .edgerc with a real [default] section.
 
     init_config() reads this synchronously (EdgeRc/EdgeGridAuth) with no network call —
     good enough to get a CLI invocation past credential loading in tests.
     """
     edgerc_path = tmp_path / 'valid.edgerc'
     edgerc_path.write_text(
-        '[onboard]\n'
+        '[default]\n'
         'host = example.akamaiapis.net\n'
         'client_token = test_client_token\n'
         'client_secret = test_client_secret\n'
