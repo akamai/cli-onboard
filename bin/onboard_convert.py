@@ -31,7 +31,7 @@ class onboard:
             self.account_switch_key = ''
             self.csv_loc = click_args['csv']
             self.csv_loc = self.get_actual_location(self.csv_loc)
-            self.iteractive_mode = click_args['force']
+            self.force_mode = click_args['force']
             self.ehn_option = click_args['media_ehn']
             self.property_list = []
             self.product_list = []

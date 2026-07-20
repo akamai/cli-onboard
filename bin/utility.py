@@ -690,7 +690,7 @@ class utility:
                         count += 1
 
         if count == 0:
-            if not onboard_object.iteractive_mode:
+            if not onboard_object.force_mode:
                 print()
                 print('_' * 120)
                 print()

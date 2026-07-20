@@ -19,7 +19,7 @@ import pytest
 
 
 # These tests pass force=True in click_overrides, which sets onboard_object's
-# iteractive_mode True and makes validateSetupStepsConvert skip the confirm prompt
+# force_mode True and makes validateSetupStepsConvert skip the confirm prompt
 # entirely - passing this in as confirm_input proves that (it errors instead of
 # hanging on real input() if the prompt is ever reached).
 def _fail_if_prompted():
