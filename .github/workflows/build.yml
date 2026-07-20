@@ -28,6 +28,9 @@ jobs:
 
       - name: Run tests
         run: uv run pytest -v
+        env:
+          COLUMNS: "120"
+          PYTHONUTF8: "1"
 
   pip-install:
     strategy:
