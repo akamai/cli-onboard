@@ -294,7 +294,7 @@ def convert(config, **kwargs):
                     logger.info(e)
 
     # Got this far, we are ready to try and execute the actual steps
-    valid_steps = util.validateSetupStepsConvert(onboard_object, papi, click_args['prefix'], cli_mode='convert')
+    valid_steps = util.validateSetupStepsConvert(onboard_object, papi, click_args['prefix'])
     if not valid_steps:
         logger.error('Please correct the setup json file settings and try again.')
         return -1

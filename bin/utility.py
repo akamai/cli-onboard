@@ -9,6 +9,7 @@ import shutil
 import subprocess
 import sys
 import time
+from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 from shutil import which
@@ -35,6 +36,21 @@ root = get_cli_root_directory()
 
 space = ' '
 column_width = 50
+
+
+@dataclass
+class _ConvertCsvRow:
+    """One parsed row from convert's input CSV, after defaulting.
+
+    Replaces the parallel propertyList/hostnameList/edgeHostnameList/
+    secureNetworkList/productList lists csv_2_property_dict_convert() used to
+    build by index - a per-row bundle of these can't drift out of alignment.
+    """
+    property_name: str
+    hostname: str
+    edge_hostname: str
+    secure_network: str | None
+    product: str
 
 
 class utility:
@@ -434,7 +450,6 @@ class utility:
         '''
 
         if count == 0:
-            self.valid is True
             print()
             logger.warning('Onboarding Delivery Config')
         else:
@@ -442,7 +457,7 @@ class utility:
 
         return self.valid
 
-    def validateSetupStepsConvert(self, onboard_object, wrapper_object, prefix, cli_mode='convert', confirm_input=input) -> bool:
+    def validateSetupStepsConvert(self, onboard_object, wrapper_object, prefix, confirm_input=input) -> bool:
         """
         Function to validate the input values of {hostname}.json when in convert mode
         """
@@ -647,7 +662,6 @@ class utility:
                         count += 1
 
         if count == 0:
-            self.valid is True
             if not onboard_object.iteractive_mode:
                 print()
                 print('_' * 120)
@@ -1896,15 +1910,11 @@ class utility:
         return propertyJson
 
     def csv_2_property_dict_convert(self, onboard_object) -> tuple:
-        propertyList = []
-        hostnameList = []
-        edgeHostnameList = []
-        secureNetworkList = []
-        productList = []
         ehn_suffix = onboard_object.ehn_suffix
         if onboard_object.secure_network == 'STANDARD_TLS':
             ehn_suffix = '.edgesuite.net'
 
+        rows: list[_ConvertCsvRow] = []
         for i, row in enumerate(onboard_object.csv_dict):
             try:
                 propertyName = row['propertyName']
@@ -1921,12 +1931,22 @@ class utility:
                 row['templateName'] = propertyName
 
             hostname = row['hostname']
-            hostnameList.append(hostname)
-            propertyList.append(propertyName)
-            try:
-                secureNetworkList.append(row['secureNetwork'])
-            except KeyError:
-                msg = 'csv does not have KeyError column'
+
+            # ehn_suffix intentionally carries over from the previous row when
+            # this row's csv doesn't have a secureNetwork column at all -
+            # only a *present* value (including an unrecognized one) resets it.
+            if 'secureNetwork' in row:
+                secureNetwork = row['secureNetwork']
+                if secureNetwork == 'SHARED_CERT':
+                    ehn_suffix = '.akamaized.net'
+                elif secureNetwork == 'STANDARD_TLS':
+                    ehn_suffix = '.edgesuite.net'
+                elif secureNetwork == 'ENHANCED_TLS':
+                    ehn_suffix = '.edgekey.net'
+                else:
+                    ehn_suffix = '.edgesuite.net'  # default
+            else:
+                secureNetwork = None
 
             try:
                 product = row['product']
@@ -1940,40 +1960,33 @@ class utility:
                 product = 'prd_Site_Accel'
                 row['product'] = product
 
-            if product not in productList:
-                productList.append(product)
-
-            try:
-                if row['secureNetwork'] == 'SHARED_CERT':
-                    ehn_suffix = '.akamaized.net'
-                elif row['secureNetwork'] == 'STANDARD_TLS':
-                    ehn_suffix = '.edgesuite.net'
-                elif row['secureNetwork'] == 'ENHANCED_TLS':
-                    ehn_suffix = '.edgekey.net'
-                else:
-                    ehn_suffix = '.edgesuite.net'  # default
-            except KeyError:
-                msg = 'csv does not have KeyError column'
-
             try:
                 edgeHostname = row['edgeHostname']
                 if (edgeHostname is None) or (edgeHostname == ''):
                     if onboard_object.edge_hostname_mode in (EdgeHostnameMode.SECURE_BY_DEFAULT, EdgeHostnameMode.CREATE_CPS_EDGEHOSTNAME, EdgeHostnameMode.CPS_PLACEHOLDER):
-                        edgeHostnameList.append(f'{hostname}{ehn_suffix}')
+                        edgeHostname = f'{hostname}{ehn_suffix}'
                         logger.debug(f'using edge hostname {hostname}{ehn_suffix}')
                     else:
                         sys.exit(logger.error(f'No edgeHostname provided for {hostname} - row:{i + 1}'))
-                else:
-                    edgeHostnameList.append(edgeHostname)
             except KeyError:
                 if onboard_object.edge_hostname_mode in (EdgeHostnameMode.SECURE_BY_DEFAULT, EdgeHostnameMode.CREATE_CPS_EDGEHOSTNAME, EdgeHostnameMode.CPS_PLACEHOLDER):
-                    edgeHostnameList.append(f'{hostname}{ehn_suffix}')
+                    edgeHostname = f'{hostname}{ehn_suffix}'
                     logger.debug(f'using edge hostname {hostname}{ehn_suffix}')
                 else:
                     sys.exit(logger.error('edgeHostname column must exist in input csv unless using secure-by-default or CPS mode'))
 
-        propertyList = list(set(propertyList))
-        hostnameList = list(set(hostnameList))
+            rows.append(_ConvertCsvRow(
+                property_name=propertyName, hostname=hostname, edge_hostname=edgeHostname,
+                secure_network=secureNetwork, product=product,
+            ))
+
+        propertyList = list({r.property_name for r in rows})
+        hostnameList = list({r.hostname for r in rows})
+        edgeHostnameList = [r.edge_hostname for r in rows]
+        productList = []
+        for r in rows:
+            if r.product not in productList:
+                productList.append(r.product)
 
         onboard_object.edge_hostname_list = edgeHostnameList
         onboard_object.property_list = propertyList

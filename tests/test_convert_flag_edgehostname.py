@@ -51,6 +51,39 @@ def test_cps_placeholder_mode_synthesizes_edgehostname_when_column_missing(util,
     assert onboard_object.edge_hostname_list == ['www.example.com.edgesuite.net']
 
 
+def test_row_missing_product_secureNetwork_and_edgehostname_columns_defaults_all_three(util, click_args_factory, config_stub):
+    """Ticket 03's row-shape refactor of csv_2_property_dict_convert() must not
+    change defaulting behavior. Requested for test_convert_csv_validation.py,
+    but that file covers csv_validator_convert() (cerberus schema validation) -
+    a different function from csv_2_property_dict_convert() (the per-row
+    defaulting this refactor touches), so this lives alongside this file's
+    other csv_2_property_dict_convert() coverage instead.
+    """
+    click_args = click_args_factory(cert_mode='SBD', enrollment_id=None, use_existing_edgehostname=None)
+    onboard_object = onboard_convert.onboard(config_stub, click_args)
+    onboard_object.csv_dict = [{'hostname': 'www.example.com'}]  # only hostname present
+    util.csv_2_property_dict_convert(onboard_object)
+    assert onboard_object.product_list == ['prd_Site_Accel']
+    assert onboard_object.edge_hostname_list == ['www.example.com.edgesuite.net']
+    assert onboard_object.property_list == ['www.example.com']
+
+
+def test_missing_secureNetwork_column_carries_over_previous_rows_ehn_suffix(util, click_args_factory, config_stub):
+    """Documents a subtle, deliberately-preserved behavior: ehn_suffix only resets
+    when a row's secureNetwork column is *present* (even with an unrecognized
+    value) - a row missing the column entirely keeps whatever suffix the
+    previous row resolved, rather than resetting to the network-wide default.
+    """
+    click_args = click_args_factory(cert_mode='SBD', enrollment_id=None, use_existing_edgehostname=None)
+    onboard_object = onboard_convert.onboard(config_stub, click_args)
+    onboard_object.csv_dict = [
+        {'hostname': 'first.example.com', 'secureNetwork': 'ENHANCED_TLS'},
+        {'hostname': 'second.example.com'},  # no secureNetwork column at all
+    ]
+    util.csv_2_property_dict_convert(onboard_object)
+    assert onboard_object.edge_hostname_list == ['first.example.com.edgekey.net', 'second.example.com.edgekey.net']
+
+
 def test_csv_mode_missing_edgehostname_column_errors(util, click_args_factory, config_stub, caplog):
     click_args = click_args_factory(use_existing_edgehostname='CSV')
     onboard_object = onboard_convert.onboard(config_stub, click_args)
