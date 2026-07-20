@@ -144,7 +144,7 @@ akamai onboard multi-hosts \
 
 ### 3. Create many properties from a template and CSV
 
-Use `batch-create` when you want to stamp out multiple properties from a common rule tree (a JSON file containing the delivery configuration rules).
+Use `batch-create` when you want to stamp out multiple properties from a common [rule-tree JSON](#what-is-a-rule-tree-json).
 
 ```bash
 akamai onboard batch-create \
@@ -219,7 +219,7 @@ akamai onboard appsec-policy --waf-config-name sample_sec --policy-name Default
 
 ### 9. Convert competitor CDN artifacts into Akamai properties
 
-Use `convert` to create delivery configurations from migration CSV files and per-property rule-tree JSON files (one JSON file per property, containing delivery configuration rules).
+Use `convert` to create delivery configurations from migration CSV files and per-property [rule-tree JSON](#what-is-a-rule-tree-json) files (one per property).
 
 ```bash
 akamai onboard convert \
@@ -230,7 +230,7 @@ akamai onboard convert \
   --network ENHANCED_TLS
 ```
 
-Use `--cert-mode CPS` if the properties require CPS-managed certificates.
+Use `--cert-mode CPS` if the properties require CPS-managed certificates — see [Default DV versus CPS](#default-dv-secure-by-defaultsbd-versus-cps) for when to choose which.
 
 For the full option list, see [Convert command options](#convert-command-options).
 
@@ -276,7 +276,7 @@ These options apply before the subcommand:
 
 ### Common input types
 
-> For `batch-create` and `convert`, the JSON input is a rule-tree JSON template (delivery configuration rules) rather than a setup JSON file.
+> For `batch-create` and `convert`, the JSON input is a [rule-tree JSON](#what-is-a-rule-tree-json) template rather than a setup JSON file.
 
 | Command         | CSV                | JSON               |
 | --------------- | ------------------ | ------------------ |
@@ -332,13 +332,17 @@ $ akamai onboard convert --help
 
 ## 💡 Explanation
 
+### What is a rule-tree JSON?
+
+A rule-tree JSON is a JSON file containing Property Manager delivery configuration rules — the same rule-tree shape PAPI accepts for a property. `batch-create` and `convert` take this as their template/per-property input, instead of the single-property setup JSON used by `create`, `single-host`, and `multi-hosts`.
+
 ### Why there are multiple onboarding commands ?
 
 The command set is organized around different operational entry points rather than one universal input format.
 
 - `single-host` is the simplest onboarding case.
 - `multi-hosts` is for one property with multiple hostnames.
-- `batch-create` is for many properties built from a custom rule-tree template (a JSON file containing the delivery configuration rules).
+- `batch-create` is for many properties built from a custom [rule-tree JSON](#what-is-a-rule-tree-json) template.
 - `create` is the most flexible JSON-driven workflow when you need explicit control over delivery, edge hostname, WAF, and activation settings.
 - `convert` is a migration workflow for importing artifacts produced by Internal CDN conversion tooling.
 
