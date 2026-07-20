@@ -10,6 +10,7 @@
 - [How-to guides](#-how-to-guides)
 - [Commands Reference](#-commands-reference)
 - [Explanation](#-explanation)
+- [Contributing](CONTRIBUTING.md)
 
 ## Requirements
 
@@ -98,7 +99,7 @@ After the command succeeds, you can enable staging activation in the JSON file a
 
 ## 🧭 How-to guides
 
-These are task-oriented entry points. If you are learning the tool for the first time, start with the [tutorial](#-tutorial-onboard-your-first-property).
+These are task-oriented entry points. If you are learning the tool for the first time, start with the [tutorial](#-tutorial-onboard-your-first-property). For the full command list, see the [Command catalog](#-commands-reference).
 
 [1. Create one hostname quickly](#1-create-one-hostname-quickly)
 [2. Create one property with multiple hostnames](#2-create-one-property-with-multiple-hostnames)
@@ -256,23 +257,31 @@ These options apply before the subcommand:
 
 ### Command catalog
 
-```shell
- appsec-create           Create new security configuration, security policy, and policy match target
- appsec-policy           List available security configuration policy
- appsec-remove           Remove hostnames from selected hosts and any policy match targets
- appsec-update           Add hostnames as selected hosts to existing security configuration and optionally add to
-                         policy match target
- batch-create            Create a 1 or more delivery configurations using a csv input and optionally update WAF
-                         policy
- convert                 🌈 Bring over delivery configs from Competitors 🌈
- create                  Create a delivery configuration and update existing WAF policy
- fetch-sample-templates  Pull sample templates
- multi-hosts             Create a delivery configuration with mutltiple hostnames and security configuration with one
-                         WAF policy
- sbd-precheck            ✔️ Precheck Default DV (SBD) hostnames for token placement
- sbd-status              ✔️ View Default DV (SBD) certificate deployment status
- single-host             Create a simple delivery and security configuration with one hostname and one WAF policy
+This is the real `--help` output for the CLI's registered commands, kept in sync automatically — see [`bin/sync_readme_commands.py`](bin/sync_readme_commands.py).
+
+<!-- command-catalog:start -->
+```console
+$ akamai onboard --help
+
+╭─ Commands ───────────────────────────────────────────────────────────────────────────────────────────────────────────╮
+│ appsec-create           Create new security configuration, security policy, and policy match target                  │
+│ appsec-policy           List available security configuration policy                                                 │
+│ appsec-remove           Remove hostnames from selected hosts and any policy match targets                            │
+│ appsec-update           Add hostnames as selected hosts to existing security configuration and optionally add to     │
+│                         policy match target                                                                          │
+│ batch-create            Create a 1 or more delivery configurations using a csv input and optionally update WAF       │
+│                         policy                                                                                       │
+│ convert                 🌈 Bring over delivery configs from Competitors 🌈                                           │
+│ create                  Create a delivery configuration and update existing WAF policy                               │
+│ fetch-sample-templates  Pull sample templates                                                                        │
+│ multi-hosts             Create a delivery configuration with mutltiple hostnames and security configuration with one │
+│                         WAF policy                                                                                   │
+│ sbd-precheck            ✔️ Precheck Default DV (SBD) hostnames for token placement                                    │
+│ sbd-status              ✔️ View Default DV (SBD) certificate deployment status                                        │
+│ single-host             Create a simple delivery and security configuration with one hostname and one WAF policy     │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
 ```
+<!-- command-catalog:end -->
 
 ### Common input types
 
@@ -338,7 +347,7 @@ A rule-tree JSON is a JSON file containing Property Manager delivery configurati
 
 ### Why there are multiple onboarding commands ?
 
-The command set is organized around different operational entry points rather than one universal input format.
+The command set is organized around different operational entry points rather than one universal input format (see the [Command catalog](#-commands-reference) for the full list):
 
 - `single-host` is the simplest onboarding case.
 - `multi-hosts` is for one property with multiple hostnames.
@@ -368,66 +377,7 @@ Many commands support activation, but a staging-first rollout is the lower-risk 
 
 ## Contribution guidelines
 
-By submitting a contribution to this project, you assign the contribution and associated copyright rights to the repository owner.
-
-### Local development
-
-The plugin metadata requires a minimum of Python 3.12.
-
-```bash
-git clone https://github.com/akamai/cli-onboard.git
-cd cli-onboard
-python3 -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
-```
-
-To test a different branch:
-
-1. Check out the branch: `git checkout -b new-branch`
-2. Uninstall the existing version: `akamai uninstall onboard`
-3. Get the repo's absolute path: `pwd` (e.g. `/Users/Documents/cli-onboard`)
-4. Install from the local repo:
-   - **macOS / Linux** (three slashes): `akamai install file:///Users/Documents/cli-onboard`
-   - **Windows** (two slashes): `akamai install file://C:/Users/sample/cli-onboard`
-
-Local artifacts are written to folders such as `logs/`, and `convert` writes an Excel workbook under `output/{account_name}/`.
-
-#### Troubleshooting `akamai install`
-
-If the install command fails, find the error message below and follow the fix.
-
-**Error: `venv python package not found`**
-
-What's happening: your computer's Python is a very new version (3.14), and your copy of `akamai-cli` is too old to work with it — this is a known bug ([akamai/cli#214](https://github.com/akamai/cli/issues/214)) that's already been fixed in newer releases.
-
-Fix: update `akamai-cli`, then try installing again.
-
-```bash
-akamai upgrade
-```
-
-**Error: `externally-managed-environment`**
-
-What's happening: modern versions of Python (3.11+) protect themselves from having packages installed into them by outside tools, to avoid breaking your system. The install command trips this protection.
-
-Fix: run the install with two extra settings that tell it "this one install is safe to allow":
-
-```bash
-PIP_BREAK_SYSTEM_PACKAGES=1 PIP_IGNORE_INSTALLED=1 akamai install file:///path/to/cli-onboard
-```
-
-**Need to use a specific Python version (e.g. 3.12) instead of your default one?**
-
-What's happening: `akamai-cli` always uses whatever program is named `python` on your computer. If you have multiple Python versions and need a particular one just for this install, you can temporarily point `python` at it.
-
-Fix (using `uv`, a Python version manager):
-
-```bash
-uv python install 3.12 --default   # installs Python 3.12 and makes it the default (skipped if already installed)
-PATH="$HOME/.local/bin:$PATH" PIP_BREAK_SYSTEM_PACKAGES=1 PIP_IGNORE_INSTALLED=1 \
-  akamai install file:///path/to/cli-onboard
-```
+Want to contribute? See [CONTRIBUTING.md](CONTRIBUTING.md) for dev environment setup, running tests and lint, and how to submit a change.
 
 ## Notice
 

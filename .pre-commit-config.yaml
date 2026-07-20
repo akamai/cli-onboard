@@ -35,7 +35,7 @@ repos:
     rev: v0.45.0
     hooks:
       - id: markdownlint
-        files: ^(README|CHANGELOG)\.md$
+        files: ^(README|CHANGELOG|CONTRIBUTING)\.md$
   - repo: local
     hooks:
       - id: sync-cli-manifest
@@ -43,4 +43,10 @@ repos:
         entry: python bin/sync_cli_manifest.py
         language: system
         files: ^(pyproject\.toml|cli\.json)$
+        pass_filenames: false
+      - id: sync-readme-commands
+        name: sync README's Command catalog from the CLI's registered commands
+        entry: uv run python bin/sync_readme_commands.py
+        language: system
+        files: ^(README\.md|bin/akamai-onboard\.py)$
         pass_filenames: false
