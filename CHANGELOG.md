@@ -1,5 +1,9 @@
 # RELEASE NOTES
 
+<!-- Format: new entries use the merged "#### ENHANCEMENTS/BUG FIXES:" heading,
+     regardless of whether the entry has both kinds of items. Historical entries
+     below that use a different heading are left as originally written. -->
+
 ## 2.5.2
 
 #### ENHANCEMENTS/BUG FIXES:
