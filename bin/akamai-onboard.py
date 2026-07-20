@@ -165,7 +165,8 @@ def init_config(config):
 
 
 @click.group(context_settings={'help_option_names': ['-h', '--help']},
-             help=f'{PACKAGE_DESCRIPTION} (v{PACKAGE_VERSION})')
+             help=f'{PACKAGE_DESCRIPTION} (v{PACKAGE_VERSION})',
+             invoke_without_command=True, no_args_is_help=False)
 @click.option('--edgerc', metavar='', default=os.path.join(os.path.expanduser('~'), '.edgerc'),
               help='Location of the credentials file [$AKAMAI_EDGERC]', required=False)
 @click.option('-s', '--section', metavar='', default='onboard',
@@ -174,11 +175,18 @@ def init_config(config):
               metavar='',
               help='Account Switch Key (Akamai Internal Only)', required=False)
 @click.version_option(version=PACKAGE_VERSION)
+@click.pass_context
 @pass_config
-def cli(config, edgerc, section, account_key):
+def cli(config, ctx, edgerc, section, account_key):
     config.edgerc = edgerc
     config.section = section
     config.account_key = account_key
+    if ctx.invoked_subcommand is None:
+        # Click 8.2+ raises NoArgsIsHelpError (exit code 2) when a group with
+        # no_args_is_help gets no subcommand, which the akamai-cli wrapper
+        # reports as a command failure. Show help and exit cleanly instead.
+        click.echo(ctx.get_help())
+        ctx.exit(0)
 
 
 @cli.command()
