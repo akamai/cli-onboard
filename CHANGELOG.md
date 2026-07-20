@@ -15,10 +15,20 @@
 - Simplify internal logic for handling edge hostname modes (no behavior change)
 - Extract shared CP code result-logging helper
 - Default `--section` to `default` (matching a stock `.edgerc`) instead of `onboard`
-- Switch console logging from `coloredlogs` to `rich` (`RichHandler`): drops the `WARNING:`/`INFO:` level prefix, adds a right-aligned source `file.py:line` tag; file log (`logs/onboard.log`) format is unchanged
+
+- Logging improvements
+  - log file now appends (mode: "a") instead of overwriting each run
+  - detailed API response bodies now captured in logs/onboard.log only, not shown in CLI output
+  - API response dumps (edge hostname creation, cpcode operations, hostname updates) moved from ERROR to DEBUG level
+  - Switch console logging from `coloredlogs` to `rich` (`RichHandler`)
+  - drops the `WARNING:`/`INFO:` level prefix
+  - adds a right-aligned source `file.py:line` tag; file log (`logs/onboard.log`) format is unchanged
 
 #### BUG FIXES:
 
+- wrapper_api.py - better error handling
+- utility_papi.py - better error handling
+- utility.py - better error handling
 - Fix UTF-8 encoding on Windows to prevent Unicode errors and CI build failures
 - Fix crash (`cannot access local variable 'session'`) that masked the real "Edgerc section ... not found" error
 - Fix `appsec-remove` crash (`ValueError: too many values to unpack`) from `init_config()` return value mismatch
