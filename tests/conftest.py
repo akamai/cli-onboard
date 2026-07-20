@@ -33,6 +33,7 @@ shutil.copy2(REPO_ROOT / 'config' / 'logging.json', 'config/logging.json')
 # Must be imported after the chdir above - utility.py calls setup_logger() at
 # import time, which creates `logs/`/`config/` as a side effect in the cwd.
 import utility  # noqa: E402
+import utility_papi  # noqa: E402
 
 
 # ---------------------------------------------------------------------------
@@ -216,6 +217,15 @@ def util():
     depend on being on PATH) skipped via its check_prereqs constructor seam.
     """
     return utility.utility(check_prereqs=False)
+
+
+@pytest.fixture
+def papi():
+    """A real utility_papi.papiFunctions() - no constructor seam needed, it has
+    no state and no shell-out of its own; all PAPI calls go through the
+    wrapper_object it's passed, which tests double out at the call site.
+    """
+    return utility_papi.papiFunctions()
 
 
 class FakeConvertUtility(utility.utility):

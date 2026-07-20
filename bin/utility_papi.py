@@ -94,39 +94,54 @@ class papiFunctions:
 
         return (all_properties_active, success_onboarded_hostnames, failed_activations, activationDict)
 
+    def _sanitize_cpcode_name(self, cpcode_name: str) -> str:
+        special_characters = ['"', '^', '_', ',', '#', '%', "'", '\\']
+        for character in special_characters:
+            cpcode_name = cpcode_name.replace(character, '.')
+        return cpcode_name
+
+    def _unwrap_cpcode_response(self, response, action: str, error_message: str) -> dict:
+        """
+        Shared shape behind create_new_cpcode and search_for_cpcode: unwrap a
+        PAPI response's JSON body, exiting with `error_message` on any non-2xx
+        or non-JSON response. The caller decides what a *successful* body
+        means (e.g. search's "no matches" is a legitimate outcome, not an
+        error, so it's handled by the caller, not here).
+        """
+        try:
+            resp_body = response.json()
+        except Exception:
+            resp_body = None
+
+        if response.ok and resp_body:
+            logger.debug(json.dumps(resp_body, indent=4))
+            return resp_body
+
+        if resp_body:
+            logger.debug(json.dumps(resp_body, indent=4))
+        else:
+            logger.debug(f'cpcode {action} response status={response.status_code} body={response.text[:500]}')
+        sys.exit(logger.error(error_message))
+
     def create_new_cpcode(self, onboard_object, wrapper_object,
                         cpcode_name, contract_id, group_id, product_id, path=None) -> int:
         """
         Function to create new cpcode
         """
-        special_characters = ['"', '^', '_', ',', '#', '%', "'", '\\']
-        for i in special_characters:
-            cpcode_name = cpcode_name.replace(i, '.')
+        cpcode_name = self._sanitize_cpcode_name(cpcode_name)
         create_cpcode_response = wrapper_object.createCpcode(contract_id,
                                                              group_id, product_id, cpcode_name)
-        try:
-            resp_body = create_cpcode_response.json()
-        except Exception:
-            resp_body = None
-            logger.debug(f'cpcode create response status={create_cpcode_response.status_code} body={create_cpcode_response.text[:500]}')
+        resp_body = self._unwrap_cpcode_response(create_cpcode_response, 'create', 'Unable to create new cpcode')
 
-        if create_cpcode_response.ok and resp_body:
-            logger.debug(json.dumps(resp_body, indent=4))
-            new_cpcode = resp_body['cpcodeLink'].split('?')[0].split('/')[-1].replace('cpc_', '')
-            onboard_object.onboard_default_cpcode = int(new_cpcode)
-            # PAPI returns 201 when it actually creates a cpcode, and 200 when a
-            # cpcode with this name already exists and it's just handing back that one
-            cpcode_verb = 'New' if create_cpcode_response.status_code == 201 else 'Reused existing'
-            if path:
-                logger.info(f'{space}{space}{emoji.point_right} {cpcode_verb} cpcode: {new_cpcode:<28}{path}')
-            else:
-                logger.info(f'{space}{space}{emoji.point_right} {cpcode_verb} cpcode: {new_cpcode:<28}{cpcode_name}')
+        new_cpcode = resp_body['cpcodeLink'].split('?')[0].split('/')[-1].replace('cpc_', '')
+        onboard_object.onboard_default_cpcode = int(new_cpcode)
+        # PAPI returns 201 when it actually creates a cpcode, and 200 when a
+        # cpcode with this name already exists and it's just handing back that one
+        cpcode_verb = 'New' if create_cpcode_response.status_code == 201 else 'Reused existing'
+        if path:
+            logger.info(f'{space}{space}{emoji.point_right} {cpcode_verb} cpcode: {new_cpcode:<28}{path}')
         else:
-            if resp_body:
-                logger.debug(json.dumps(resp_body, indent=4))
-            else:
-                logger.debug(f'cpcode create response status={create_cpcode_response.status_code} body={create_cpcode_response.text[:500]}')
-            sys.exit(logger.error('Unable to create new cpcode'))
+            logger.info(f'{space}{space}{emoji.point_right} {cpcode_verb} cpcode: {new_cpcode:<28}{cpcode_name}')
         return int(new_cpcode)
 
     def search_for_cpcode(self, onboard_object, wrapper_object,
@@ -134,41 +149,26 @@ class papiFunctions:
         """
         Function to search for existing cpcode
         """
-        special_characters = ['"', '^', '_', ',', '#', '%', "'", '\\']
-        for i in special_characters:
-            cpcode_name = cpcode_name.replace(i, '.')
-
+        cpcode_name = self._sanitize_cpcode_name(cpcode_name)
         logger.info(f"searching for existing cpcode: '{cpcode_name}'")
         search_cpcode_response = wrapper_object.searchCpcode(contract_id,
                                                              group_id, product_id, cpcode_name)
-        try:
-            resp_body = search_cpcode_response.json()
-        except Exception:
-            resp_body = None
-            logger.debug(f'cpcode search response status={search_cpcode_response.status_code} body={search_cpcode_response.text[:500]}')
+        resp_body = self._unwrap_cpcode_response(search_cpcode_response, 'search', 'Unable to search for existing cpcode')
 
         existing_cpcode = 0
-        if search_cpcode_response.ok and resp_body:
-            logger.debug(json.dumps(resp_body, indent=4))
-            # Without a productId filter, match cpcodeName exactly rather than
-            # blindly trusting cpcodes[0], since more than one product/group
-            # combination can share the same name in the unfiltered results
-            matches = [c for c in resp_body['cpcodes'] if c['cpcodeName'].casefold() == cpcode_name.casefold()]
-            if len(matches) > 1:
-                logger.warning(f'{len(matches)} existing cpcodes named "{cpcode_name}" found, using the first match')
-            if matches:
-                existing_cpcode = matches[0]['cpcodeId']
-                onboard_object.onboard_default_cpcode = int(existing_cpcode)
-                if path:
-                    logger.info(f'{space}{space}{emoji.point_right} Existing cpcode found: {existing_cpcode} for path: {path}')
-                else:
-                    logger.info(f'{space}{space}{emoji.point_right} Existing cpcode found: {existing_cpcode}')
-        else:
-            if resp_body:
-                logger.debug(json.dumps(resp_body, indent=4))
+        # Without a productId filter, match cpcodeName exactly rather than
+        # blindly trusting cpcodes[0], since more than one product/group
+        # combination can share the same name in the unfiltered results
+        matches = [c for c in resp_body['cpcodes'] if c['cpcodeName'].casefold() == cpcode_name.casefold()]
+        if len(matches) > 1:
+            logger.warning(f'{len(matches)} existing cpcodes named "{cpcode_name}" found, using the first match')
+        if matches:
+            existing_cpcode = matches[0]['cpcodeId']
+            onboard_object.onboard_default_cpcode = int(existing_cpcode)
+            if path:
+                logger.info(f'{space}{space}{emoji.point_right} Existing cpcode found: {existing_cpcode} for path: {path}')
             else:
-                logger.debug(f'cpcode search response status={search_cpcode_response.status_code} body={search_cpcode_response.text[:500]}')
-            sys.exit(logger.error('Unable to search for existing cpcode'))
+                logger.info(f'{space}{space}{emoji.point_right} Existing cpcode found: {existing_cpcode}')
         return int(existing_cpcode)
 
     def create_update_pm(self, config, onboard_object, wrapper_object, utility_object, cli_mode: str | None = None):
