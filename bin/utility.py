@@ -2177,7 +2177,7 @@ class utility:
             onboard_waf_prev_version = 0
             response = wrapper_object.getWafConfigurations()
             df = pd.DataFrame(response.json()['configurations'])
-            df.fillna('', inplace=True)
+            df = df.fillna('').infer_objects(copy=False)
             return onboard_waf_config_id, onboard_waf_prev_version, df
 
     def list_waf_policy(self, wrapper_object, config_id, version, policy_name: str | None = None) -> str:
@@ -2340,7 +2340,7 @@ class utility:
         waf = self.populate_waf_data(by, df)
         df = pd.DataFrame(waf)
         waf_df = df.set_index('waf_config_name')
-        waf_df.fillna('', inplace=True)
+        waf_df = waf_df.fillna('').infer_objects(copy=False)
         logger.debug(f'\nPivot\n{waf_df}')
 
         # display data on terminal

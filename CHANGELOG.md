@@ -22,6 +22,7 @@
 - Fix UTF-8 encoding on Windows to prevent Unicode errors and CI build failures
 - Fix crash (`cannot access local variable 'session'`) that masked the real "Edgerc section ... not found" error
 - Fix `appsec-remove` crash (`ValueError: too many values to unpack`) from `init_config()` return value mismatch
+- Fix pandas `FutureWarning` on `fillna` to use `fillna('').infer_objects(copy=False)` per pandas' own guidance)
 
 ## 2.4.0
 
