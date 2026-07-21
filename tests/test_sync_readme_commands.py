@@ -20,7 +20,10 @@ def test_render_catalog_captures_the_real_help_commands_panel(cli):
     assert catalog.startswith('```console\n$ akamai onboard --help\n')
     assert catalog.endswith('```')
     assert 'Commands' in catalog
-    assert '╭' in catalog and '╰' in catalog
+    # rich-click renders panels with rounded corners (╭╰), but Rich substitutes
+    # square corners (┌└) on Windows consoles that don't report VT/ANSI support
+    # (e.g. GitHub Actions' windows-latest runners) - accept either box style.
+    assert ('╭' in catalog and '╰' in catalog) or ('┌' in catalog and '└' in catalog)
     assert '`single-host`' not in catalog  # real --help output, not markdown
     assert 'single-host' in catalog
     assert 'Create a simple delivery and security configuration' in catalog

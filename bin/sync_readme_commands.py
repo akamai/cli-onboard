@@ -64,10 +64,18 @@ def render_catalog(cli) -> str:
     try:
         result = CliRunner().invoke(cli, ['--help'], env={'COLUMNS': HELP_COLUMNS})
         output = re.sub(r'\x1b\[[0-9;?]*[ -/]*[@-~]', '', result.output)
-        start = output.index('╭')
-        commands_start = output.index('Commands', start)
-        start = output.rfind('╭', 0, commands_start)
-        end = output.index('╯', start) + 1
+        # rich-click renders panels with box.ROUNDED (╭─╮│╰─╯), but Rich silently
+        # substitutes box.SQUARE (┌─┐│└─┘) on Windows consoles that don't report
+        # VT/ANSI support (e.g. GitHub Actions' windows-latest runners) - match
+        # either corner style rather than assuming the rounded one.
+        box_corners = {'╭': '╯', '┌': '┘'}
+        commands_start = output.index('Commands')
+        start, open_corner = max(
+            (output.rfind(corner, 0, commands_start), corner) for corner in box_corners
+        )
+        if start == -1:
+            raise ValueError(f'No box-drawing corner found before "Commands" in --help output: {output[:500]!r}')
+        end = output.index(box_corners[open_corner], start) + 1
         commands_panel = output[start:end]
     finally:
         cli.commands.update(removed)
