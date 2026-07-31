@@ -28,8 +28,7 @@ pip install -r requirements.txt
 2. Uninstall the existing version: `akamai uninstall onboard`
 3. Get the repo's absolute path: `pwd` (e.g. `/Users/Documents/cli-onboard`)
 4. Install from the local repo:
-   - **macOS / Linux** (three slashes): `akamai install file:///Users/Documents/cli-onboard`
-   - **Windows** (two slashes): `akamai install file://C:/Users/sample/cli-onboard`
+   - **macOS / Linux / Windows**: `akamai install "file://$(pwd)"`
 
 Local artifacts are written to folders such as `logs/`, and `convert` writes an Excel workbook under `output/{account_name}/`.
 
@@ -47,7 +46,7 @@ This repo uses [pre-commit](https://pre-commit.com/) (`.pre-commit-config.yaml`)
 
 ```bash
 pre-commit install       # once, so hooks run automatically on every commit
-pre-commit run          # runs against your staged changes, same as a real commit
+pre-commit run           # runs against your staged changes, same as a real commit
 ```
 
 If a hook modifies a file (for example, rewriting a generated section), re-stage the file and commit again — that's expected, not an error. Avoid `pre-commit run --all-files` for everyday changes — it runs every hook against every file in the repo, which can surface unrelated pre-existing issues that have nothing to do with your change.
@@ -79,10 +78,35 @@ akamai upgrade
 
 What's happening: modern versions of Python (3.11+) protect themselves from having packages installed into them by outside tools, to avoid breaking your system. The install command trips this protection.
 
-Fix: run the install with two extra settings that tell it "this one install is safe to allow":
+Fix: edit your pip config to allow it, then rerun the install. This option installs libraries directly into your operating system's global Python environment.
 
 ```bash
-PIP_BREAK_SYSTEM_PACKAGES=1 PIP_IGNORE_INSTALLED=1 akamai install file:///path/to/cli-onboard
+# macOS;
+# Linux: ~/.config/pip/pip.conf,
+# Windows: %APPDATA%\pip\pip.ini
+code ~/Library/Application\ Support/pip/pip.conf
+```
+
+```ini
+[global]
+break-system-packages = true
+```
+
+```bash
+akamai install "file://$(pwd)"
+```
+
+If it still fails, fall back to passing the same setting inline for just this one install:
+
+```bash
+PIP_BREAK_SYSTEM_PACKAGES=1 PIP_IGNORE_INSTALLED=1 akamai install "file://$(pwd)"
+```
+
+If that still fails, install with `uv` directly instead of going through `akamai install`:
+
+```bash
+uv tool install -e .
+onboard --version
 ```
 
 **Need to use a specific Python version (e.g. 3.12) instead of your default one?**
@@ -94,5 +118,5 @@ Fix (using `uv`, a Python version manager):
 ```bash
 uv python install 3.12 --default   # installs Python 3.12 and makes it the default (skipped if already installed)
 PATH="$HOME/.local/bin:$PATH" PIP_BREAK_SYSTEM_PACKAGES=1 PIP_IGNORE_INSTALLED=1 \
-  akamai install file:///path/to/cli-onboard
+  akamai install "file://$(pwd)"
 ```
