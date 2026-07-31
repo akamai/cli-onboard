@@ -4,7 +4,7 @@
      headings (omit whichever has no items). Historical entries below that use
      a different heading are left as originally written. -->
 
-## 2.5.2
+## 2.5.3
 
 #### ENHANCEMENTS:
 
@@ -34,6 +34,8 @@
 - Fix crash (`cannot access local variable 'session'`) that masked the real "Edgerc section ... not found" error
 - Fix `appsec-remove` crash (`ValueError: too many values to unpack`) from `init_config()` return value mismatch
 - Fix pandas `FutureWarning` on `fillna` to use `fillna('').infer_objects(copy=False)` per pandas' own guidance)
+- Fix `cli-onboard` so it's installable via `pip install -e .` / `uv tool install -e .` (adds a `cli_entry` console-script shim and setuptools packaging config so flat-layout auto-discovery doesn't break)
+- Fix the `sync-readme-commands` pre-commit hook to sanitize ANSI escape codes and handle the square-cornered box style Rich falls back to on non-VT Windows consoles (e.g. GitHub Actions' `windows-latest` runners), which was failing CI
 
 ## 2.4.0
 

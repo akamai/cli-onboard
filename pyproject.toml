@@ -1,6 +1,6 @@
 [project]
 name = "cli-onboard"
-version = "2.5.2"
+version = "2.5.3"
 description = "Onboard Akamai delivery and WAF configuration"
 readme = "README.md"
 requires-python = ">=3.12"
