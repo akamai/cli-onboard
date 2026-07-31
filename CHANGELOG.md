@@ -15,6 +15,7 @@
 - Simplify internal logic for handling edge hostname modes (no behavior change)
 - Extract shared CP code result-logging helper
 - Default `--section` to `default` (matching a stock `.edgerc`) instead of `onboard`
+- Drop the `uliplot` dependency (vendored the one function used, `auto_adjust_xlsx_column_width`, into `xlsx_util.py`) - `uliplot` pulled in `matplotlib`/`Pillow` for unrelated plotting helpers this CLI never used, which noticeably slowed the first run after a fresh install
 
 - Logging improvements
   - log file now appends (mode: "a") instead of overwriting each run

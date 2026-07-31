@@ -29,7 +29,7 @@ from pyisemail import is_email
 from rich import print
 from rich import print_json
 from tabulate import tabulate
-from UliPlot.XLSX import auto_adjust_xlsx_column_width
+from xlsx_util import auto_adjust_xlsx_column_width
 
 logger = setup_logger()
 root = get_cli_root_directory()

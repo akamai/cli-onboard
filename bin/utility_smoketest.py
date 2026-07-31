@@ -29,7 +29,7 @@ from exceptions import setup_logger
 from forcediphttpsadapter.adapters import ForcedIPHTTPSAdapter
 from poll import pollActivation
 from requests.adapters import HTTPAdapter
-from UliPlot.XLSX import auto_adjust_xlsx_column_width
+from xlsx_util import auto_adjust_xlsx_column_width
 
 logger = setup_logger()
 space = ' '
@@ -397,7 +397,6 @@ class smoketestFunctions:
                 acme_target = 'not_found'
                 acme_hostname = f'_acme-status.{hostname}'
                 logger.error(f'{emoji.fail} {msg} Error! Token not returned from PAPI')
-
 
             dnsResp = self.dns_lookup(acme_record['validationCname']['hostname'])
             try:
