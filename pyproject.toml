@@ -27,6 +27,19 @@ dependencies = [
     "xlsxwriter==3.2.9",
 ]
 
+[build-system]
+requires = ["setuptools>=82.0.1"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+# This project ships as a plain script tree (`bin/`) invoked directly by
+# `akamai-cli`, not as an importable Python package, so there's nothing for
+# setuptools to package. Without this, setuptools' flat-layout auto-discovery
+# finds several top-level directories (config/, templates/, tests/, ...) and
+# refuses to guess which one is "the package", breaking `uv tool install -e .`
+# / `pip install -e .`.
+packages = []
+
 [dependency-groups]
 dev = ["pytest==9.1.1"]
 
