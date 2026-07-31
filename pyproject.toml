@@ -31,14 +31,23 @@ dependencies = [
 requires = ["setuptools>=82.0.1"]
 build-backend = "setuptools.build_meta"
 
+[project.scripts]
+onboard = "cli_entry:main"
+
 [tool.setuptools]
 # This project ships as a plain script tree (`bin/`) invoked directly by
 # `akamai-cli`, not as an importable Python package, so there's nothing for
-# setuptools to package. Without this, setuptools' flat-layout auto-discovery
-# finds several top-level directories (config/, templates/, tests/, ...) and
-# refuses to guess which one is "the package", breaking `uv tool install -e .`
-# / `pip install -e .`.
+# setuptools to auto-discover as a package. Without this, setuptools'
+# flat-layout auto-discovery finds several top-level directories (config/,
+# templates/, tests/, ...) and refuses to guess which one is "the package",
+# breaking `uv tool install -e .` / `pip install -e .`.
+#
+# `cli_entry` is the one module we do declare, purely to give the above
+# console-script entry point something importable to point at (see
+# bin/cli_entry.py for why it can't just be bin/akamai-onboard.py directly).
 packages = []
+package-dir = {"" = "bin"}
+py-modules = ["cli_entry"]
 
 [dependency-groups]
 dev = ["pytest==9.1.1"]

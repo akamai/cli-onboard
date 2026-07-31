@@ -10,3 +10,8 @@ sample_templates
 .sh
 *.csv
 !templates/**/*.csv
+
+output
+.claude
+.scratch
+*.egginfo
