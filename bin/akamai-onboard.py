@@ -17,6 +17,7 @@ import configparser
 import json
 import logging.config
 import os
+import subprocess
 import sys
 import time
 import tomllib
@@ -989,17 +990,17 @@ def batch_create(config, **kwargs):
     if click_args['group'] is None:
         command = (f'akamai pm lg -s default -a {config.account_key}') if config.account_key is not None else ('akamai pm lg')
         logger.warning(f'Group ID is required.  Running akamai property manager cli command: {command}')
-        sys.exit(os.system(command))
+        sys.exit(subprocess.run(command, shell=True).returncode)
 
     if click_args['contract'] is None:
         command = (f'akamai pm lc -s default -a {config.account_key}') if config.account_key is not None else ('akamai pm lc')
         logger.warning(f'Contract ID is required.  Running akamai property manager cli command: {command}')
-        sys.exit(os.system(command))
+        sys.exit(subprocess.run(command, shell=True).returncode)
 
     if click_args['product'] is None:
         command = (f"akamai pm lp -s default -c {click_args['contract']} -a {config.account_key}") if config.account_key is not None else (f"akamai pm lc -c {click_args['contract']}")
         logger.warning(f'Product ID is required.  Running akamai property manager cli command: {command}')
-        sys.exit(os.system(command))
+        sys.exit(subprocess.run(command, shell=True).returncode)
 
     utility_papi_object = utility_papi.papiFunctions()
     utility_waf_object = utility_waf.wafFunctions()
