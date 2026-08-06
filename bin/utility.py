@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import csv
 import json
+import logging
 import os
 import platform
 import re
@@ -21,7 +22,6 @@ import pandas as pd
 import util_emojis as emoji
 from cerberus import Validator
 from exceptions import get_cli_root_directory
-from exceptions import setup_logger
 from jsonschema import validate
 from jsonschema import ValidationError
 from model.edge_hostname_mode import EdgeHostnameMode
@@ -31,7 +31,7 @@ from rich import print_json
 from tabulate import tabulate
 from xlsx_util import auto_adjust_xlsx_column_width
 
-logger = setup_logger()
+logger = logging.getLogger(__name__)
 root = get_cli_root_directory()
 
 space = ' '

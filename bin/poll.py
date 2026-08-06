@@ -1,15 +1,15 @@
 from __future__ import annotations
 
 import json
+import logging
 import time
 from time import gmtime
 from time import strftime
 
-from exceptions import setup_logger
 from rich.live import Live
 from rich.table import Table
 
-logger = setup_logger()
+logger = logging.getLogger(__name__)
 
 
 def generate_table(activationDict, network) -> Table:

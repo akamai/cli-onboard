@@ -3,9 +3,8 @@ from __future__ import annotations
 import csv
 import importlib.util
 import json
-import logging.config  # noqa: F401 - needed so exceptions.setup_logger() can find dictConfig
+import logging
 import os
-import shutil
 import tempfile
 from pathlib import Path
 from types import SimpleNamespace
@@ -16,22 +15,10 @@ from click.testing import CliRunner
 REPO_ROOT = Path(__file__).resolve().parent.parent
 BIN_DIR = REPO_ROOT / 'bin'
 
-# `bin/*.py` modules call setup_logger() at import time, which creates
-# `logs/` and `config/` in the current working directory as a side effect.
-# Move the whole test process into a scratch directory before any test file
-# imports those modules, so that side effect doesn't litter the repo root.
+# Avoids cli fixture's setup_logger() littering logs/ in the repo root during tests.
 _SCRATCH_DIR = tempfile.mkdtemp(prefix='cli-onboard-tests-')
 os.chdir(_SCRATCH_DIR)
 
-# setup_logger() falls back to a relative 'config/logging.json' when it can't
-# find a copy under ~/.akamai-cli (i.e. on any machine without a prior real
-# `akamai install`, such as a CI runner). Seed that fallback here so the
-# import below doesn't depend on the machine's install history.
-os.makedirs('config', exist_ok=True)
-shutil.copy2(REPO_ROOT / 'config' / 'logging.json', 'config/logging.json')
-
-# Must be imported after the chdir above - utility.py calls setup_logger() at
-# import time, which creates `logs/`/`config/` as a side effect in the cwd.
 import exceptions  # noqa: E402
 import utility  # noqa: E402
 import utility_papi  # noqa: E402

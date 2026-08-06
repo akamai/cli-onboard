@@ -13,49 +13,54 @@ Copyright 2022 Akamai Technologies, Inc. All Rights Reserved.
 """
 from __future__ import annotations
 
-import json
 import logging.config
 import os
-import shutil
 import time
 from pathlib import Path
 
 from rich.logging import RichHandler
 
+# Inlined equivalent of the old config/logging.json - avoids disk I/O.
+_LOG_CONFIG = {
+    'version': 1,
+    'disable_existing_loggers': False,
+    'formatters': {
+        'long': {
+            'format': '%(asctime)s %(process)d %(filename)-17s %(lineno)-5d %(levelname)-8s: %(message)s',
+            'datefmt': '%Y-%m-%d %H:%M:%S',
+        },
+    },
+    'handlers': {
+        'file_handler': {
+            'class': 'logging.FileHandler',
+            'level': 'DEBUG',
+            'filename': 'logs/onboard.log',
+            'formatter': 'long',
+            'delay': True,
+            'mode': 'a',
+            'encoding': 'utf8',
+        },
+    },
+    'root': {
+        'handlers': ['file_handler'],
+    },
+}
+
 
 def setup_logger():
-    """Create folders and copy config json when running via Akamai CLI"""
+    """Configure process-wide logging once, at the real entry point."""
     Path('logs').mkdir(parents=True, exist_ok=True)
-    Path('config').mkdir(parents=True, exist_ok=True)
 
-    docker_path = os.path.expanduser(Path('/cli'))
-    local_home_path = os.path.expanduser(Path('~/.akamai-cli'))
-
-    if Path(docker_path).exists():
-        origin_config = f'{docker_path}/.akamai-cli/src/cli-onboard/config/logging.json'
-    elif Path(local_home_path).exists():
-        origin_config = f'{local_home_path}/src/cli-onboard/config/logging.json'
-        origin_config = os.path.expanduser(origin_config)
-    else:
-        origin_config = 'cli-onboard/config/logging.json'
-
-    try:
-        shutil.copy2(origin_config, 'config/logging.json')
-    except FileNotFoundError as e:
-        origin_config = 'config/logging.json'
-
-    with open(origin_config) as f:
-        log_cfg = json.load(f)
-    logging.config.dictConfig(log_cfg)
+    logging.config.dictConfig(_LOG_CONFIG)
     logging.Formatter.converter = time.gmtime
-    logger = logging.getLogger(__name__)
+    root = logging.getLogger()
     # NOTSET here so it inherits from root (see apply_log_level()), not pinned.
-    logging.getLogger().setLevel(logging.INFO)
-    for handler in logger.handlers[:]:
+    root.setLevel(logging.INFO)
+    for handler in root.handlers[:]:
         if isinstance(handler, RichHandler):
-            logger.removeHandler(handler)
-    logger.addHandler(RichHandler(show_level=False, show_time=False, rich_tracebacks=True))
-    return logger
+            root.removeHandler(handler)
+    root.addHandler(RichHandler(show_level=False, show_time=False, rich_tracebacks=True))
+    return logging.getLogger(__name__)
 
 
 def resolve_log_level(log_level: str | None, verbose: bool) -> int:

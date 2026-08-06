@@ -12,6 +12,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 import random
 import re
@@ -21,12 +22,11 @@ import sys
 import _logging as lg
 import pandas as pd
 import util_emojis as emoji
-from exceptions import setup_logger
 from rich import print_json
 from tabulate import tabulate
 
 
-logger = setup_logger()
+logger = logging.getLogger(__name__)
 headers = {'Content-Type': 'application/json'}
 
 

@@ -2,17 +2,17 @@ from __future__ import annotations
 
 import datetime
 import json
+import logging
 import re
 import sys
 import time
 from time import gmtime
 from time import strftime
 
-from exceptions import setup_logger
 from rich.live import Live
 from rich.table import Table
 
-logger = setup_logger()
+logger = logging.getLogger(__name__)
 dot = ' '
 
 

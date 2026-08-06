@@ -13,11 +13,11 @@ Copyright 2019 Akamai Technologies, Inc. All Rights Reserved.
 """
 from __future__ import annotations
 
+import logging
 import os
 from pathlib import Path
 
-from exceptions import setup_logger
-logger = setup_logger()
+logger = logging.getLogger(__name__)
 
 
 class onboard:

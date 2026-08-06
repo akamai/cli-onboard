@@ -3,6 +3,7 @@ from __future__ import annotations
 import csv
 import ipaddress
 import json
+import logging
 import os
 import platform
 import random
@@ -25,13 +26,12 @@ import pandas as pd
 import requests
 import urllib3
 import util_emojis as emoji
-from exceptions import setup_logger
 from forcediphttpsadapter.adapters import ForcedIPHTTPSAdapter
 from poll import pollActivation
 from requests.adapters import HTTPAdapter
 from xlsx_util import auto_adjust_xlsx_column_width
 
-logger = setup_logger()
+logger = logging.getLogger(__name__)
 space = ' '
 column_width = 50
 

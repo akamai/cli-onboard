@@ -1,12 +1,12 @@
 from __future__ import annotations
 
+import logging
 from collections import defaultdict
 
-from exceptions import setup_logger
 from rich.table import Table
 
 
-logger = setup_logger()
+logger = logging.getLogger(__name__)
 space = ' '
 
 

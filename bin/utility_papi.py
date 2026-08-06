@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 import shutil
 import sys
@@ -10,12 +11,11 @@ from time import gmtime
 from time import strftime
 
 import util_emojis as emoji
-from exceptions import setup_logger
 from model.edge_hostname_mode import EdgeHostnameMode
 from poll import pollActivation
 from rich import print_json
 
-logger = setup_logger()
+logger = logging.getLogger(__name__)
 space = ' '
 
 

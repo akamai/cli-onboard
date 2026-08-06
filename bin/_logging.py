@@ -1,13 +1,12 @@
 from __future__ import annotations
 
+import logging
 import sys
 import time
 from time import gmtime
 from time import strftime
 
-from exceptions import setup_logger
-
-logger = setup_logger()
+logger = logging.getLogger(__name__)
 
 
 def _elapse_time(start_time: time, msg: str) -> None:

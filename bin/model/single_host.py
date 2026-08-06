@@ -13,13 +13,13 @@ Copyright 2022 Akamai Technologies, Inc. All Rights Reserved.
 """
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 
-from exceptions import setup_logger
 from model.edge_hostname_mode import EdgeHostnameMode
 
 
-logger = setup_logger()
+logger = logging.getLogger(__name__)
 
 
 @dataclass

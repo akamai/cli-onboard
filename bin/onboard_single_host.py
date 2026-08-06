@@ -14,13 +14,13 @@ Copyright 2022 Akamai Technologies, Inc. All Rights Reserved.
 from __future__ import annotations
 
 import json
+import logging
 import sys
 from pathlib import Path
 
 from exceptions import get_cli_root_directory
-from exceptions import setup_logger
 
-logger = setup_logger()
+logger = logging.getLogger(__name__)
 root = get_cli_root_directory()
 
 
