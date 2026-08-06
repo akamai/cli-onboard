@@ -4,6 +4,13 @@
      headings (omit whichever has no items). Historical entries below that use
      a different heading are left as originally written. -->
 
+## 2.5.4
+
+#### ENHANCEMENTS:
+
+- Add `--log-level`/`--debug`/`--verbose` flags to the `cli` group and every subcommand, so verbosity can be set globally (`cli-onboard --debug convert ...`) or per-subcommand (`cli-onboard convert --log-level DEBUG ...`); most-verbose-wins if both are set
+- Drop `config/logging.json` and the docker/local-home/cwd path-hunting logic that located and copied it - logging config is now a plain Python dict in `exceptions.py`, applied once at the real entry point instead of once per module (17 modules previously called `setup_logger()` redundantly at import time, each re-reading and re-copying the config file)
+
 ## 2.5.3
 
 #### ENHANCEMENTS:
