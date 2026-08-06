@@ -4,25 +4,51 @@
      headings (omit whichever has no items). Historical entries below that use
      a different heading are left as originally written. -->
 
-## 2.5.4
+All notable changes to this project are documented in this file.
+
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
+and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+Each release is grouped into two sections:
+
+- **ENHANCEMENTS** — new features or improvements to existing behavior
+- **BUG FIXES** — bug fixes
+
+---
+
+## [v2.5.4] - 2026-08-04
 
 #### ENHANCEMENTS:
 
-- Add `--log-level`/`--debug`/`--verbose` flags to the `cli` group and every subcommand, so verbosity can be set globally (`cli-onboard --debug convert ...`) or per-subcommand (`cli-onboard convert --log-level DEBUG ...`); most-verbose-wins if both are set
-- Drop `config/logging.json` and the docker/local-home/cwd path-hunting logic that located and copied it - logging config is now a plain Python dict in `exceptions.py`, applied once at the real entry point instead of once per module (17 modules previously called `setup_logger()` redundantly at import time, each re-reading and re-copying the config file)
+- `convert` precheck now prints the account's actual valid groups/contracts as a colorful `rich` table
+- Add `--log-level`/`--debug`/`--verbose` flags to the `cli` group and every subcommand
+- Drop `config/logging.json` and the path-hunting logic that located and copied it
+- Logging config is now a plain Python dict in `exceptions.py`, applied once at the real entry point instead of once per module
+- Table shows when `--group`/`--contract`/a csv `GroupID` doesn't validate, mirroring `akamai pm list-groups`/`list-contracts`
+- Verbosity can be set globally (`cli-onboard --debug convert ...`) or per-subcommand; most-verbose-wins if both are set
 
-## 2.5.3
+#### BUG FIXES:
+
+- `--contract` was never actually checked against the account's real contracts; now validated directly
+- `--group`/`--contract` are commonly passed unprefixed, so the literal comparison rejected valid ones and left listings empty
+- `convert` precheck never validated `--group` or a csv `GroupID` against the account's real groups
+- `convert` precheck's `--contract` line was echoed as "valid" whenever the product lookup happened to succeed
+- An invalid group only surfaced later as a raw API failure mid-run; it's now checked up front, same as `--product`
+- Fixed a prefix mismatch: PAPI returns group/contract IDs with their `grp_`/`ctr_` prefix
+- Replace deprecated `os.system()` calls with `subprocess.run()` in `akamai-onboard.py`, `utility.py`, `wrapper_api.py`
+
+## [v2.5.3] - 2026-07-31
 
 #### ENHANCEMENTS:
 
-- New command: `sbd-precheck`, `sbd-status`, `convert`
-- Update Ion Premier and Ion Standard Template
-- Rename `iteractive_mode` to `force_mode` for clarity
-- Rename `ASK` to `account_switch_key` for clarity
-- Simplify internal logic for handling edge hostname modes (no behavior change)
-- Extract shared CP code result-logging helper
 - Default `--section` to `default` (matching a stock `.edgerc`) instead of `onboard`
 - Drop the `uliplot` dependency (vendored the one function used, `auto_adjust_xlsx_column_width`, into `xlsx_util.py`) - `uliplot` pulled in `matplotlib`/`Pillow` for unrelated plotting helpers this CLI never used, which noticeably slowed the first run after a fresh install
+- Extract shared CP code result-logging helper
+- New command: `sbd-precheck`, `sbd-status`, `convert`
+- Rename `ASK` to `account_switch_key` for clarity
+- Rename `iteractive_mode` to `force_mode` for clarity
+- Simplify internal logic for handling edge hostname modes (no behavior change)
+- Update Ion Premier and Ion Standard Template
 
 - Logging improvements
   - log file now appends (mode: "a") instead of overwriting each run
@@ -34,17 +60,17 @@
 
 #### BUG FIXES:
 
-- wrapper_api.py - better error handling
+- Fix `appsec-remove` crash (`ValueError: too many values to unpack`) from `init_config()` return value mismatch
+- Fix `cli-onboard` so it's installable via `pip install -e .` / `uv tool install -e .` (adds a `cli_entry` console-script shim and setuptools packaging config so flat-layout auto-discovery doesn't break)
+- Fix crash (`cannot access local variable 'session'`) that masked the real "Edgerc section ... not found" error
+- Fix pandas `FutureWarning` on `fillna` to use `fillna('').infer_objects(copy=False)` per pandas' own guidance)
+- Fix the `sync-readme-commands` pre-commit hook to sanitize ANSI escape codes and handle the square-cornered box style Rich falls back to on non-VT Windows consoles (e.g. GitHub Actions' `windows-latest` runners), which was failing CI
+- Fix UTF-8 encoding on Windows to prevent Unicode errors and CI build failures
 - utility_papi.py - better error handling
 - utility.py - better error handling
-- Fix UTF-8 encoding on Windows to prevent Unicode errors and CI build failures
-- Fix crash (`cannot access local variable 'session'`) that masked the real "Edgerc section ... not found" error
-- Fix `appsec-remove` crash (`ValueError: too many values to unpack`) from `init_config()` return value mismatch
-- Fix pandas `FutureWarning` on `fillna` to use `fillna('').infer_objects(copy=False)` per pandas' own guidance)
-- Fix `cli-onboard` so it's installable via `pip install -e .` / `uv tool install -e .` (adds a `cli_entry` console-script shim and setuptools packaging config so flat-layout auto-discovery doesn't break)
-- Fix the `sync-readme-commands` pre-commit hook to sanitize ANSI escape codes and handle the square-cornered box style Rich falls back to on non-VT Windows consoles (e.g. GitHub Actions' `windows-latest` runners), which was failing CI
+- wrapper_api.py - better error handling
 
-## 2.4.0
+## [v2.4.0] - 2025-02-06
 
 #### ENHANCEMENTS/BUG FIXES:
 
@@ -52,21 +78,21 @@
 - `appsec-update` improve logging messages
 - Bump minimum python version to 3.12
 
-## 2.3.7
+## [v2.3.7] - 2024-08-19
 
 #### ENHANCEMENTS:
 
 - Replaced `cerberus` with `jsonschema`
 - Upgraded `pandas` to version `2.2.2`
 
-## 2.3.6
+## [v2.3.6] - 2024-07-25
 
 #### BUG FIXES:
 
 - appsec-create fail on brand new group without any config
 - appsec-create version/activation note is empty
 
-## 2.3.5
+## [v2.3.5] - 2024-07-25
 
 #### BUG FIXES:
 
