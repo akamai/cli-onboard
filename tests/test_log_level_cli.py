@@ -1,82 +1,102 @@
-"""Ticket 02: --log-level/--debug/--verbose wired into the `cli` group and `convert`.
+"""--log-level/--debug/--verbose wired into the `cli` group and its subcommands.
 
-These invoke `convert` with a deliberately-missing edgerc file, mirroring the
+These invoke each subcommand with a deliberately-missing edgerc file, mirroring the
 pattern in tests/test_convert_cli_parsing.py::test_missing_edgerc_file_exits -
-apply_log_level() runs as the very first thing in convert()'s body, before
-init_config() fails cleanly on the missing edgerc, so we can assert on the
+apply_log_level_from_flags() runs as the very first thing in each subcommand's body,
+before init_config() fails cleanly on the missing edgerc, so we can assert on the
 resulting root logger level without any network access or real credentials.
 """
 from __future__ import annotations
 
 import logging
 
+import pytest
 
-def _invoke_convert(runner, cli, tmp_path, extra_group_args=(), extra_convert_args=()):
+# Minimum required options per subcommand, just enough to get past click's own
+# parsing and into the function body (where apply_log_level_from_flags() runs).
+_REQUIRED_ARGS = {
+    'convert': ['--csv', 'x.csv', '-d', 'x'],
+    'batch-create': ['--template', 't.json', '--contract', 'ctr_1', '--group', 'grp_1',
+                      '--product', 'prd_1', '--csv', 'x.csv'],
+    'sbd-status': [],
+    'sbd-precheck': ['--csv', 'x.csv'],
+    'appsec-update': ['--config-id', '123', '--csv', 'x.csv'],
+    'appsec-remove': ['--config-id', '123', '--csv', 'x.csv'],
+}
+
+# Ticket 03's targets: subcommands using **kwargs, so log_level/debug/verbose land
+# there for free with no signature change.
+_KWARGS_SUBCOMMANDS = ['batch-create', 'sbd-status', 'sbd-precheck', 'appsec-update', 'appsec-remove']
+
+
+def _invoke(runner, cli, tmp_path, subcommand, extra_group_args=(), extra_subcommand_args=()):
     missing_edgerc = tmp_path / 'does-not-exist.edgerc'
     args = ['--edgerc', str(missing_edgerc), *extra_group_args,
-            'convert', '--csv', 'x.csv', '-d', 'x', *extra_convert_args]
+            subcommand, *_REQUIRED_ARGS[subcommand], *extra_subcommand_args]
     result = runner.invoke(cli, args)
     assert 'Unable to read edgerc file' in result.output
     return result
 
 
+# --- convert (ticket 02) ---------------------------------------------------
+
 def test_no_logging_flags_leaves_root_at_info(runner, cli, tmp_path, restore_logging_state):
     # Matches the real bootstrap: setup_logger() always sets root to INFO before
     # any flag is parsed. With no flags at all, that default must be undisturbed.
     logging.getLogger().setLevel(logging.INFO)
-    _invoke_convert(runner, cli, tmp_path)
+    _invoke(runner, cli, tmp_path, 'convert')
     assert logging.getLogger().level == logging.INFO
 
 
 def test_group_level_debug_flag(runner, cli, tmp_path, restore_logging_state):
     logging.getLogger().setLevel(logging.WARNING)
-    _invoke_convert(runner, cli, tmp_path, extra_group_args=['--debug'])
+    _invoke(runner, cli, tmp_path, 'convert', extra_group_args=['--debug'])
     assert logging.getLogger().level == logging.DEBUG
 
 
 def test_group_level_verbose_flag(runner, cli, tmp_path, restore_logging_state):
     logging.getLogger().setLevel(logging.WARNING)
-    _invoke_convert(runner, cli, tmp_path, extra_group_args=['--verbose'])
+    _invoke(runner, cli, tmp_path, 'convert', extra_group_args=['--verbose'])
     assert logging.getLogger().level == logging.DEBUG
 
 
 def test_group_level_log_level_flag(runner, cli, tmp_path, restore_logging_state):
     logging.getLogger().setLevel(logging.WARNING)
-    _invoke_convert(runner, cli, tmp_path, extra_group_args=['--log-level', 'ERROR'])
+    _invoke(runner, cli, tmp_path, 'convert', extra_group_args=['--log-level', 'ERROR'])
     assert logging.getLogger().level == logging.ERROR
 
 
 def test_subcommand_level_debug_flag(runner, cli, tmp_path, restore_logging_state):
     logging.getLogger().setLevel(logging.WARNING)
-    _invoke_convert(runner, cli, tmp_path, extra_convert_args=['--debug'])
+    _invoke(runner, cli, tmp_path, 'convert', extra_subcommand_args=['--debug'])
     assert logging.getLogger().level == logging.DEBUG
 
 
 def test_subcommand_level_verbose_flag(runner, cli, tmp_path, restore_logging_state):
     logging.getLogger().setLevel(logging.WARNING)
-    _invoke_convert(runner, cli, tmp_path, extra_convert_args=['--verbose'])
+    _invoke(runner, cli, tmp_path, 'convert', extra_subcommand_args=['--verbose'])
     assert logging.getLogger().level == logging.DEBUG
 
 
 def test_subcommand_level_log_level_flag(runner, cli, tmp_path, restore_logging_state):
     logging.getLogger().setLevel(logging.WARNING)
-    _invoke_convert(runner, cli, tmp_path, extra_convert_args=['--log-level', 'ERROR'])
+    _invoke(runner, cli, tmp_path, 'convert', extra_subcommand_args=['--log-level', 'ERROR'])
     assert logging.getLogger().level == logging.ERROR
 
 
 def test_most_verbose_wins_across_group_and_subcommand(runner, cli, tmp_path, restore_logging_state):
     logging.getLogger().setLevel(logging.WARNING)
-    _invoke_convert(runner, cli, tmp_path,
-                     extra_group_args=['--debug'],
-                     extra_convert_args=['--log-level', 'ERROR'])
+    _invoke(runner, cli, tmp_path, 'convert',
+            extra_group_args=['--debug'],
+            extra_subcommand_args=['--log-level', 'ERROR'])
     assert logging.getLogger().level == logging.DEBUG
 
 
 def test_most_verbose_wins_regardless_of_which_side_is_more_verbose(runner, cli, tmp_path, restore_logging_state):
     logging.getLogger().setLevel(logging.WARNING)
-    _invoke_convert(runner, cli, tmp_path,
-                     extra_group_args=['--log-level', 'ERROR'],
-                     extra_convert_args=['--debug'])
+    _invoke(runner, cli, tmp_path, 'convert',
+            extra_group_args=['--log-level', 'ERROR'],
+            extra_subcommand_args=['--debug'])
     assert logging.getLogger().level == logging.DEBUG
 
 
@@ -89,6 +109,44 @@ def test_help_shows_logging_options_on_group(runner, cli):
 
 def test_help_shows_logging_options_on_convert(runner, cli):
     result = runner.invoke(cli, ['convert', '--help'])
+    assert result.exit_code == 0
+    for option in ('--log-level', '--debug', '--verbose'):
+        assert option in result.output
+
+
+# --- ticket 03: remaining **kwargs subcommands ------------------------------
+
+@pytest.mark.parametrize('subcommand', _KWARGS_SUBCOMMANDS)
+def test_kwargs_subcommand_no_flags_leaves_root_at_info(runner, cli, tmp_path, restore_logging_state, subcommand):
+    logging.getLogger().setLevel(logging.INFO)
+    _invoke(runner, cli, tmp_path, subcommand)
+    assert logging.getLogger().level == logging.INFO
+
+
+@pytest.mark.parametrize('subcommand', _KWARGS_SUBCOMMANDS)
+def test_kwargs_subcommand_group_level_debug_flag(runner, cli, tmp_path, restore_logging_state, subcommand):
+    logging.getLogger().setLevel(logging.WARNING)
+    _invoke(runner, cli, tmp_path, subcommand, extra_group_args=['--debug'])
+    assert logging.getLogger().level == logging.DEBUG
+
+
+@pytest.mark.parametrize('subcommand', _KWARGS_SUBCOMMANDS)
+def test_kwargs_subcommand_level_debug_flag(runner, cli, tmp_path, restore_logging_state, subcommand):
+    logging.getLogger().setLevel(logging.WARNING)
+    _invoke(runner, cli, tmp_path, subcommand, extra_subcommand_args=['--debug'])
+    assert logging.getLogger().level == logging.DEBUG
+
+
+@pytest.mark.parametrize('subcommand', _KWARGS_SUBCOMMANDS)
+def test_kwargs_subcommand_level_log_level_flag(runner, cli, tmp_path, restore_logging_state, subcommand):
+    logging.getLogger().setLevel(logging.WARNING)
+    _invoke(runner, cli, tmp_path, subcommand, extra_subcommand_args=['--log-level', 'ERROR'])
+    assert logging.getLogger().level == logging.ERROR
+
+
+@pytest.mark.parametrize('subcommand', _KWARGS_SUBCOMMANDS)
+def test_kwargs_subcommand_help_shows_logging_options(runner, cli, subcommand):
+    result = runner.invoke(cli, [subcommand, '--help'])
     assert result.exit_code == 0
     for option in ('--log-level', '--debug', '--verbose'):
         assert option in result.output

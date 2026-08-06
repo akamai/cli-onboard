@@ -58,12 +58,12 @@ def setup_logger():
     return logger
 
 
-def resolve_log_level(log_level: str | None, debug: bool, verbose: bool) -> int:
+def resolve_log_level(log_level: str | None, verbose: bool) -> int:
     """Resolve --log-level/--debug/--verbose to a level; most verbose wins, default INFO."""
     levels = []
     if log_level:
         levels.append(getattr(logging, log_level.upper()))
-    if debug or verbose:
+    if verbose:
         levels.append(logging.DEBUG)
     if not levels:
         return logging.INFO
@@ -87,10 +87,10 @@ def apply_log_level(level: int) -> None:
     logging.getLogger('requests').setLevel(logging.WARNING)
 
 
-def apply_log_level_from_flags(log_level: str | None, debug: bool, verbose: bool) -> None:
+def apply_log_level_from_flags(log_level: str | None, verbose: bool) -> None:
     """Apply only if a flag was given, so an unset layer can't override another's level."""
-    if log_level or debug or verbose:
-        apply_log_level(resolve_log_level(log_level, debug, verbose))
+    if log_level or verbose:
+        apply_log_level(resolve_log_level(log_level, verbose))
 
 
 def get_cli_root_directory():

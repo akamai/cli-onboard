@@ -10,28 +10,24 @@ import exceptions
 
 class TestResolveLogLevel:
     def test_defaults_to_info_when_nothing_set(self):
-        assert exceptions.resolve_log_level(None, False, False) == logging.INFO
+        assert exceptions.resolve_log_level(None, False) == logging.INFO
 
     def test_log_level_alone_is_honored(self):
-        assert exceptions.resolve_log_level('ERROR', False, False) == logging.ERROR
+        assert exceptions.resolve_log_level('ERROR', False) == logging.ERROR
 
     def test_log_level_is_case_insensitive(self):
-        assert exceptions.resolve_log_level('debug', False, False) == logging.DEBUG
-        assert exceptions.resolve_log_level('DEBUG', False, False) == logging.DEBUG
-
-    def test_debug_flag_wins_over_less_verbose_log_level(self):
-        assert exceptions.resolve_log_level('WARNING', True, False) == logging.DEBUG
+        assert exceptions.resolve_log_level('debug', False) == logging.DEBUG
+        assert exceptions.resolve_log_level('DEBUG', False) == logging.DEBUG
 
     def test_verbose_flag_wins_over_less_verbose_log_level(self):
-        assert exceptions.resolve_log_level('WARNING', False, True) == logging.DEBUG
-
-    def test_debug_and_verbose_both_set_is_still_debug(self):
-        assert exceptions.resolve_log_level(None, True, True) == logging.DEBUG
+        # --debug and --verbose are the same underlying flag (see log_level_options
+        # in bin/akamai-onboard.py), so this covers both spellings.
+        assert exceptions.resolve_log_level('WARNING', True) == logging.DEBUG
 
     def test_more_verbose_explicit_log_level_beats_no_flags(self):
         # DEBUG is more verbose than the INFO default, so it should win even
         # though --debug/--verbose weren't passed.
-        assert exceptions.resolve_log_level('DEBUG', False, False) == logging.DEBUG
+        assert exceptions.resolve_log_level('DEBUG', False) == logging.DEBUG
 
 
 class TestApplyLogLevel:
@@ -77,24 +73,24 @@ class TestApplyLogLevel:
 class TestApplyLogLevelFromFlags:
     def test_no_flags_given_does_not_touch_the_current_level(self, restore_logging_state):
         exceptions.apply_log_level(logging.ERROR)
-        exceptions.apply_log_level_from_flags(None, False, False)
+        exceptions.apply_log_level_from_flags(None, False)
         assert logging.getLogger().level == logging.ERROR
 
     def test_log_level_alone_is_applied(self, restore_logging_state):
-        exceptions.apply_log_level_from_flags('ERROR', False, False)
+        exceptions.apply_log_level_from_flags('ERROR', False)
         assert logging.getLogger().level == logging.ERROR
 
     def test_unset_layer_cannot_clobber_a_quieter_explicit_level_set_elsewhere(self, restore_logging_state):
         # Simulates: group passes --log-level ERROR, subcommand passes nothing.
         # The subcommand's absence of flags must not be treated as an implicit
         # "INFO" request that overrides the group's explicit, quieter choice.
-        exceptions.apply_log_level_from_flags('ERROR', False, False)
-        exceptions.apply_log_level_from_flags(None, False, False)
+        exceptions.apply_log_level_from_flags('ERROR', False)
+        exceptions.apply_log_level_from_flags(None, False)
         assert logging.getLogger().level == logging.ERROR
 
-    def test_debug_from_either_layer_still_wins(self, restore_logging_state):
-        exceptions.apply_log_level_from_flags('ERROR', False, False)
-        exceptions.apply_log_level_from_flags(None, True, False)
+    def test_verbose_from_either_layer_still_wins(self, restore_logging_state):
+        exceptions.apply_log_level_from_flags('ERROR', False)
+        exceptions.apply_log_level_from_flags(None, True)
         assert logging.getLogger().level == logging.DEBUG
 
 

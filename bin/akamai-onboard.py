@@ -119,10 +119,8 @@ pass_config = click.make_pass_decorator(Config, ensure=True)
 
 def log_level_options(f):
     """Shared --log-level/--debug/--verbose options for the cli group and each subcommand."""
-    f = click.option('--verbose', is_flag=True, default=False,
-                      help='Enable DEBUG-level logging (shortcut for --log-level DEBUG)')(f)
-    f = click.option('--debug', is_flag=True, default=False,
-                      help='Enable DEBUG-level logging (shortcut for --log-level DEBUG)')(f)
+    f = click.option('--debug', '--verbose', 'verbose', is_flag=True, default=False,
+                      help='shortcut for --log-level DEBUG')(f)
     f = click.option('--log-level', metavar='',
                       type=click.Choice(['DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL'], case_sensitive=False),
                       default=None, help='Set logging verbosity')(f)
@@ -191,8 +189,8 @@ def init_config(config):
 @click.version_option(version=PACKAGE_VERSION)
 @click.pass_context
 @pass_config
-def cli(config, ctx, edgerc, section, account_key, log_level, debug, verbose):
-    apply_log_level_from_flags(log_level, debug, verbose)
+def cli(config, ctx, edgerc, section, account_key, log_level, verbose):
+    apply_log_level_from_flags(log_level, verbose)
     config.edgerc = edgerc
     config.section = section
     config.account_key = account_key
@@ -244,7 +242,7 @@ def convert(config, **kwargs):
     """
     Bring over Cloudflare/Cloudfront/Imperva/Fastly configs to Akamai platform
     """
-    apply_log_level_from_flags(kwargs.pop('log_level'), kwargs.pop('debug'), kwargs.pop('verbose'))
+    apply_log_level_from_flags(kwargs.pop('log_level'), kwargs.pop('verbose'))
     logger.info('Start Akamai CLI onboard')
     start_time = time.perf_counter()
     try:
@@ -949,11 +947,13 @@ def create(config, file):
 @click.option('--activate', metavar='', type=click.Choice(['delivery-staging', 'waf-staging', 'delivery-production', 'waf-production']), multiple=True, help='Options: delivery-staging, delivery-production, waf-staging, waf-production', required=False)
 @click.option('--email', metavar='', multiple=True, help='email(s) for activation notifications', required=False)
 @click.option('--csv', metavar='', required=True, help='csv file with headers hostname,origin,propertyName,forwardHostHeader,edgeHostname')
+@log_level_options
 @pass_config
 def batch_create(config, **kwargs):
     """
     Create a 1 or more delivery configurations using a csv input and optionally update WAF policy
     """
+    apply_log_level_from_flags(kwargs.pop('log_level'), kwargs.pop('verbose'))
     logger.info('Start Akamai CLI onboard')
     try:
         _, wrapper_object, account_input, account_output = init_config(config)
@@ -1137,11 +1137,13 @@ def batch_create(config, **kwargs):
 
 
 @cli.command(short_help=f'{emoji.heavy_check_mark} View Default DV (SBD) certificate deployment status')
+@log_level_options
 @pass_config
 def sbd_status(config, **kwargs):
     """
     Check status of all secure by default hostnames on an account
     """
+    apply_log_level_from_flags(kwargs.pop('log_level'), kwargs.pop('verbose'))
     logger.info('Start Akamai CLI onboard Secure by Default Status')
 
     # Validate akamai cli and cli pipeline are installed
@@ -1209,11 +1211,13 @@ def sbd_status(config, **kwargs):
 @click.option('--csv', metavar='', required=True, help='csv file with a list of hostnames')
 @click.option('--launch/--no-launch', default=True, metavar='', help='automatically open excel application')
 @click.option('--tokens-only', default=False, is_flag=True, metavar='', help='skip dns check to see if acme record is valid (only generate tokens)')
+@log_level_options
 @pass_config
 def sbd_precheck(config, **kwargs):
     """
     Precheck Default DV (SBD) hostnames for token placement
     """
+    apply_log_level_from_flags(kwargs.pop('log_level'), kwargs.pop('verbose'))
     logger.info('Start Akamai CLI onboard Secure by Default Precheck')
 
     # Validate akamai cli and cli pipeline are installed
@@ -1271,6 +1275,7 @@ def sbd_precheck(config, **kwargs):
 @click.option('--activate', metavar='', type=click.Choice(['staging', 'production']), multiple=True, help='Options: staging, production', required=False, default=[])
 @click.option('--version', metavar='', help='version to add hostname(s) to', default='latest', required=False)
 @click.option('--email', metavar='', required=False, help='email for activation notifications')
+@log_level_options
 @pass_config
 def appsec_update(config, **kwargs):
     """
@@ -1279,6 +1284,7 @@ def appsec_update(config, **kwargs):
     \b
     Add additional hostnames and optionally add to policy match target
     """
+    apply_log_level_from_flags(kwargs.pop('log_level'), kwargs.pop('verbose'))
     logger.info('Start Akamai CLI onboard')
     try:
         _, wrapper_object, account_input, account_output = init_config(config)
@@ -1398,11 +1404,13 @@ def appsec_policy(config, waf_config_name, policy_name, name_contains):
 @click.option('--activate', metavar='', type=click.Choice(['staging', 'production']), multiple=True, help='Options: staging, production')
 @click.option('--version', metavar='', help='version to add hostname(s) to', default='latest')
 @click.option('--email', metavar='', help='email for activation notifications')
+@log_level_options
 @pass_config
 def appsec_remove(config, **kwargs):
     """
     Remove hostnames from selected hosts and any policy match targets
     """
+    apply_log_level_from_flags(kwargs.pop('log_level'), kwargs.pop('verbose'))
     logger.info('Start Akamai CLI onboard')
     _, wrapper_object, account_input, account_output = init_config(config)
     util = utility.utility()
