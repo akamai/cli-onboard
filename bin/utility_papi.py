@@ -581,9 +581,8 @@ class papiFunctions:
 
                 else:
                     # branch
-                    logger.debug(create_resp.json().keys())
-                    print_json(data=create_resp.json())
                     logger.critical('Unable to create property')
+                    logger.error(create_resp.json())
 
                     try:
                         errors = [err for err in create_resp.json()['errors']]
