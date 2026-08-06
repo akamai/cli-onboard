@@ -125,15 +125,22 @@ def template_dir_factory(tmp_path):
 class StubWrapper:
     """Minimal stand-in for the PAPI wrapper object used by validateSetupStepsConvert.
 
-    Real validateSetupStepsConvert calls wrapper_object.property_exists(name) and
-    (via utility.validateProductId) wrapper_object.getProductsByContract(contract_id) —
-    both genuine network calls in production. This stub answers both locally so the
-    surrounding flag/GTM/email/activation logic can be exercised without a live API.
+    Real validateSetupStepsConvert calls wrapper_object.property_exists(name),
+    (via utility.validateProductId) wrapper_object.getProductsByContract(contract_id),
+    (via utility.validateGroupId) wrapper_object.get_groups(), and (via
+    utility.validateContractId) wrapper_object.get_contracts() — all genuine network
+    calls in production. This stub answers them locally so the surrounding
+    flag/GTM/email/activation logic can be exercised without a live API.
     """
 
-    def __init__(self, existing_properties: set[str] | None = None, valid_products: set[str] | None = None):
+    def __init__(self, existing_properties: set[str] | None = None, valid_products: set[str] | None = None,
+                 valid_groups: dict[str, list[str]] | None = None, valid_contracts: set[str] | None = None):
         self.existing_properties = existing_properties or set()
         self.valid_products = valid_products or {'prd_Site_Accel'}
+        # groupId -> contractIds it belongs to; defaults match click_args_factory's
+        # 'group': 'grp_456' / 'contract': 'ctr_TEST123' so unrelated tests pass by default.
+        self.valid_groups = valid_groups or {'grp_456': ['ctr_TEST123']}
+        self.valid_contracts = valid_contracts or {'ctr_TEST123'}
 
     def property_exists(self, property_name: str) -> bool:
         return property_name in self.existing_properties
@@ -143,6 +150,13 @@ class StubWrapper:
             status_code=200,
             json=lambda: {'products': {'items': [{'productId': p} for p in self.valid_products]}},
         )
+
+    def get_groups(self):
+        return [{'groupId': gid, 'groupName': f'{gid}-name', 'contractIds': contracts}
+                for gid, contracts in self.valid_groups.items()]
+
+    def get_contracts(self):
+        return [{'contractId': cid, 'contractTypeName': 'DIRECT_CUSTOMER'} for cid in self.valid_contracts]
 
 
 @pytest.fixture

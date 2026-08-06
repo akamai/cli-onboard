@@ -17,6 +17,7 @@ import os
 import random
 import re
 import string
+import subprocess
 import sys
 
 import _logging as lg
@@ -173,6 +174,30 @@ class apiCallsWrapper:
                 except KeyError:
                     groups.append(grp)
         return groups
+
+    def get_groups(self) -> list:
+        url = f'https://{self.access_hostname}/papi/v1/groups/'
+        url = self.formUrl(url)
+        resp = self.session.get(url)
+
+        groups = []
+        if resp.status_code == 401:
+            lg._log_error('accountSwitchKey is invalid')
+        elif resp.status_code == 200:
+            groups = resp.json()['groups']['items']
+        return groups
+
+    def get_contracts(self) -> list:
+        url = f'https://{self.access_hostname}/papi/v1/contracts'
+        url = self.formUrl(url)
+        resp = self.session.get(url)
+
+        contracts = []
+        if resp.status_code == 401:
+            lg._log_error('accountSwitchKey is invalid')
+        elif resp.status_code == 200:
+            contracts = resp.json()['contracts']['items']
+        return contracts
 
     def checkAuthorization(self):
         """
@@ -447,18 +472,7 @@ class apiCallsWrapper:
         url = f'https://{self.access_hostname}/papi/v1/products?contractId={contractId}'
         url = self.formUrl(url)
         resp = self.session.get(url)
-        if resp.status_code == 200:
-            return resp
-        else:
-            match = re.search(r'=(.*)', self.account_switch_key)
-
-            if match:
-                account_switch_key = match.group(1)
-                command = (f'akamai pm -s default lg -a {account_switch_key}') if account_switch_key is not None else ('akamai pm lg')
-                logger.warning(f'Possible invalid contract id {contractId}')
-                logger.warning(f'Running akamai property manager cli command: {command}')
-                os.system(command)
-            return resp
+        return resp
 
     def createEdgehostname(self, productId: str, domainPrefix: str, secureNetwork: str,
                            certEnrollmentId: int,
@@ -867,7 +881,7 @@ class apiCallsWrapper:
                 command = (f'akamai pm -s default lg -a {account_switch_key}') if account_switch_key is not None else ('akamai pm lg')
                 logger.warning('Possible invalid contract/group_id')
                 logger.warning('Running akamai property manager cli command: {command}')
-                sys.exit(os.system(command))
+                sys.exit(subprocess.run(command, shell=True).returncode)
         return response, hostnames, selectable_df
 
     def get_property_hostnames(self, property_id: str, contract_id: str, group_id: str, network: str | None = 'staging'):

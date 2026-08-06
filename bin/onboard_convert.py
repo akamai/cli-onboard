@@ -36,6 +36,7 @@ class onboard:
             self.ehn_option = click_args['media_ehn']
             self.property_list = []
             self.product_list = []
+            self.group_list = []
             self.valid_csv = True
             self.csv_dict = []
             self.all_template_json_exists = True

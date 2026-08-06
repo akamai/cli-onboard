@@ -123,3 +123,136 @@ def test_declining_confirmation_without_force_exits_cleanly(util, build_onboard_
     wrapper = stub_wrapper_factory()
     with pytest.raises(SystemExit):
         util.validateSetupStepsConvert(onboard_object, wrapper, prefix=None, confirm_input=lambda: 'no')
+
+
+def test_invalid_group_id_errors(util, build_onboard_object, stub_wrapper_factory, caplog, capsys):
+    """A --group that doesn't exist (or isn't on this contract) must fail precheck,
+    not surface as a raw API error partway through property/cpcode creation - and
+    must list the groups that ARE available on that contract, same as invalid
+    --product does for products. The listing itself is a rich Table printed straight
+    to the console (logger.warning() goes through a shared RichHandler configured with
+    markup=False, so it can't render Rich tables) - assert its content via capsys.
+    """
+    onboard_object = build_onboard_object(click_overrides={'group': 'grp_bogus', 'force': True})
+    wrapper = stub_wrapper_factory()  # only knows about 'grp_456'
+    with caplog.at_level(logging.WARNING):
+        with pytest.raises(SystemExit):
+            util.validateSetupStepsConvert(onboard_object, wrapper, prefix=None, confirm_input=_fail_if_prompted)
+    assert 'invalid group_id' in caplog.text
+    assert 'Available valid group_id for contract ctr_TEST123' in caplog.text
+    assert 'grp_456' in capsys.readouterr().out
+
+
+def test_unprefixed_group_and_contract_match_prefixed_papi_response(util, build_onboard_object, stub_wrapper_factory):
+    """Reproduces the reported bug: PAPI's /papi/v1/groups always returns groupId and
+    contractIds WITH their 'grp_'/'ctr_' prefix, but users commonly pass --group/--contract
+    unprefixed (as in the report: group 27897, contract V-511SV19). Comparing those
+    raw strings against the prefixed PAPI values matched nothing, so every group was
+    filtered out of "Available valid group_id" - even ones that were actually valid.
+    """
+    onboard_object = build_onboard_object(click_overrides={'group': '27897', 'contract': 'V-511SV19', 'force': True})
+    wrapper = stub_wrapper_factory(valid_groups={'grp_27897': ['ctr_V-511SV19']}, valid_contracts={'ctr_V-511SV19'})
+    assert util.validateSetupStepsConvert(onboard_object, wrapper, prefix=None, confirm_input=_fail_if_prompted) is True
+
+
+def test_unprefixed_invalid_group_still_lists_available_groups(util, build_onboard_object, stub_wrapper_factory, caplog, capsys):
+    """Same prefix mismatch as above, but for a genuinely invalid group - the fix must
+    not just stop over-rejecting valid groups, it must still populate the "available
+    groups for this contract" listing instead of printing an empty table.
+    """
+    onboard_object = build_onboard_object(click_overrides={'group': '99999', 'contract': 'V-511SV19', 'force': True})
+    wrapper = stub_wrapper_factory(valid_groups={'grp_27897': ['ctr_V-511SV19']}, valid_contracts={'ctr_V-511SV19'})
+    with caplog.at_level(logging.WARNING):
+        with pytest.raises(SystemExit):
+            util.validateSetupStepsConvert(onboard_object, wrapper, prefix=None, confirm_input=_fail_if_prompted)
+    assert 'invalid group_id' in caplog.text
+    assert 'grp_27897' in capsys.readouterr().out
+
+
+def test_group_id_wrong_contract_errors(util, build_onboard_object, stub_wrapper_factory, caplog):
+    """A group that exists but belongs to a different (valid) contract must also fail
+    precheck. ctr_OTHER is itself a real contract on the account so this isolates the
+    group/contract-mismatch case from the separate "contract doesn't exist" case below.
+    """
+    onboard_object = build_onboard_object(click_overrides={'group': 'grp_456', 'contract': 'ctr_OTHER', 'force': True})
+    wrapper = stub_wrapper_factory(valid_contracts={'ctr_TEST123', 'ctr_OTHER'})  # grp_456 only maps to ctr_TEST123
+    with caplog.at_level(logging.ERROR):
+        with pytest.raises(SystemExit):
+            util.validateSetupStepsConvert(onboard_object, wrapper, prefix=None, confirm_input=_fail_if_prompted)
+    assert 'invalid group_id' in caplog.text
+    assert 'invalid contract_id' not in caplog.text
+
+
+def test_invalid_contract_suppresses_group_listing(util, build_onboard_object, stub_wrapper_factory, caplog, capsys):
+    """When the contract itself is wrong, no group on the account matches it, so the
+    "Available valid group_id" table would just be empty and misleading - both the
+    contract AND the group are wrong here, so the listing section must not appear.
+    """
+    onboard_object = build_onboard_object(click_overrides={'group': 'grp_456', 'contract': 'ctr_BOGUS', 'force': True})
+    wrapper = stub_wrapper_factory()  # only knows about ctr_TEST123
+    with caplog.at_level(logging.WARNING):
+        with pytest.raises(SystemExit):
+            util.validateSetupStepsConvert(onboard_object, wrapper, prefix=None, confirm_input=_fail_if_prompted)
+    assert 'invalid group_id' in caplog.text
+    assert 'Available valid group_id' not in caplog.text
+    assert 'invalid contract_id' in caplog.text
+    assert 'Available valid contract_id' in caplog.text
+    assert 'TEST123' in capsys.readouterr().out  # displayed unprefixed, same convention as the group table
+
+
+def test_invalid_contract_id_lists_available_contracts(util, build_onboard_object, stub_wrapper_factory, caplog, capsys):
+    """contract_id used to just be echoed as "valid" whenever a product lookup happened
+    to succeed - never actually checked against the account's real contracts. A bogus
+    --contract must fail precheck and list the contracts that ARE on the account, the
+    same as `akamai pm list-contracts` would show.
+    """
+    onboard_object = build_onboard_object(click_overrides={'contract': 'ctr_BOGUS', 'group': 'grp_456', 'force': True})
+    wrapper = stub_wrapper_factory(valid_contracts={'ctr_TEST123', 'ctr_OTHER'})
+    with caplog.at_level(logging.WARNING):
+        with pytest.raises(SystemExit):
+            util.validateSetupStepsConvert(onboard_object, wrapper, prefix=None, confirm_input=_fail_if_prompted)
+    assert 'invalid contract_id' in caplog.text
+    assert 'Available valid contract_id' in caplog.text
+    out = capsys.readouterr().out
+    assert 'TEST123' in out
+    assert 'OTHER' in out
+
+
+def test_unprefixed_contract_matches_prefixed_papi_response(util, build_onboard_object, stub_wrapper_factory):
+    """Same prefix mismatch as groups: --contract is commonly passed unprefixed."""
+    onboard_object = build_onboard_object(click_overrides={'contract': 'V-511SV19', 'group': '27897', 'force': True})
+    wrapper = stub_wrapper_factory(valid_groups={'grp_27897': ['ctr_V-511SV19']}, valid_contracts={'ctr_V-511SV19'})
+    assert util.validateSetupStepsConvert(onboard_object, wrapper, prefix=None, confirm_input=_fail_if_prompted) is True
+
+
+def test_csv_provided_invalid_group_id_errors(util, build_onboard_object, stub_wrapper_factory, caplog, capsys):
+    """Custom-solution mode: no --group passed, so each property's GroupID comes from
+    the csv (onboard_object.group_list, populated by csv_2_property_array_convert).
+    An invalid value there must also fail precheck (and list the contract's available
+    groups) rather than only surfacing later.
+    """
+    onboard_object = build_onboard_object(click_overrides={'group': None, 'force': True})
+    onboard_object.group_list = ['grp_bogus']
+    wrapper = stub_wrapper_factory()
+    with caplog.at_level(logging.WARNING):
+        with pytest.raises(SystemExit):
+            util.validateSetupStepsConvert(onboard_object, wrapper, prefix=None, confirm_input=_fail_if_prompted)
+    assert 'invalid group_id' in caplog.text
+    assert 'Available valid group_id for contract ctr_TEST123' in caplog.text
+    assert 'grp_456' in capsys.readouterr().out
+
+
+def test_csv_provided_valid_group_id_passes(util, build_onboard_object, stub_wrapper_factory):
+    onboard_object = build_onboard_object(click_overrides={'group': None, 'force': True})
+    onboard_object.group_list = ['grp_456']
+    wrapper = stub_wrapper_factory()
+    assert util.validateSetupStepsConvert(onboard_object, wrapper, prefix=None, confirm_input=_fail_if_prompted) is True
+
+
+def test_no_group_and_no_csv_groupid_errors(util, build_onboard_object, stub_wrapper_factory, caplog):
+    onboard_object = build_onboard_object(click_overrides={'group': None, 'force': True})
+    wrapper = stub_wrapper_factory()
+    with caplog.at_level(logging.ERROR):
+        with pytest.raises(SystemExit):
+            util.validateSetupStepsConvert(onboard_object, wrapper, prefix=None, confirm_input=_fail_if_prompted)
+    assert 'No --group provided' in caplog.text

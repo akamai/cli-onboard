@@ -26,8 +26,10 @@ from jsonschema import validate
 from jsonschema import ValidationError
 from model.edge_hostname_mode import EdgeHostnameMode
 from pyisemail import is_email
+from rich import box
 from rich import print
 from rich import print_json
+from rich.table import Table
 from tabulate import tabulate
 from xlsx_util import auto_adjust_xlsx_column_width
 
@@ -80,12 +82,12 @@ class utility:
         if click_args['group'] is None:
             command = (f'akamai pm -s default lg -a {config.account_key}') if config.account_key is not None else ('akamai pm lg')
             logger.warning(f'Group ID is required.  Running akamai property manager cli command: {command}')
-            # sys.exit(os.system(command))
+            sys.exit(subprocess.run(command, shell=True).returncode)
 
         if click_args['contract'] is None:
             command = (f'akamai pm lc -s default -a {config.account_key}') if config.account_key is not None else ('akamai pm lc')
             logger.warning(f'Contract ID is required.  Running akamai property manager cli command: {command}')
-            sys.exit(os.system(command))
+            sys.exit(subprocess.run(command, shell=True).returncode)
 
     def check_sbd_quota(self, papi, click_args, total_needed) -> bool:
         contract_id = click_args['contract']
@@ -585,17 +587,36 @@ class utility:
 
         print()
         logger.warning(f'{emoji.looking} Validating product, group and contract details')
-        # validate product id available per contract
 
+        # contract_id used to just be echoed as "valid" whenever a product lookup
+        # happened to succeed - it was never actually checked against the account's
+        # real contracts. Validate it directly, same pattern as group_id below.
+        contract_width = column_width - len(onboard_object.contract_id)
+        contract_msg = f'{onboard_object.contract_id}{space:>{contract_width}}'
+        contract_detail = self.validateContractId(wrapper_object, onboard_object.contract_id)
+        if contract_detail['Found']:
+            logger.info(f'{space}{emoji.thumbup} {contract_msg}valid contract_id')
+        else:
+            logger.error(f'{space}{emoji.thumbdown} {contract_msg}invalid contract_id')
+            count += 1
+            if contract_detail['contracts']:
+                print()
+                logger.warning('Available valid contract_id (same as akamai pm list-contracts)')
+                contracts_list = sorted(contract_detail['contracts'], key=lambda c: str(c.get('contractId', '')))
+                rich_table = Table(header_style='bold plum2', box=box.ROUNDED, border_style='dim')
+                rich_table.add_column('Contract ID', style='plum2')
+                rich_table.add_column('Contract Type', style='plum2')
+                for c in contracts_list:
+                    rich_table.add_row(self._strip_id_prefix(c.get('contractId', '')), c.get('contractTypeName', ''))
+                print(rich_table)
+
+        # validate product id available per contract
         for product in onboard_object.product_list:
             product_detail = self.validateProductId(wrapper_object,
                                                     onboard_object.contract_id,
                                                     product)
             if product_detail['Found']:
                 logger.info(f'{space}{emoji.thumbup} {product}{space:>{column_width - len(product)}}valid product_id')
-                logger.info(f'{space}{emoji.thumbup} {onboard_object.contract_id}{space:>{column_width - len(onboard_object.contract_id)}}valid contract_id')
-                # entitlement relies on contract, not group
-                # logger.info(f'{space}{emoji.thumbup} {onboard_object.group_id}{space:>{column_width - len(onboard_object.group_id)}}valid group_id')
             else:
                 logger.error(f'{space}{emoji.thumbdown} {product}{space:>{column_width - len(product)}}invalid product_id')
                 logger.warning(f'Available valid product_id for contract {onboard_object.contract_id}')
@@ -603,6 +624,41 @@ class utility:
                 products_list = sorted(product_detail['products'])
                 for p in products_list:
                     logger.warning(p)
+
+        # a top-level --group applies to every property; otherwise each property
+        # falls back to its own GroupID column from the csv (see onboard_object.group_list)
+        groups_to_check = [onboard_object.group_id] if onboard_object.group_id else onboard_object.group_list
+        if not groups_to_check:
+            logger.error(f'{space}{emoji.fail} No --group provided and no GroupID column found in csv')
+            count += 1
+        else:
+            for group_id in groups_to_check:
+                width = column_width - len(group_id)
+                msg = f'{group_id}{space:>{width}}'
+                group_detail = self.validateGroupId(wrapper_object, onboard_object.contract_id, group_id)
+                if group_detail['Found']:
+                    logger.info(f'{space}{emoji.thumbup} {msg}valid group_id')
+                else:
+                    logger.error(f'{space}{emoji.thumbdown} {msg}invalid group_id')
+                    count += 1
+                    # no groups matched this contract at all - the contract_id itself is
+                    # almost certainly wrong too, so a group listing would just be an
+                    # empty/misleading table. Skip it in that case.
+                    if group_detail['groups']:
+                        print()
+                        logger.warning(f'Available valid group_id for contract {onboard_object.contract_id} (same as akamai pm list-groups)')
+                        groups_list = sorted(group_detail['groups'], key=lambda g: str(g.get('groupName', '')).lower())
+                        rich_table = Table(header_style='bold misty_rose3', box=box.ROUNDED, border_style='dim')
+                        rich_table.add_column('Contract IDs', style='misty_rose3')
+                        rich_table.add_column('Group Name', style='white')
+                        rich_table.add_column('Group ID', style='misty_rose3')
+                        for g in groups_list:
+                            rich_table.add_row(
+                                ', '.join(self._strip_id_prefix(c) for c in g.get('contractIds', [])),
+                                g.get('groupName', ''),
+                                self._strip_id_prefix(g.get('groupId', '')),
+                            )
+                        print(rich_table)
 
         print()
         # network must be either STANDARD_TLS or ENHANCED_TLS
@@ -1168,13 +1224,54 @@ class utility:
                 else:
                     pass
         else:
-            logger.error(f'Product validation failed with status {get_products_response.status_code}')
+            print()
+            logger.debug(f'Product validation failed with status {get_products_response.status_code}')
             try:
                 logger.debug(json.dumps(get_products_response.json(), indent=4))
             except Exception:
                 logger.debug(get_products_response.text[:500])
 
         return products
+
+    def _strip_id_prefix(self, value: str) -> str:
+        """
+        PAPI returns groupId/contractIds with their 'grp_'/'ctr_' prefix, but
+        onboard_object.contract_id/group_id are taken from user input, which is
+        commonly passed unprefixed (see convert's --group/--contract help text).
+        Compare on the bare id so both forms match.
+        """
+        if isinstance(value, str) and value.startswith(('ctr_', 'grp_')):
+            return value.split('_', 1)[1]
+        return value
+
+    def validateGroupId(self, wrapper_object, contract_id, group_id) -> dict:
+        """
+        Function to validate a group id exists and belongs to the given contract
+        """
+        result = {'Found': False, 'groups': []}
+        normalized_contract = self._strip_id_prefix(contract_id)
+        normalized_group = self._strip_id_prefix(group_id)
+        groups = wrapper_object.get_groups()
+        for group in groups:
+            group_contracts = [self._strip_id_prefix(c) for c in group.get('contractIds', [])]
+            if normalized_contract in group_contracts:
+                result['groups'].append(group)
+                if self._strip_id_prefix(group.get('groupId', '')) == normalized_group:
+                    result['Found'] = True
+        return result
+
+    def validateContractId(self, wrapper_object, contract_id) -> dict:
+        """
+        Function to validate a contract id exists on this account
+        """
+        result = {'Found': False, 'contracts': []}
+        normalized_contract = self._strip_id_prefix(contract_id)
+        contracts = wrapper_object.get_contracts()
+        for contract in contracts:
+            result['contracts'].append(contract)
+            if self._strip_id_prefix(contract.get('contractId', '')) == normalized_contract:
+                result['Found'] = True
+        return result
 
     def validateEdgeHostnameExists(self, wrapper_object, edge_hostname) -> bool:
         """
@@ -1934,6 +2031,8 @@ class utility:
             propertyJson[propertyName]['product'] = row['product']
             if row.get('GroupID'):
                 propertyJson[propertyName]['group'] = row['GroupID']
+                if row['GroupID'] not in onboard_object.group_list:
+                    onboard_object.group_list.append(row['GroupID'])
             hostname = row['hostname']
             propertyJson[propertyName]['hostnames'] = [hostname]
             propertyJson[propertyName]['edgeHostnames'] = [edgeHostname]
