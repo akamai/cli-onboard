@@ -49,9 +49,7 @@ def setup_logger():
     logging.config.dictConfig(log_cfg)
     logging.Formatter.converter = time.gmtime
     logger = logging.getLogger(__name__)
-    # Leave this logger's own level at NOTSET so it inherits its effective level
-    # from the root logger (see apply_log_level()) instead of being pinned here -
-    # root starts at INFO so today's default behavior is unchanged.
+    # NOTSET here so it inherits from root (see apply_log_level()), not pinned.
     logging.getLogger().setLevel(logging.INFO)
     for handler in logger.handlers[:]:
         if isinstance(handler, RichHandler):
@@ -61,9 +59,7 @@ def setup_logger():
 
 
 def resolve_log_level(log_level: str | None, debug: bool, verbose: bool) -> int:
-    """Compute the effective log level from --log-level/--debug/--verbose, most
-    verbose wins. Defaults to INFO when none of the three are set.
-    """
+    """Resolve --log-level/--debug/--verbose to a level; most verbose wins, default INFO."""
     levels = []
     if log_level:
         levels.append(getattr(logging, log_level.upper()))
@@ -74,20 +70,27 @@ def resolve_log_level(log_level: str | None, debug: bool, verbose: bool) -> int:
     return min(levels)
 
 
-def apply_log_level(level: int) -> None:
-    """Apply an effective log level process-wide.
+# Most verbose level requested so far, tracked separately from root.level so a
+# lone --log-level WARNING/ERROR/CRITICAL isn't blocked by the INFO bootstrap.
+_most_verbose_level_requested: int | None = None
 
-    Sets the root logger to the more verbose of its current level and `level`,
-    so calling this more than once (e.g. once from the CLI group, once from a
-    subcommand) always keeps the most verbose level ever requested, regardless
-    of call order. Third-party HTTP libraries are pinned to WARNING regardless
-    of `level`, since urllib3/requests DEBUG logging dumps raw request headers -
-    including the EdgeGrid Authorization signature.
-    """
-    root = logging.getLogger()
-    root.setLevel(min(root.level, level))
+
+def apply_log_level(level: int) -> None:
+    """Set the process-wide log level to the most verbose of `level` and any prior call."""
+    global _most_verbose_level_requested
+    if _most_verbose_level_requested is None or level < _most_verbose_level_requested:
+        _most_verbose_level_requested = level
+    logging.getLogger().setLevel(_most_verbose_level_requested)
+    # Pinned regardless of level: DEBUG here would dump raw HTTP headers,
+    # including the EdgeGrid Authorization signature.
     logging.getLogger('urllib3').setLevel(logging.WARNING)
     logging.getLogger('requests').setLevel(logging.WARNING)
+
+
+def apply_log_level_from_flags(log_level: str | None, debug: bool, verbose: bool) -> None:
+    """Apply only if a flag was given, so an unset layer can't override another's level."""
+    if log_level or debug or verbose:
+        apply_log_level(resolve_log_level(log_level, debug, verbose))
 
 
 def get_cli_root_directory():

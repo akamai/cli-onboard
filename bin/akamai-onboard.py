@@ -47,6 +47,7 @@ import utility_waf
 import wrapper_api
 from akamai.edgegrid import EdgeGridAuth
 from akamai.edgegrid import EdgeRc
+from exceptions import apply_log_level_from_flags
 from exceptions import get_cli_execution_directory
 from exceptions import get_cli_root_directory
 from exceptions import setup_logger
@@ -116,6 +117,18 @@ class Config:
 pass_config = click.make_pass_decorator(Config, ensure=True)
 
 
+def log_level_options(f):
+    """Shared --log-level/--debug/--verbose options for the cli group and each subcommand."""
+    f = click.option('--verbose', is_flag=True, default=False,
+                      help='Enable DEBUG-level logging (shortcut for --log-level DEBUG)')(f)
+    f = click.option('--debug', is_flag=True, default=False,
+                      help='Enable DEBUG-level logging (shortcut for --log-level DEBUG)')(f)
+    f = click.option('--log-level', metavar='',
+                      type=click.Choice(['DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL'], case_sensitive=False),
+                      default=None, help='Set logging verbosity')(f)
+    return f
+
+
 def init_config(config):
     if not config.edgerc:
         if not os.getenv('AKAMAI_EDGERC'):
@@ -174,10 +187,12 @@ def init_config(config):
 @click.option('-a', '--account-key', '--accountkey', '--accountSwitchKey', '--accountswitchkey',
               metavar='',
               help='Account Switch Key (Akamai Internal Only)', required=False)
+@log_level_options
 @click.version_option(version=PACKAGE_VERSION)
 @click.pass_context
 @pass_config
-def cli(config, ctx, edgerc, section, account_key):
+def cli(config, ctx, edgerc, section, account_key, log_level, debug, verbose):
+    apply_log_level_from_flags(log_level, debug, verbose)
     config.edgerc = edgerc
     config.section = section
     config.account_key = account_key
@@ -223,11 +238,13 @@ def help(ctx):
 @click.option('--dryrun', metavar='', is_flag=True, default=False, help='admin - test config')
 @click.option('--prefix', metavar='', help='admin - required for dryrun.')
 @click.option('--launch/--no-launch', default=True, metavar='', help='automatically open excel application')
+@log_level_options
 @pass_config
 def convert(config, **kwargs):
     """
     Bring over Cloudflare/Cloudfront/Imperva/Fastly configs to Akamai platform
     """
+    apply_log_level_from_flags(kwargs.pop('log_level'), kwargs.pop('debug'), kwargs.pop('verbose'))
     logger.info('Start Akamai CLI onboard')
     start_time = time.perf_counter()
     try:

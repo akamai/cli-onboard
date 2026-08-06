@@ -3,22 +3,9 @@ from __future__ import annotations
 import logging
 
 import exceptions
-import pytest
 
-
-@pytest.fixture
-def restore_logging_state():
-    """Snapshot/restore global logging state that resolve_log_level()/apply_log_level()
-    mutate, so tests in this file can't leak level changes into each other or into
-    other test files that share the same process-wide logging registry.
-    """
-    root = logging.getLogger()
-    shared = logging.getLogger('exceptions')
-    urllib3_logger = logging.getLogger('urllib3')
-    requests_logger = logging.getLogger('requests')
-    snapshot = (root.level, shared.level, urllib3_logger.level, requests_logger.level)
-    yield
-    root.level, shared.level, urllib3_logger.level, requests_logger.level = snapshot
+# `restore_logging_state` fixture lives in tests/conftest.py, shared with
+# tests/test_log_level_cli.py.
 
 
 class TestResolveLogLevel:
@@ -48,20 +35,32 @@ class TestResolveLogLevel:
 
 
 class TestApplyLogLevel:
-    def test_lowers_root_level_when_more_verbose(self, restore_logging_state):
+    def test_first_call_is_always_honored_even_if_quieter_than_the_info_bootstrap(self, restore_logging_state):
+        # setup_logger() always bootstraps root to INFO before any flag is parsed.
+        # A lone `--log-level ERROR` (quieter than INFO) must still take effect -
+        # it must not be treated as "regressing" against that incidental bootstrap.
         logging.getLogger().setLevel(logging.INFO)
+        exceptions.apply_log_level(logging.ERROR)
+        assert logging.getLogger().level == logging.ERROR
+
+    def test_second_call_lowers_root_level_when_more_verbose(self, restore_logging_state):
+        exceptions.apply_log_level(logging.INFO)
         exceptions.apply_log_level(logging.DEBUG)
         assert logging.getLogger().level == logging.DEBUG
 
-    def test_never_regresses_to_a_less_verbose_level(self, restore_logging_state):
-        logging.getLogger().setLevel(logging.INFO)
+    def test_never_regresses_to_a_less_verbose_level_than_already_requested(self, restore_logging_state):
+        exceptions.apply_log_level(logging.INFO)
         exceptions.apply_log_level(logging.WARNING)
         assert logging.getLogger().level == logging.INFO
 
     def test_most_verbose_wins_regardless_of_call_order(self, restore_logging_state):
-        logging.getLogger().setLevel(logging.INFO)
         exceptions.apply_log_level(logging.DEBUG)
         exceptions.apply_log_level(logging.ERROR)
+        assert logging.getLogger().level == logging.DEBUG
+
+        exceptions._most_verbose_level_requested = None
+        exceptions.apply_log_level(logging.ERROR)
+        exceptions.apply_log_level(logging.DEBUG)
         assert logging.getLogger().level == logging.DEBUG
 
     def test_pins_urllib3_and_requests_to_warning_even_under_debug(self, restore_logging_state):
@@ -73,6 +72,30 @@ class TestApplyLogLevel:
         exceptions.apply_log_level(logging.CRITICAL)
         assert logging.getLogger('urllib3').level == logging.WARNING
         assert logging.getLogger('requests').level == logging.WARNING
+
+
+class TestApplyLogLevelFromFlags:
+    def test_no_flags_given_does_not_touch_the_current_level(self, restore_logging_state):
+        exceptions.apply_log_level(logging.ERROR)
+        exceptions.apply_log_level_from_flags(None, False, False)
+        assert logging.getLogger().level == logging.ERROR
+
+    def test_log_level_alone_is_applied(self, restore_logging_state):
+        exceptions.apply_log_level_from_flags('ERROR', False, False)
+        assert logging.getLogger().level == logging.ERROR
+
+    def test_unset_layer_cannot_clobber_a_quieter_explicit_level_set_elsewhere(self, restore_logging_state):
+        # Simulates: group passes --log-level ERROR, subcommand passes nothing.
+        # The subcommand's absence of flags must not be treated as an implicit
+        # "INFO" request that overrides the group's explicit, quieter choice.
+        exceptions.apply_log_level_from_flags('ERROR', False, False)
+        exceptions.apply_log_level_from_flags(None, False, False)
+        assert logging.getLogger().level == logging.ERROR
+
+    def test_debug_from_either_layer_still_wins(self, restore_logging_state):
+        exceptions.apply_log_level_from_flags('ERROR', False, False)
+        exceptions.apply_log_level_from_flags(None, True, False)
+        assert logging.getLogger().level == logging.DEBUG
 
 
 class TestSetupLoggerLevelWiring:

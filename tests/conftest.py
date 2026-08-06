@@ -32,6 +32,7 @@ shutil.copy2(REPO_ROOT / 'config' / 'logging.json', 'config/logging.json')
 
 # Must be imported after the chdir above - utility.py calls setup_logger() at
 # import time, which creates `logs/`/`config/` as a side effect in the cwd.
+import exceptions  # noqa: E402
 import utility  # noqa: E402
 import utility_papi  # noqa: E402
 
@@ -254,6 +255,21 @@ class FakeConvertUtility(utility.utility):
 @pytest.fixture
 def fake_convert_utility_cls():
     return FakeConvertUtility
+
+
+@pytest.fixture
+def restore_logging_state():
+    """Reset logging level state to a fresh-process baseline, then restore it after."""
+    root = logging.getLogger()
+    shared = logging.getLogger('exceptions')
+    urllib3_logger = logging.getLogger('urllib3')
+    requests_logger = logging.getLogger('requests')
+    snapshot = (root.level, shared.level, urllib3_logger.level, requests_logger.level,
+                exceptions._most_verbose_level_requested)
+    exceptions._most_verbose_level_requested = None
+    yield
+    (root.level, shared.level, urllib3_logger.level, requests_logger.level,
+     exceptions._most_verbose_level_requested) = snapshot
 
 
 @pytest.fixture
