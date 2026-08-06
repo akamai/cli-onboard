@@ -106,7 +106,9 @@ def get_cli_root_directory():
     elif Path(local_home_path).exists():
         return Path(f'{local_home_path}')
     else:
-        return os.getcwd()
+        # fallback to use package location instead of cwd
+        # Same reasoning as _load_package_metadata() in akamai-onboard.py.
+        return Path(__file__).resolve().parent.parent
 
 
 def get_cli_execution_directory():
