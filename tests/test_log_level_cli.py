@@ -1,11 +1,4 @@
-"""--log-level/--debug/--verbose wired into the `cli` group and its subcommands.
-
-These invoke each subcommand with a deliberately-missing edgerc file, mirroring the
-pattern in tests/test_convert_cli_parsing.py::test_missing_edgerc_file_exits -
-apply_log_level_from_flags() runs as the very first thing in each subcommand's body,
-before init_config() fails cleanly on the missing edgerc, so we can assert on the
-resulting root logger level without any network access or real credentials.
-"""
+"""--log-level/--debug/--verbose across the cli group and all subcommands."""
 from __future__ import annotations
 
 import logging
@@ -22,14 +15,28 @@ _REQUIRED_ARGS = {
     'sbd-precheck': ['--csv', 'x.csv'],
     'appsec-update': ['--config-id', '123', '--csv', 'x.csv'],
     'appsec-remove': ['--config-id', '123', '--csv', 'x.csv'],
+    'multi-hosts': ['--csv', 'x.csv', '--file', 'f.json'],
+    'single-host': ['--file', 'f.json'],
+    'create': ['--file', 'f.json'],
+    'appsec-policy': [],
+    'appsec-create': ['--contract-id', 'ctr_1', '--group-id', 'grp_1', '--csv', 'x.csv'],
 }
 
 # Ticket 03's targets: subcommands using **kwargs, so log_level/debug/verbose land
 # there for free with no signature change.
 _KWARGS_SUBCOMMANDS = ['batch-create', 'sbd-status', 'sbd-precheck', 'appsec-update', 'appsec-remove']
 
+# Ticket 04's targets: fixed-signature subcommands that call init_config() and so
+# can be exercised via the same missing-edgerc trick as _KWARGS_SUBCOMMANDS.
+_FIXED_SIGNATURE_SUBCOMMANDS = ['multi-hosts', 'single-host', 'create', 'appsec-policy', 'appsec-create']
+
+# Ticket 04's remaining targets: no init_config() call, so they run to completion
+# instead of failing on a missing edgerc - verified separately below.
+_NO_INIT_CONFIG_SUBCOMMANDS = ['fetch-sample-templates', 'help']
+
 
 def _invoke(runner, cli, tmp_path, subcommand, extra_group_args=(), extra_subcommand_args=()):
+    # Missing edgerc fails init_config() cleanly, after apply_log_level_from_flags() runs.
     missing_edgerc = tmp_path / 'does-not-exist.edgerc'
     args = ['--edgerc', str(missing_edgerc), *extra_group_args,
             subcommand, *_REQUIRED_ARGS[subcommand], *extra_subcommand_args]
@@ -146,6 +153,78 @@ def test_kwargs_subcommand_level_log_level_flag(runner, cli, tmp_path, restore_l
 
 @pytest.mark.parametrize('subcommand', _KWARGS_SUBCOMMANDS)
 def test_kwargs_subcommand_help_shows_logging_options(runner, cli, subcommand):
+    result = runner.invoke(cli, [subcommand, '--help'])
+    assert result.exit_code == 0
+    for option in ('--log-level', '--debug', '--verbose'):
+        assert option in result.output
+
+
+# --- ticket 04: remaining fixed-signature subcommands -----------------------
+
+@pytest.mark.parametrize('subcommand', _FIXED_SIGNATURE_SUBCOMMANDS)
+def test_fixed_signature_subcommand_no_flags_leaves_root_at_info(runner, cli, tmp_path, restore_logging_state, subcommand):
+    logging.getLogger().setLevel(logging.INFO)
+    _invoke(runner, cli, tmp_path, subcommand)
+    assert logging.getLogger().level == logging.INFO
+
+
+@pytest.mark.parametrize('subcommand', _FIXED_SIGNATURE_SUBCOMMANDS)
+def test_fixed_signature_subcommand_group_level_debug_flag(runner, cli, tmp_path, restore_logging_state, subcommand):
+    logging.getLogger().setLevel(logging.WARNING)
+    _invoke(runner, cli, tmp_path, subcommand, extra_group_args=['--debug'])
+    assert logging.getLogger().level == logging.DEBUG
+
+
+@pytest.mark.parametrize('subcommand', _FIXED_SIGNATURE_SUBCOMMANDS)
+def test_fixed_signature_subcommand_level_debug_flag(runner, cli, tmp_path, restore_logging_state, subcommand):
+    logging.getLogger().setLevel(logging.WARNING)
+    _invoke(runner, cli, tmp_path, subcommand, extra_subcommand_args=['--debug'])
+    assert logging.getLogger().level == logging.DEBUG
+
+
+@pytest.mark.parametrize('subcommand', _FIXED_SIGNATURE_SUBCOMMANDS)
+def test_fixed_signature_subcommand_level_log_level_flag(runner, cli, tmp_path, restore_logging_state, subcommand):
+    logging.getLogger().setLevel(logging.WARNING)
+    _invoke(runner, cli, tmp_path, subcommand, extra_subcommand_args=['--log-level', 'ERROR'])
+    assert logging.getLogger().level == logging.ERROR
+
+
+@pytest.mark.parametrize('subcommand', _FIXED_SIGNATURE_SUBCOMMANDS)
+def test_fixed_signature_subcommand_help_shows_logging_options(runner, cli, subcommand):
+    result = runner.invoke(cli, [subcommand, '--help'])
+    assert result.exit_code == 0
+    for option in ('--log-level', '--debug', '--verbose'):
+        assert option in result.output
+
+
+# --- ticket 04: fetch-sample-templates and help (no init_config() call) -----
+
+@pytest.mark.parametrize('subcommand', _NO_INIT_CONFIG_SUBCOMMANDS)
+def test_no_init_config_subcommand_no_flags_leaves_root_at_info(runner, cli, restore_logging_state, subcommand):
+    logging.getLogger().setLevel(logging.INFO)
+    result = runner.invoke(cli, [subcommand])
+    assert result.exit_code == 0
+    assert logging.getLogger().level == logging.INFO
+
+
+@pytest.mark.parametrize('subcommand', _NO_INIT_CONFIG_SUBCOMMANDS)
+def test_no_init_config_subcommand_group_level_debug_flag(runner, cli, restore_logging_state, subcommand):
+    logging.getLogger().setLevel(logging.WARNING)
+    result = runner.invoke(cli, ['--debug', subcommand])
+    assert result.exit_code == 0
+    assert logging.getLogger().level == logging.DEBUG
+
+
+@pytest.mark.parametrize('subcommand', _NO_INIT_CONFIG_SUBCOMMANDS)
+def test_no_init_config_subcommand_level_debug_flag(runner, cli, restore_logging_state, subcommand):
+    logging.getLogger().setLevel(logging.WARNING)
+    result = runner.invoke(cli, [subcommand, '--debug'])
+    assert result.exit_code == 0
+    assert logging.getLogger().level == logging.DEBUG
+
+
+@pytest.mark.parametrize('subcommand', _NO_INIT_CONFIG_SUBCOMMANDS)
+def test_no_init_config_subcommand_help_shows_logging_options(runner, cli, subcommand):
     result = runner.invoke(cli, [subcommand, '--help'])
     assert result.exit_code == 0
     for option in ('--log-level', '--debug', '--verbose'):

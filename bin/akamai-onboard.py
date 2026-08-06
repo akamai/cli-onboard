@@ -203,11 +203,13 @@ def cli(config, ctx, edgerc, section, account_key, log_level, verbose):
 
 
 @cli.command()
+@log_level_options
 @click.pass_context
-def help(ctx):
+def help(ctx, log_level, verbose):
     '''
     Show help information
     '''
+    apply_log_level_from_flags(log_level, verbose)
     print(ctx.parent.get_help())
 
 
@@ -507,10 +509,12 @@ def convert(config, **kwargs):
 
 
 @cli.command(short_help='Pull sample templates')
-def fetch_sample_templates():
+@log_level_options
+def fetch_sample_templates(log_level, verbose):
     """
     Retrieve sample templates for available commands
     """
+    apply_log_level_from_flags(log_level, verbose)
     source_folder = Path(root, 'templates', 'sample_setup_files')
     Path('sample_templates').mkdir(parents=True, exist_ok=True)
     target_folder = Path().resolve()
@@ -525,11 +529,13 @@ def fetch_sample_templates():
               help='CSV input file without headers.  Data in format hostname,origin-hostname')
 @click.option('-f', '--file', metavar='', required=True,
               help='File containing setup/onboard config key-value pairs in JSON')
+@log_level_options
 @pass_config
-def multi_hosts(config, csv, file):
+def multi_hosts(config, csv, file, log_level, verbose):
     """
     Simplify onboarding ONE property with multiple hostnames and optionally multiple CPCodes
     """
+    apply_log_level_from_flags(log_level, verbose)
     logger.info('Start Akamai CLI onboard')
     try:
         _, wrap_api, account_input, account_output = init_config(config)
@@ -693,12 +699,14 @@ def multi_hosts(config, csv, file):
 @cli.command(short_help='Create a simple delivery and security configuration with one hostname and one WAF policy')
 @click.option('-f', '--file', metavar='', required=True,
               help='File containing setup/onboard config key-value pairs in JSON')
+@log_level_options
 @pass_config
-def single_host(config, file):
+def single_host(config, file, log_level, verbose):
     """
     Simplify onboarding ONE property.  By default, delivery config will be activating on STAGING network.
     Security config will also be activating on STAGING network if create_new_security_config is True.
     """
+    apply_log_level_from_flags(log_level, verbose)
     logger.info('Start Akamai CLI onboard')
     try:
         _, wrap_api, account_input, account_output = init_config(config)
@@ -796,9 +804,10 @@ def single_host(config, file):
 
 @cli.command(short_help='Create a delivery configuration and update existing WAF policy')
 @click.option('-f', '--file', metavar='', help='File containing setup/onboard config key-value pairs in JSON', required=True)
+@log_level_options
 @pass_config
-def create(config, file):
-
+def create(config, file, log_level, verbose):
+    apply_log_level_from_flags(log_level, verbose)
     logger.info('Start Akamai CLI onboard')
     try:
         _, wrapper_object, account_input, account_output = init_config(config)
@@ -1366,11 +1375,13 @@ def appsec_update(config, **kwargs):
 @click.option('--waf-config-name', metavar='', help='Security config name', required=False)
 @click.option('--policy-name', metavar='', help='Security policy name, exact match', required=False)
 @click.option('--name-contains', metavar='', help='Keyword search security config by name', required=False)
+@log_level_options
 @pass_config
-def appsec_policy(config, waf_config_name, policy_name, name_contains):
+def appsec_policy(config, waf_config_name, policy_name, name_contains, log_level, verbose):
     """
     List available security configuration policy
     """
+    apply_log_level_from_flags(log_level, verbose)
     logger.info('Start Akamai CLI onboard')
     try:
         _, wrap_api, account_input, account_output = init_config(config)
@@ -1511,8 +1522,9 @@ class Fake:
               help='by command depends on data in CSV input file.     Options: hostname, propertyname')
 @click.option('--email', metavar='', required=False, help='email for activation notifications')
 @click.option('--version-notes', 'note', metavar='', default='Onboard CLI Activation', help='config version notes')
+@log_level_options
 @pass_config
-def appsec_create(config, contract_id, group_id, by, activate, csv, email, note):
+def appsec_create(config, contract_id, group_id, by, activate, csv, email, note, log_level, verbose):
     """
     Batch create new security configuration, security policy, and policy match target
 
@@ -1528,6 +1540,7 @@ def appsec_create(config, contract_id, group_id, by, activate, csv, email, note)
       \b
       Option 2 by propertyname: Headers contain propertyname,waf_config_name,waf_policy_name,hostname
     """
+    apply_log_level_from_flags(log_level, verbose)
     logger.info('Start Akamai CLI onboard')
     try:
         _, wrap_api, account_input, account_output = init_config(config)
