@@ -902,20 +902,93 @@ class papiFunctions:
                 return found
         return None
 
-    def log_pmuser_origin_detection(self, property_name: str, rule_tree: dict, unique_cpcode_enabled: bool) -> None:
+    def _pmuser_origin_child_hostname_values(self, child: dict) -> list[str]:
+        """Every value from a PMUSER_ORIGIN child's `hostname` criteria, in order."""
+        values = []
+        for criterion in child.get('criteria', []):
+            if criterion.get('name') == 'hostname':
+                values.extend(criterion.get('options', {}).get('values', []))
+        return values
+
+    def _classify_pmuser_origin_child(self, child: dict, csv_hostnames: set[str]) -> str:
         """
-        --unique-cpcode walking-skeleton step: detect and log whether this
-        property's ruletree has a PMUSER_ORIGIN node, without mutating
-        rule_tree. Real pruning/injection lands in later slices.
+        Classify a PMUSER_ORIGIN child against a property's (lowercased) CSV
+        hostname set. Returns one of:
+        - 'wildcard'      any hostname value starts with '*.' - always kept, no cpcode
+        - 'full_match'    every hostname value is in csv_hostnames - kept, cpcode candidate
+        - 'partial_match' some but not all values are in csv_hostnames - kept untouched, warned
+        - 'no_match'      no value matches (including a child with no hostname values at all) - pruned
         """
-        if not unique_cpcode_enabled:
-            return
+        values = self._pmuser_origin_child_hostname_values(child)
+        if any(value.startswith('*.') for value in values):
+            return 'wildcard'
+        if not values:
+            return 'no_match'
+        matched = [value for value in values if value.lower() in csv_hostnames]
+        if len(matched) == len(values):
+            return 'full_match'
+        if matched:
+            return 'partial_match'
+        return 'no_match'
+
+    def prune_pmuser_origin_children(self, property_name: str, rule_tree: dict, csv_hostnames: list[str]) -> list[str]:
+        """
+        --unique-cpcode: prune rule_tree's PMUSER_ORIGIN children down to the
+        hostnames this property is actually onboarding (csv_hostnames),
+        mutating rule_tree in place. Wildcard children are always preserved;
+        multi-value children that only partially match are left untouched
+        (with a warning) rather than pruned or modified. A no-op (returns [],
+        no mutation) when rule_tree has no PMUSER_ORIGIN node - see
+        find_pmuser_origin_node. Returns the hostname values actually pruned,
+        for reporting.
+        """
         pmuser_origin_node = self.find_pmuser_origin_node(rule_tree)
-        if pmuser_origin_node:
-            child_count = len(pmuser_origin_node.get('children', []))
-            logger.debug(f'{property_name}: found PMUSER_ORIGIN node with {child_count} children')
-        else:
+        if not pmuser_origin_node:
             logger.debug(f'{property_name}: --unique-cpcode has no effect, no PMUSER_ORIGIN node in ruletree')
+            return []
+
+        csv_hostname_set = {hostname.lower() for hostname in csv_hostnames}
+        survivors = []
+        pruned_hostnames = []
+        non_wildcard_survivor_count = 0
+
+        for child in pmuser_origin_node.get('children', []):
+            classification = self._classify_pmuser_origin_child(child, csv_hostname_set)
+
+            if classification == 'no_match':
+                pruned_hostnames.extend(self._pmuser_origin_child_hostname_values(child))
+                continue
+
+            if classification == 'partial_match':
+                values = self._pmuser_origin_child_hostname_values(child)
+                mismatched = [value for value in values if value.lower() not in csv_hostname_set]
+                child_name = child.get('name')
+                logger.warning(
+                    f"{property_name}: PMUSER_ORIGIN child '{child_name}' only partially matches CSV "
+                    f'hostnames - {mismatched} not found - left untouched, review manually'
+                )
+
+            survivors.append(child)
+            if classification != 'wildcard':
+                non_wildcard_survivor_count += 1
+
+        pmuser_origin_node['children'] = survivors
+
+        if non_wildcard_survivor_count == 0:
+            logger.warning(f'{property_name}: no PMUSER_ORIGIN children matched CSV hostnames after pruning')
+
+        return pruned_hostnames
+
+    def apply_unique_cpcode(self, property_name: str, rule_tree: dict, csv_hostnames: list[str],
+                             enabled: bool) -> list[str]:
+        """
+        convert()'s --unique-cpcode call-site gate. Disabled is a pure no-op
+        (returns [] without even looking at rule_tree); enabled delegates to
+        prune_pmuser_origin_children and returns its pruned-hostname list.
+        """
+        if not enabled:
+            return []
+        return self.prune_pmuser_origin_children(property_name, rule_tree, csv_hostnames)
 
     def get_path_value(self, single_rule: dict) -> str:
         if len(single_rule['criteria']) > 0:

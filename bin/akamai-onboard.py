@@ -398,7 +398,8 @@ def convert(config, **kwargs):
             original_ruletree = util_papi.inject_cpcode_behavior(level0, cpcode)
             all_smoketest.append([host, '/', cpcode])
 
-            util_papi.log_pmuser_origin_detection(property, original_ruletree, click_args['unique_cpcode'])
+            property_dict[property]['prunedHostnames'] = util_papi.apply_unique_cpcode(
+                property, original_ruletree, property_dict[property]['hostnames'], click_args['unique_cpcode'])
 
             property_dict[property]['ruleTree'] = {'rules': original_ruletree}
             property_dict[property]['comments'] = comments
