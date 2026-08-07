@@ -404,6 +404,7 @@ def convert(config, **kwargs):
                 onboard, papi, property, original_ruletree, property_dict[property]['hostnames'],
                 onboard_object.contract_id, onboard_object.group_id, property_dict[property]['product'],
                 click_args['unique_cpcode'])
+            all_smoketest.extend(util_papi.unique_cpcode_smoketest_rows(property_dict[property]['uniqueCpcodes']))
 
             property_dict[property]['ruleTree'] = {'rules': original_ruletree}
             property_dict[property]['comments'] = comments
@@ -516,7 +517,7 @@ def convert(config, **kwargs):
         result_df.index.name = 'propertyName'
         result_df = result_df.reset_index()
 
-        cols = ['error_flags', 'hostnames', 'edgeHostnames']
+        cols = ['error_flags', 'hostnames', 'edgeHostnames', 'prunedHostnames']
         for col in cols:
             result_df[col] = result_df.apply(lambda row: utility.split_elements_newline_withcomma(row[col])
                                                         if row[col] else '', axis=1)
@@ -526,6 +527,7 @@ def convert(config, **kwargs):
         result_df = result_df.rename(columns={'url': 'propertyName'})
 
         sheet['properties'] = result_df[cols]
+        sheet['cpcodes'] = pd.DataFrame(all_smoketest, columns=headers)
 
         if not activation_df.empty:
             sheet['activation_status'] = activation_df

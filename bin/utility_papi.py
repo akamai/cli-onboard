@@ -1029,6 +1029,10 @@ class papiFunctions:
         return self.inject_unique_cpcodes(onboard_object, wrapper_object, property_name, rule_tree,
                                           csv_hostnames, contract_id, group_id, product_id)
 
+    def unique_cpcode_smoketest_rows(self, unique_cpcodes: dict[str, int]) -> list[list]:
+        """Report rows (hostname, hostname, cpcode), one per --unique-cpcode injected hostname."""
+        return [[hostname, hostname, cpcode] for hostname, cpcode in unique_cpcodes.items()]
+
     def get_path_value(self, single_rule: dict) -> str:
         if len(single_rule['criteria']) > 0:
             for each_criteria in single_rule['criteria']:

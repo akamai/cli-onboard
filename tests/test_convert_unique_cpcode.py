@@ -243,11 +243,7 @@ def _onboard_object(click_args_factory, config_stub):
 
 
 class _RecordingCpcodeWrapper:
-    """Fake PAPI wrapper for search/create cpcode calls, keyed by cpcode_name -
-    lets one test drive several different PMUSER_ORIGIN hostnames through
-    inject_unique_cpcodes and assert on each independently, without hitting a
-    real API.
-    """
+    """Fake PAPI wrapper for search/create cpcode calls, keyed by cpcode_name so one test can drive several hostnames."""
 
     def __init__(self, search_responses=None, create_responses=None):
         self._search_responses = search_responses or {}
@@ -279,10 +275,7 @@ def _created_response(cpcode_id):
 
 
 class TestInjectUniqueCpcodes:
-    """Ticket 03: inject_unique_cpcodes(). Exercises the real inject_cpcode_behavior
-    (and its cpCode.json template load), so CWD is pinned to the repo root rather
-    than relying on ~/.akamai-cli being installed on the machine running the tests.
-    """
+    """Exercises the real inject_cpcode_behavior/template load, so CWD is pinned to repo root, not ~/.akamai-cli."""
 
     @pytest.fixture(autouse=True)
     def _repo_root_cwd(self, monkeypatch):
@@ -448,3 +441,39 @@ class TestApplyUniqueCpcodeInjection:
 
         assert result == {'www.example.com': 67890}
         assert wrapper.search_calls == ['www.example.com']
+
+
+class TestUniqueCpcodeSmoketestRows:
+    """Turns ticket 03's {hostname: cpcode} map into extra rows for the 'cpcodes' report sheet."""
+
+    def test_empty_dict_returns_no_rows(self, papi):
+        assert papi.unique_cpcode_smoketest_rows({}) == []
+
+    def test_hostname_is_used_as_both_hostname_and_scope_columns(self, papi):
+        rows = papi.unique_cpcode_smoketest_rows({'www.example.com': 12345})
+
+        assert rows == [['www.example.com', 'www.example.com', 12345]]
+
+    def test_multiple_entries_produce_one_row_each_in_order(self, papi):
+        rows = papi.unique_cpcode_smoketest_rows({'a.example.com': 111, 'b.example.com': 222})
+
+        assert rows == [
+            ['a.example.com', 'a.example.com', 111],
+            ['b.example.com', 'b.example.com', 222],
+        ]
+
+
+class TestSplitElementsNewlineWithcommaForPrunedHostnames:
+    """First direct coverage of the formatter the new prunedHostnames column reuses from hostnames/edgeHostnames."""
+
+    def test_single_pruned_hostname_has_no_numbering_prefix(self):
+        import utility
+
+        assert utility.split_elements_newline_withcomma(['old.example.com']) == 'old.example.com'
+
+    def test_multiple_pruned_hostnames_are_numbered_and_newline_joined(self):
+        import utility
+
+        result = utility.split_elements_newline_withcomma(['old.example.com', 'stale.example.com'])
+
+        assert result == '1. old.example.com,\n2. stale.example.com'
