@@ -1,0 +1,142 @@
+"""
+Drives the real `check-activation` CLI command (issue 02 of
+.scratch/skip-activation-polling-spec.md) through CliRunner, with the network
+seam (wrapper_api.apiCallsWrapper.pollActivationStatus/pollWafActivationStatus)
+replaced by monkeypatched stand-ins -- init_config()'s edgerc/session setup is
+local/synchronous (see fake_edgerc), so nothing else needs mocking to reach
+the command's own logic.
+"""
+from __future__ import annotations
+
+from types import SimpleNamespace
+
+import activation_manifest
+import pytest
+import wrapper_api
+
+
+def _stub_poll_activation_status(status_by_activation_id, status_code=200):
+    def _poll(self, contractId, groupId, propertyId, activationId):
+        status = status_by_activation_id[activationId]
+        body = {'activations': {'items': [{'activationId': activationId, 'network': 'PRODUCTION', 'status': status}]}}
+        return SimpleNamespace(status_code=status_code, json=lambda: body)
+    return _poll
+
+
+def _stub_poll_waf_activation_status(status_by_activation_id, status_code=200):
+    def _poll(self, activationId):
+        status = status_by_activation_id[activationId]
+        body = {'network': 'PRODUCTION', 'status': status}
+        return SimpleNamespace(status_code=status_code, json=lambda: body)
+    return _poll
+
+
+@pytest.fixture
+def manifest_path(tmp_path):
+    return str(tmp_path / 'activation-status.csv')
+
+
+def test_all_active_manifest_exits_zero(runner, cli, fake_edgerc, monkeypatch, manifest_path):
+    activation_manifest.append_activation(manifest_path, 'example-prop', 'prp_123', 1, 'atv_1')
+    monkeypatch.setattr(wrapper_api.apiCallsWrapper, 'pollActivationStatus',
+                         _stub_poll_activation_status({'atv_1': 'ACTIVE'}))
+
+    result = runner.invoke(cli, [
+        '--edgerc', fake_edgerc, 'check-activation',
+        '--file', manifest_path, '--contract', 'ctr_1', '--group', 'grp_1',
+    ])
+
+    assert result.exit_code == 0
+    assert 'example-prop' in result.output
+    assert 'ACTIVE' in result.output
+
+
+def test_mixed_pending_and_active_exits_non_zero_and_shows_both_statuses(runner, cli, fake_edgerc, monkeypatch, manifest_path):
+    activation_manifest.append_activation(manifest_path, 'example-prop', 'prp_123', 1, 'atv_1')
+    activation_manifest.append_activation(manifest_path, 'WAF Security File', '', 3, 'act_1')
+    monkeypatch.setattr(wrapper_api.apiCallsWrapper, 'pollActivationStatus',
+                         _stub_poll_activation_status({'atv_1': 'ACTIVE'}))
+    monkeypatch.setattr(wrapper_api.apiCallsWrapper, 'pollWafActivationStatus',
+                         _stub_poll_waf_activation_status({'act_1': 'PENDING'}))
+
+    result = runner.invoke(cli, [
+        '--edgerc', fake_edgerc, 'check-activation',
+        '--file', manifest_path, '--contract', 'ctr_1', '--group', 'grp_1',
+    ])
+
+    assert result.exit_code != 0
+    assert 'ACTIVE' in result.output
+    assert 'PENDING' in result.output
+
+
+def test_manifest_with_only_waf_rows(runner, cli, fake_edgerc, monkeypatch, manifest_path):
+    activation_manifest.append_activation(manifest_path, 'WAF Security File', '', 3, 'act_1')
+    monkeypatch.setattr(wrapper_api.apiCallsWrapper, 'pollWafActivationStatus',
+                         _stub_poll_waf_activation_status({'act_1': 'ACTIVATED'}))
+
+    # No --contract/--group needed for a WAF-only manifest.
+    result = runner.invoke(cli, [
+        '--edgerc', fake_edgerc, 'check-activation', '--file', manifest_path,
+    ])
+
+    assert result.exit_code == 0
+    assert 'WAF Security File' in result.output
+
+
+def test_manifest_with_only_delivery_rows(runner, cli, fake_edgerc, monkeypatch, manifest_path):
+    activation_manifest.append_activation(manifest_path, 'prop-a', 'prp_1', 1, 'atv_1')
+    activation_manifest.append_activation(manifest_path, 'prop-b', 'prp_2', 1, 'atv_2')
+    monkeypatch.setattr(wrapper_api.apiCallsWrapper, 'pollActivationStatus',
+                         _stub_poll_activation_status({'atv_1': 'ACTIVE', 'atv_2': 'ACTIVE'}))
+
+    result = runner.invoke(cli, [
+        '--edgerc', fake_edgerc, 'check-activation',
+        '--file', manifest_path, '--contract', 'ctr_1', '--group', 'grp_1',
+    ])
+
+    assert result.exit_code == 0
+    assert 'prop-a' in result.output
+    assert 'prop-b' in result.output
+
+
+def test_ad_hoc_delivery_check_without_manifest_file(runner, cli, fake_edgerc, monkeypatch):
+    monkeypatch.setattr(wrapper_api.apiCallsWrapper, 'pollActivationStatus',
+                         _stub_poll_activation_status({'atv_1': 'ACTIVE'}))
+
+    result = runner.invoke(cli, [
+        '--edgerc', fake_edgerc, 'check-activation',
+        '--activation-id', 'atv_1', '--property-id', 'prp_123', '--version', '1',
+        '--contract', 'ctr_1', '--group', 'grp_1',
+    ])
+
+    assert result.exit_code == 0
+    assert 'atv_1' in result.output
+    assert '1' in result.output
+
+
+def test_ad_hoc_waf_check_without_property_id(runner, cli, fake_edgerc, monkeypatch):
+    monkeypatch.setattr(wrapper_api.apiCallsWrapper, 'pollWafActivationStatus',
+                         _stub_poll_waf_activation_status({'act_1': 'ACTIVATED'}))
+
+    result = runner.invoke(cli, [
+        '--edgerc', fake_edgerc, 'check-activation', '--activation-id', 'act_1',
+    ])
+
+    assert result.exit_code == 0
+    assert 'act_1' in result.output
+
+
+def test_missing_file_and_activation_id_errors(runner, cli, fake_edgerc):
+    result = runner.invoke(cli, ['--edgerc', fake_edgerc, 'check-activation'])
+
+    assert result.exit_code != 0
+
+
+def test_delivery_row_without_contract_and_group_exits_non_zero(runner, cli, fake_edgerc, monkeypatch, manifest_path):
+    activation_manifest.append_activation(manifest_path, 'example-prop', 'prp_123', 1, 'atv_1')
+    monkeypatch.setattr(wrapper_api.apiCallsWrapper, 'pollActivationStatus',
+                         _stub_poll_activation_status({'atv_1': 'ACTIVE'}))
+
+    result = runner.invoke(cli, ['--edgerc', fake_edgerc, 'check-activation', '--file', manifest_path])
+
+    assert result.exit_code != 0

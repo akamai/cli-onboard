@@ -120,6 +120,7 @@ def test_get_commands_matches_the_real_cli(cli):
         'appsec-remove',
         'appsec-update',
         'batch-create',
+        'check-activation',
         'convert',
         'create',
         'fetch-sample-templates',

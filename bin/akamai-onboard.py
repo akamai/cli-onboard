@@ -29,6 +29,7 @@ from time import strftime
 
 import _logging as lg
 import activation_manifest
+import activation_status
 import onboard
 import onboard_appsec_update
 import onboard_batch_create
@@ -831,6 +832,55 @@ def single_host(config, file, no_wait, log_level, verbose):
 
     util.log_cli_timing()
     return 0
+
+
+@cli.command(short_help='Check status of activation(s) submitted earlier with --no-wait')
+@click.option('--file', metavar='', default=None, help='manifest CSV written by --no-wait (see single-host --no-wait)')
+@click.option('--activation-id', metavar='', default=None,
+              help='single activation id to check, for an ad-hoc check without --file')
+@click.option('--property-id', metavar='', default=None,
+              help='property id for the ad-hoc check (delivery activation); omit for a WAF activation')
+@click.option('--version', metavar='', default=None, help='property/config version, display only, for the ad-hoc check')
+@click.option('-c', '--contract', metavar='', default=None,
+              help='Contract ID; required to check any delivery activation')
+@click.option('-g', '--group', metavar='', default=None,
+              help='Group ID; required to check any delivery activation')
+@log_level_options
+@pass_config
+def check_activation(config, file, activation_id, property_id, version, contract, group, log_level, verbose):
+    """
+    Check current status of activation(s) submitted earlier with --no-wait.
+
+    Queries each activation exactly once and exits -- does not poll or block.
+    Exit code is 0 if everything checked is active, non-zero otherwise.
+    """
+    apply_log_level_from_flags(log_level, verbose)
+    logger.info('Start Akamai CLI onboard check-activation')
+    try:
+        _, wrap_api, account_input, account_output = init_config(config)
+    except Exception as err:
+        lg._log_error(err)
+        sys.exit(1)
+
+    if file:
+        rows = activation_status.load_manifest_rows(file)
+    elif activation_id:
+        rows = [{'property_name': property_id or activation_id, 'property_id': property_id or '',
+                 'version': version or '', 'activation_id': activation_id}]
+    else:
+        logger.error('Must provide either --file or --activation-id')
+        sys.exit(1)
+
+    if not rows:
+        logger.error(f'No activation rows found in {file}')
+        sys.exit(1)
+
+    results = activation_status.check_all(wrap_api, rows, contract, group)
+    console = Console()
+    console.print(activation_status.build_status_table(results))
+
+    all_active = all(r['is_active'] for r in results)
+    sys.exit(0 if all_active else 1)
 
 
 @cli.command(short_help='Create a delivery configuration and update existing WAF policy')

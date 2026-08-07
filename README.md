@@ -271,6 +271,7 @@ $ akamai onboard --help
 │                         policy match target                                                                          │
 │ batch-create            Create a 1 or more delivery configurations using a csv input and optionally update WAF       │
 │                         policy                                                                                       │
+│ check-activation        Check status of activation(s) submitted earlier with --no-wait                               │
 │ convert                 🌈 Bring over delivery configs from Competitors 🌈                                           │
 │ create                  Create a delivery configuration and update existing WAF policy                               │
 │ fetch-sample-templates  Pull sample templates                                                                        │
