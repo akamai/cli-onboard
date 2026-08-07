@@ -385,14 +385,14 @@ class wafFunctions:
         logger.error('Unable to create a match target')
         return False
 
-    def activation_detail(self, wrap_api, onboard_object, activate):
+    def activation_detail(self, wrap_api, onboard_object, activate, network):
         logger.warning(f'Activating Security Config on {activate} network')
         count = 0
         for i, appsec in enumerate(onboard_object):
             config_id = onboard_object[i].onboard_waf_config_id
             response = wrap_api.activateWafPolicy(config_id,
                                             onboard_object[i].onboard_waf_config_version,
-                                            network='STAGING',
+                                            network=network,
                                             emails=onboard_object[i].notification_emails,
                                             note=onboard_object[i].version_notes)
             if response.ok:
@@ -436,12 +436,12 @@ class wafFunctions:
         activation_detail), just not polled further.
         """
         print()
-        self.activation_detail(wrap_api, onboard_object, activate)
+        self.activation_detail(wrap_api, onboard_object, activate, network='STAGING')
         self.waf_poll_activation(wrap_api, onboard_object, network='STAGING')
 
         if activate == 'production':
             print()
-            self.activation_detail(wrap_api, onboard_object, activate)
+            self.activation_detail(wrap_api, onboard_object, activate, network='PRODUCTION')
             self.waf_poll_activation(wrap_api, onboard_object, network='PRODUCTION', no_wait=no_wait)
 
     def waf_poll_activation(self, wrapper_api, appsec_onboard, network, no_wait=False):

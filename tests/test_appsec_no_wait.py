@@ -83,8 +83,10 @@ class FakeAppsecCreateWrapper:
     def __init__(self, activate_ok=True):
         self.activate_ok = activate_ok
         self.poll_call_count = 0
+        self.activate_networks = []
 
     def activateWafPolicy(self, config_id, version, network, emails, note):
+        self.activate_networks.append(network)
         body = ({'activationId': 777, 'createDate': '2026-01-01T00:00:00Z', 'status': 'PENDING'} if self.activate_ok
                 else {'detail': 'no conflict here'})
         return SimpleNamespace(ok=self.activate_ok, json=lambda: body)
@@ -137,6 +139,7 @@ class TestActivateAndPollNoWait:
         # staging polled once (immediate ACTIVATED); production skipped polling entirely
         assert wrapper.poll_call_count == 1
         assert appsec_onboard[0].activation_id == 777
+        assert wrapper.activate_networks == ['STAGING', 'PRODUCTION']
 
     def test_staging_only_activate_is_unaffected_by_no_wait(self, monkeypatch):
         monkeypatch.setattr('time.sleep', lambda *_: None)
@@ -147,6 +150,7 @@ class TestActivateAndPollNoWait:
         waf.activate_and_poll(wrapper, appsec_onboard, 'staging', no_wait=True)
 
         assert wrapper.poll_call_count == 1
+        assert wrapper.activate_networks == ['STAGING']
 
     def test_default_no_wait_false_polls_both_networks(self, monkeypatch):
         monkeypatch.setattr('time.sleep', lambda *_: None)
@@ -157,3 +161,34 @@ class TestActivateAndPollNoWait:
         waf.activate_and_poll(wrapper, appsec_onboard, 'production')
 
         assert wrapper.poll_call_count == 2
+        assert wrapper.activate_networks == ['STAGING', 'PRODUCTION']
+
+
+class TestActivationDetailNetwork:
+    """Regression test for the bug where activation_detail hardcoded
+    network='STAGING' regardless of which leg (staging/production) was
+    being activated -- appsec-create --activate production silently
+    re-submitted a second staging activation instead of a real production
+    one. See .scratch/fix-appsec-create-production-network-spec.md.
+    """
+
+    def test_production_leg_submits_to_production_network(self, monkeypatch):
+        monkeypatch.setattr('time.sleep', lambda *_: None)
+        wrapper = FakeAppsecCreateWrapper()
+        appsec_onboard = [_appsec_item()]
+        waf = utility_waf.wafFunctions()
+
+        waf.activate_and_poll(wrapper, appsec_onboard, 'production', no_wait=True)
+
+        assert wrapper.activate_networks[0] == 'STAGING'
+        assert wrapper.activate_networks[1] == 'PRODUCTION'
+
+    def test_staging_leg_submits_to_staging_network(self, monkeypatch):
+        monkeypatch.setattr('time.sleep', lambda *_: None)
+        wrapper = FakeAppsecCreateWrapper()
+        appsec_onboard = [_appsec_item()]
+        waf = utility_waf.wafFunctions()
+
+        waf.activate_and_poll(wrapper, appsec_onboard, 'staging', no_wait=True)
+
+        assert wrapper.activate_networks == ['STAGING']
