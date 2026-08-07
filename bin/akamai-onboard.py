@@ -1263,7 +1263,7 @@ def batch_create(config, **kwargs):
                 logger.info('Activate Property Production: SKIPPING')
 
             # Activate WAF configuration to production only after success delivery config in production
-            if onboard_object.activate_waf_policy_production and activation_status == 'ACTIVE':
+            if onboard_object.activate_waf_policy_production and activation_status:
                 waf_activation_status = utility_waf_object.activateAndPoll(wrapper_object, onboard_object, network='PRODUCTION')
                 if waf_activation_status is False:
                     sys.exit(logger.error('Unable to activate WAF configuration to production network'))
