@@ -15,3 +15,7 @@ output
 .claude
 .scratch
 bin/cli_onboard.egg-info
+
+tools
+.ruff_cache
+.scratch

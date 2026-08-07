@@ -16,6 +16,22 @@ Each release is grouped into two sections:
 
 ---
 
+## [v2.5.5] - 2026-08-07
+
+#### ENHANCEMENTS:
+
+- Add `--no-wait` to `single-host`, `multi-hosts`, `convert`, `batch-create`, `appsec-create`, `appsec-update`, and `appsec-remove`: submit production activation(s) and return immediately instead of polling for completion, recording each submission's activation ID to a manifest
+- New `check-activation` command to check the status of activation(s) submitted earlier with `--no-wait`, including a `--wait` loop mode that polls until every activation completes
+- `convert`'s Excel report labels rows submitted under `--no-wait`
+- Extract shared `--no-wait` production-activation orchestration (`bin/no_wait_activation.py`) once `single-host`/`multi-hosts`'s inline blocks turned out to be identical
+
+#### BUG FIXES:
+
+- `check-activation` now handles minimal, hand-built CSVs (not just ones produced by a prior `--no-wait` run)
+- `appsec-create --activate production` now actually submits its production leg to the PRODUCTION network — `activation_detail` previously hardcoded `network='STAGING'` for both legs, so production activation silently never fired
+- `batch-create`'s WAF production activation gate now fires correctly — it compared a bool (`all_properties_active`) to the string `'ACTIVE'`, which is always `False`, so WAF production activation silently never fired even when delivery production activation succeeded
+- Fall back to the package's own location instead of the current working directory when locating the CLI root directory
+
 ## [v2.5.4] - 2026-08-04
 
 #### ENHANCEMENTS:

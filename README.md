@@ -110,6 +110,7 @@ These are task-oriented entry points. If you are learning the tool for the first
 [7. Remove hostnames from an existing AppSec configuration](#7-remove-hostnames-from-an-existing-appsec-configuration)
 [8. Inspect existing AppSec policies before updating them](#8-inspect-existing-appsec-policies-before-updating-them)
 [9. Convert competitor CDN artifacts into Akamai properties](#9-convert-competitor-cdn-artifacts-into-akamai-properties)
+[10. Skip waiting for activation and check status later](#10-skip-waiting-for-activation-and-check-status-later)
 
 ### 1. Create one hostname quickly
 
@@ -235,6 +236,29 @@ Use `--cert-mode CPS` if the properties require CPS-managed certificates — see
 
 For the full option list, see [Convert command options](#convert-command-options).
 
+### 10. Skip waiting for activation and check status later
+
+Add `--no-wait` to `single-host`, `multi-hosts`, `convert`, `batch-create`, `appsec-create`, `appsec-update`, or `appsec-remove` to submit production activation(s) and return immediately instead of polling for completion. Staging activation always waits, since production is gated on staging succeeding first.
+
+```bash
+akamai onboard batch-create \
+  --template ~/path/to/ruletree.json \
+  --csv ~/path/to/input.csv \
+  --product prd_SPM \
+  --group grp_1234 \
+  --contract ctr_1234 \
+  --activate delivery-production \
+  --no-wait
+```
+
+Each submitted activation ID is recorded to a manifest CSV (printed at the end of the run). Check on it later with `check-activation`:
+
+```bash
+akamai onboard check-activation --file output/<account>/<timestamp>_activation-status.csv
+```
+
+Add `--wait` to poll until every activation in the file is active (or errored) instead of checking once and exiting. `check-activation` also accepts a minimal, hand-built CSV or a single `--activation-id` for an ad-hoc check — see `akamai onboard check-activation --help`.
+
 [↑ Back to top](#top)
 
 ## 📚 Commands Reference
@@ -331,7 +355,14 @@ $ akamai onboard convert --help
 │    --activate                       Options: staging, production                                                     │
 │    --email                          email(s) for activation notifications                                            │
 │    --force                          skip user confirmation prompt                                                    │
+│    --dryrun                         admin - test config                                                              │
+│    --prefix                         admin - required for dryrun.                                                     │
 │    --launch/--no-launch             automatically open excel application                                             │
+│    --no-wait                        Submit production activation(s) and return immediately instead of polling for    │
+│                                     completion; check status later with check-activation. Staging activation always  │
+│                                     waits.                                                                           │
+│    --log-level                      Set logging verbosity                                                            │
+│    --debug,--verbose                shortcut for --log-level DEBUG                                                   │
 │    --help                       -h  Show this message and exit.                                                      │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
 ```
