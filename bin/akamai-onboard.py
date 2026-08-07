@@ -130,6 +130,13 @@ def log_level_options(f):
     return f
 
 
+def no_wait_option(f):
+    """Shared --no-wait option for every command that can activate production."""
+    return click.option('--no-wait', metavar='', is_flag=True, default=False,
+                         help='Submit production activation(s) and return immediately instead of polling for '
+                              'completion; check status later with check-activation. Staging activation always waits.')(f)
+
+
 def init_config(config):
     if not config.edgerc:
         if not os.getenv('AKAMAI_EDGERC'):
@@ -241,6 +248,7 @@ def help(ctx, log_level, verbose):
 @click.option('--dryrun', metavar='', is_flag=True, default=False, help='admin - test config')
 @click.option('--prefix', metavar='', help='admin - required for dryrun.')
 @click.option('--launch/--no-launch', default=True, metavar='', help='automatically open excel application')
+@no_wait_option
 @log_level_options
 @pass_config
 def convert(config, **kwargs):
@@ -450,20 +458,34 @@ def convert(config, **kwargs):
         if len(success_hostnames) > 0 and onboard_object.activate_property_production:
             # get list of successful staging activations
             success_staging_activations = (list(filter(lambda x: x['activationStatus']['STAGING'] in ['ACTIVE'], stg_activation)))
-            activation_status, success_hostnames, failed_activations, prd_activation = util_papi.batch_activate_and_poll(papi,
-                                                        success_staging_activations,
-                                                        onboard_object.contract_id,
-                                                        onboard_object.group_id,
-                                                        version=1,
-                                                        network='PRODUCTION',
-                                                        emailList=onboard_object.notification_emails,
-                                                        notes='Onboard CLI Activation')
-            prd_df = pd.DataFrame(prd_activation)
-            end_time = time.perf_counter()
-            elapse_time = str(strftime('%H:%M:%S', gmtime(end_time - start_time)))
-            if activation_status:
-                print()
-                logger.info(f'activation time total: {elapse_time}\n')
+            if click_args['no_wait']:
+                manifest_path = activation_manifest.new_manifest_path(account_output)
+                _, prd_activation = util_papi.batch_activate_and_poll(papi,
+                                                            success_staging_activations,
+                                                            onboard_object.contract_id,
+                                                            onboard_object.group_id,
+                                                            version=1,
+                                                            network='PRODUCTION',
+                                                            emailList=onboard_object.notification_emails,
+                                                            notes='Onboard CLI Activation',
+                                                            no_wait=True)
+                activation_manifest.append_batch(manifest_path, prd_activation, version=1)
+                prd_df = pd.DataFrame(prd_activation)
+            else:
+                activation_status, success_hostnames, failed_activations, prd_activation = util_papi.batch_activate_and_poll(papi,
+                                                            success_staging_activations,
+                                                            onboard_object.contract_id,
+                                                            onboard_object.group_id,
+                                                            version=1,
+                                                            network='PRODUCTION',
+                                                            emailList=onboard_object.notification_emails,
+                                                            notes='Onboard CLI Activation')
+                prd_df = pd.DataFrame(prd_activation)
+                end_time = time.perf_counter()
+                elapse_time = str(strftime('%H:%M:%S', gmtime(end_time - start_time)))
+                if activation_status:
+                    print()
+                    logger.info(f'activation time total: {elapse_time}\n')
         else:
             logger.info('Activate Property Production: SKIPPING')
 
@@ -702,9 +724,7 @@ def multi_hosts(config, csv, file, log_level, verbose):
 @cli.command(short_help='Create a simple delivery and security configuration with one hostname and one WAF policy')
 @click.option('-f', '--file', metavar='', required=True,
               help='File containing setup/onboard config key-value pairs in JSON')
-@click.option('--no-wait', metavar='', is_flag=True, default=False,
-              help='Submit production activation(s) and return immediately instead of polling for completion; '
-                   'check status later with check-activation. Staging activation always waits.')
+@no_wait_option
 @log_level_options
 @pass_config
 def single_host(config, file, no_wait, log_level, verbose):
@@ -1044,6 +1064,7 @@ def create(config, file, log_level, verbose):
 @click.option('--activate', metavar='', type=click.Choice(['delivery-staging', 'waf-staging', 'delivery-production', 'waf-production']), multiple=True, help='Options: delivery-staging, delivery-production, waf-staging, waf-production', required=False)
 @click.option('--email', metavar='', multiple=True, help='email(s) for activation notifications', required=False)
 @click.option('--csv', metavar='', required=True, help='csv file with headers hostname,origin,propertyName,forwardHostHeader,edgeHostname')
+@no_wait_option
 @log_level_options
 @pass_config
 def batch_create(config, **kwargs):
@@ -1198,28 +1219,61 @@ def batch_create(config, **kwargs):
             logger.info('Activate WAF Configuration Staging: SKIPPING')
 
         # Activate property to production
-        if onboard_object.activate_property_production:
-            # get list of successful staging activations for production activation
-            success_staging_activations = (list(filter(lambda x: x['activationStatus']['STAGING'] in ['ACTIVE'], activationDict)))
+        if click_args['no_wait']:
+            manifest_path = activation_manifest.new_manifest_path(account_output)
 
-            activation_status, success_hostnames, failed_activations, activationDict = utility_papi_object.batch_activate_and_poll(wrapper_object,
-                                                        success_staging_activations,
-                                                        onboard_object.contract_id,
-                                                        onboard_object.group_id,
-                                                        version=1,
-                                                        network='PRODUCTION',
-                                                        emailList=onboard_object.notification_emails,
-                                                        notes='Onboard CLI Activation')
-        else:
-            logger.info('Activate Property Production: SKIPPING')
+            if onboard_object.activate_property_production:
+                # get list of successful staging activations for production activation
+                success_staging_activations = (list(filter(lambda x: x['activationStatus']['STAGING'] in ['ACTIVE'], activationDict)))
 
-        # Activate WAF configuration to production only after success delivery config in production
-        if onboard_object.activate_waf_policy_production and activation_status == 'ACTIVE':
-            waf_activation_status = utility_waf_object.activateAndPoll(wrapper_object, onboard_object, network='PRODUCTION')
-            if waf_activation_status is False:
-                sys.exit(logger.error('Unable to activate WAF configuration to production network'))
+                _, activationDict = utility_papi_object.batch_activate_and_poll(wrapper_object,
+                                                            success_staging_activations,
+                                                            onboard_object.contract_id,
+                                                            onboard_object.group_id,
+                                                            version=1,
+                                                            network='PRODUCTION',
+                                                            emailList=onboard_object.notification_emails,
+                                                            notes='Onboard CLI Activation',
+                                                            no_wait=True)
+                activation_manifest.append_batch(manifest_path, activationDict, version=1)
+            else:
+                logger.info('Activate Property Production: SKIPPING')
+
+            # WAF production activation fires regardless of delivery's outcome under --no-wait -- see issue 01
+            if onboard_object.activate_waf_policy_production:
+                waf_submitted, waf_activation_id = utility_waf_object.activateAndPoll(wrapper_object, onboard_object,
+                                                                                       network='PRODUCTION', no_wait=True)
+                if waf_submitted:
+                    logger.info(f'WAF configuration production activation submitted, activation id: {waf_activation_id}')
+                    activation_manifest.append_activation(manifest_path, onboard_object.waf_config_name, '',
+                                                           onboard_object.onboard_waf_config_version, waf_activation_id)
+                else:
+                    logger.error('Unable to submit WAF configuration activation to production network')
+            else:
+                logger.info('Activate WAF Configuration Production: SKIPPING')
         else:
-            logger.info('Activate WAF Configuration Production: SKIPPING')
+            if onboard_object.activate_property_production:
+                # get list of successful staging activations for production activation
+                success_staging_activations = (list(filter(lambda x: x['activationStatus']['STAGING'] in ['ACTIVE'], activationDict)))
+
+                activation_status, success_hostnames, failed_activations, activationDict = utility_papi_object.batch_activate_and_poll(wrapper_object,
+                                                            success_staging_activations,
+                                                            onboard_object.contract_id,
+                                                            onboard_object.group_id,
+                                                            version=1,
+                                                            network='PRODUCTION',
+                                                            emailList=onboard_object.notification_emails,
+                                                            notes='Onboard CLI Activation')
+            else:
+                logger.info('Activate Property Production: SKIPPING')
+
+            # Activate WAF configuration to production only after success delivery config in production
+            if onboard_object.activate_waf_policy_production and activation_status == 'ACTIVE':
+                waf_activation_status = utility_waf_object.activateAndPoll(wrapper_object, onboard_object, network='PRODUCTION')
+                if waf_activation_status is False:
+                    sys.exit(logger.error('Unable to activate WAF configuration to production network'))
+            else:
+                logger.info('Activate WAF Configuration Production: SKIPPING')
 
         print()
         end_time = time.perf_counter()

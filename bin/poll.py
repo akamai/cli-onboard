@@ -32,7 +32,10 @@ def generate_table(activationDict, network) -> Table:
     return table
 
 
-def pollActivation(activationDict, wrapper_object, contract_id, group_id, network):
+def pollActivation(activationDict, wrapper_object, contract_id, group_id, network, no_wait=False):
+    if no_wait:
+        return True, activationDict
+
     start_time = time.perf_counter()
     all_properties_active = False
     elapse_time = 0

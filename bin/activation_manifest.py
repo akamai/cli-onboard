@@ -43,3 +43,22 @@ def append_activation(manifest_path: str, property_name: str, property_id: str |
             'activation_started': datetime.now().isoformat(timespec='seconds'),
         })
     logger.info(f'Recorded activation {activation_id} for {property_name} in {manifest_path}')
+
+
+def append_batch(manifest_path: str, activation_dicts: list[dict], version: str | int) -> None:
+    """
+    Append one manifest row per successfully-submitted property from a
+    --no-wait batch_activate_and_poll()/pollActivation() result (each dict
+    has propertyName/propertyId/activationId keys -- see poll.py). A property
+    whose submission failed is logged and skipped, matching
+    batch_activate_and_poll's existing "activationId == 0 means failed"
+    convention.
+    """
+    for property_activation in activation_dicts:
+        activation_id = property_activation['activationId']
+        property_name = property_activation['propertyName']
+        if activation_id == 0:
+            logger.error(f'Unable to submit property {property_name} activation to production network')
+            continue
+        logger.info(f'Property {property_name} production activation submitted, activation id: {activation_id}')
+        append_activation(manifest_path, property_name, property_activation['propertyId'], version, activation_id)

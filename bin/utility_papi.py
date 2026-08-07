@@ -76,9 +76,16 @@ class papiFunctions:
 
     def batch_activate_and_poll(self, wrapper_object, propertyDict,
                         contract_id, group_id, version,
-                        network, emailList: list, notes):
+                        network, emailList: list, notes, no_wait=False):
         """
         Function to activate a property to Akamai Staging or Production network.
+
+        With no_wait=True, submits every activation then returns
+        (submitted: bool, activationDict) immediately -- activationDict has
+        activationId populated per property (0 for a submission failure), but
+        no activationStatus (nothing was polled). submitted is True only if
+        every property submitted successfully. With no_wait=False (default),
+        behavior and return type (the original 4-tuple) are unchanged.
         """
 
         for i, activation in enumerate(propertyDict):
@@ -94,6 +101,11 @@ class papiFunctions:
             else:
                 logger.error(json.dumps(act_response.json(), indent=4))
                 propertyDict[i]['activationId'] = 0
+
+        if no_wait:
+            _, activationDict = pollActivation(propertyDict, wrapper_object, contract_id, group_id, network, no_wait=True)
+            submitted = all(p['activationId'] != 0 for p in activationDict)
+            return submitted, activationDict
 
         all_properties_active, activationDict = pollActivation(propertyDict, wrapper_object, contract_id, group_id, network)
         failed_activations = (list(filter(lambda x: x['activationStatus'][network] not in ['ACTIVE'], activationDict)))

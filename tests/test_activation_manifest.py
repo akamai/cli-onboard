@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import csv
+from pathlib import Path
 
 import activation_manifest
 
@@ -69,3 +70,69 @@ class TestAppendActivation:
         activation_manifest.append_activation(manifest_path, 'example-prop', 'prp_123', 1, 'atv_456')
 
         assert (tmp_path / 'nested' / 'dir' / 'activation-status.csv').exists()
+
+
+class TestAppendBatch:
+    """Covers issue 04's batch/multi-property manifest writing -- one row per
+    successfully-submitted property from a --no-wait
+    batch_activate_and_poll()/pollActivation() result (poll.py's propertyName/
+    propertyId/activationId dict shape), skipping properties whose submission
+    failed (activationId == 0).
+    """
+
+    def test_writes_one_row_per_property(self, tmp_path):
+        manifest_path = str(tmp_path / 'activation-status.csv')
+        activation_dicts = [
+            {'propertyName': 'prop-a', 'propertyId': 'prp_1', 'activationId': 'atv_1'},
+            {'propertyName': 'prop-b', 'propertyId': 'prp_2', 'activationId': 'atv_2'},
+        ]
+
+        activation_manifest.append_batch(manifest_path, activation_dicts, version=1)
+
+        with open(manifest_path, newline='') as f:
+            rows = list(csv.DictReader(f))
+        assert len(rows) == 2
+        assert rows[0] == {'property_name': 'prop-a', 'property_id': 'prp_1', 'version': '1',
+                            'activation_id': 'atv_1', 'activation_started': rows[0]['activation_started']}
+        assert rows[1]['property_name'] == 'prop-b'
+        assert rows[1]['property_id'] == 'prp_2'
+
+    def test_skips_properties_whose_submission_failed(self, tmp_path, caplog):
+        manifest_path = str(tmp_path / 'activation-status.csv')
+        activation_dicts = [
+            {'propertyName': 'prop-a', 'propertyId': 'prp_1', 'activationId': 'atv_1'},
+            {'propertyName': 'prop-failed', 'propertyId': 'prp_2', 'activationId': 0},
+        ]
+
+        activation_manifest.append_batch(manifest_path, activation_dicts, version=1)
+
+        with open(manifest_path, newline='') as f:
+            rows = list(csv.DictReader(f))
+        assert len(rows) == 1
+        assert rows[0]['property_name'] == 'prop-a'
+        assert 'prop-failed' in caplog.text
+
+    def test_all_submissions_failed_writes_no_manifest_file(self, tmp_path):
+        manifest_path = str(tmp_path / 'activation-status.csv')
+        activation_dicts = [{'propertyName': 'prop-a', 'propertyId': 'prp_1', 'activationId': 0}]
+
+        activation_manifest.append_batch(manifest_path, activation_dicts, version=1)
+
+        assert not Path(manifest_path).exists()
+
+    def test_mixed_waf_and_non_waf_rows_across_two_batches(self, tmp_path):
+        """Simulates convert (delivery-only batch) writing to the same manifest
+        a batch-create-style run would also append a WAF row to."""
+        manifest_path = str(tmp_path / 'activation-status.csv')
+        delivery_batch = [
+            {'propertyName': 'prop-a', 'propertyId': 'prp_1', 'activationId': 'atv_1'},
+            {'propertyName': 'prop-b', 'propertyId': 'prp_2', 'activationId': 'atv_2'},
+        ]
+
+        activation_manifest.append_batch(manifest_path, delivery_batch, version=1)
+        activation_manifest.append_activation(manifest_path, 'WAF Security File', '', 3, 'act_1')
+
+        with open(manifest_path, newline='') as f:
+            rows = list(csv.DictReader(f))
+        assert len(rows) == 3
+        assert [r['property_id'] for r in rows] == ['prp_1', 'prp_2', '']
