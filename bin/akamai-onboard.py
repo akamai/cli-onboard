@@ -28,6 +28,7 @@ from time import gmtime
 from time import strftime
 
 import _logging as lg
+import activation_manifest
 import onboard
 import onboard_appsec_update
 import onboard_batch_create
@@ -700,9 +701,12 @@ def multi_hosts(config, csv, file, log_level, verbose):
 @cli.command(short_help='Create a simple delivery and security configuration with one hostname and one WAF policy')
 @click.option('-f', '--file', metavar='', required=True,
               help='File containing setup/onboard config key-value pairs in JSON')
+@click.option('--no-wait', metavar='', is_flag=True, default=False,
+              help='Submit production activation(s) and return immediately instead of polling for completion; '
+                   'check status later with check-activation. Staging activation always waits.')
 @log_level_options
 @pass_config
-def single_host(config, file, log_level, verbose):
+def single_host(config, file, no_wait, log_level, verbose):
     """
     Simplify onboarding ONE property.  By default, delivery config will be activating on STAGING network.
     Security config will also be activating on STAGING network if create_new_security_config is True.
@@ -781,23 +785,49 @@ def single_host(config, file, log_level, verbose):
             print()
             logger.warning('Activate Property Production: SKIPPING')
         else:
-            status = util_papi.activate_and_poll(wrap_api,
-                                            onboard.property_name,
-                                            onboard.contract_id,
-                                            onboard.group_id,
-                                            onboard.onboard_property_id, version=1,
-                                            network='PRODUCTION',
-                                            emailList=onboard.notification_emails,
-                                            notes='Onboard CLI Activation')
-            if not status:
-                logger.error('Unable to activate property to production network')
-            else:
+            activation_kwargs = dict(wrapper_object=wrap_api,
+                                      property_name=onboard.property_name,
+                                      contract_id=onboard.contract_id,
+                                      group_id=onboard.group_id,
+                                      property_id=onboard.onboard_property_id, version=1,
+                                      network='PRODUCTION',
+                                      emailList=onboard.notification_emails,
+                                      notes='Onboard CLI Activation')
+            if no_wait:
+                manifest_path = activation_manifest.new_manifest_path(account_output)
+                submitted, activation_id = util_papi.activate_and_poll(**activation_kwargs, no_wait=True)
+                if submitted:
+                    logger.info(f'Property {onboard.property_name} production activation submitted, '
+                                f'activation id: {activation_id}')
+                    activation_manifest.append_activation(manifest_path, onboard.property_name,
+                                                           onboard.onboard_property_id, 1, activation_id)
+                else:
+                    logger.error('Unable to submit property activation to production network')
+
                 if onboard.create_new_security_config and onboard.activate_waf_policy_production:
-                    status = util_waf.activateAndPoll(wrap_api, onboard, network='PRODUCTION')
-                    if not status:
-                        sys.exit()
+                    waf_submitted, waf_activation_id = util_waf.activateAndPoll(wrap_api, onboard,
+                                                                                network='PRODUCTION', no_wait=True)
+                    if waf_submitted:
+                        logger.info(f'WAF configuration production activation submitted, '
+                                    f'activation id: {waf_activation_id}')
+                        activation_manifest.append_activation(manifest_path, onboard.waf_config_name,
+                                                               '', onboard.onboard_waf_config_version,
+                                                               waf_activation_id)
+                    else:
+                        logger.error('Unable to submit WAF configuration activation to production network')
                 else:
                     logger.info('Activate Security configuration on Staging: PRODUCTION')
+            else:
+                status = util_papi.activate_and_poll(**activation_kwargs)
+                if not status:
+                    logger.error('Unable to activate property to production network')
+                else:
+                    if onboard.create_new_security_config and onboard.activate_waf_policy_production:
+                        status = util_waf.activateAndPoll(wrap_api, onboard, network='PRODUCTION')
+                        if not status:
+                            sys.exit()
+                    else:
+                        logger.info('Activate Security configuration on Staging: PRODUCTION')
 
     util.log_cli_timing()
     return 0

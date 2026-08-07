@@ -22,9 +22,14 @@ space = ' '
 class papiFunctions:
     def activate_and_poll(self, wrapper_object, property_name,
                         contract_id, group_id, property_id, version,
-                        network, emailList: list, notes):
+                        network, emailList: list, notes, no_wait=False):
         """
         Function to activate a property to Akamai Staging or Production network.
+
+        With no_wait=True, returns (submitted: bool, activation_id: str | None)
+        immediately after submitting the activation, without polling for it to
+        go ACTIVE. With no_wait=False (default), behavior and return type
+        (a plain bool) are unchanged from before no_wait existed.
         """
         logger.warning(f'Preparing to activate property {property_name} on Akamai {network} network')
         start_time = time.perf_counter()
@@ -32,8 +37,12 @@ class papiFunctions:
                                                             version, network, emailList, notes)
         logger.debug(act_response.json())
         if act_response.status_code == 201:
-            activation_status = False
             activation_id = act_response.json()['activationLink'].split('?')[0].split('/')[-1]
+            if no_wait:
+                logger.warning(f'Activation submitted for property {property_name} on Akamai {network} network '
+                                f'(activation id: {activation_id}); not waiting for completion (--no-wait)')
+                return True, activation_id
+            activation_status = False
             while activation_status is False:
                 print('Polling 30s...')
                 activation_status_response = wrapper_object.pollActivationStatus(contract_id,
@@ -63,7 +72,7 @@ class papiFunctions:
                     return False
         else:
             logger.error(json.dumps(act_response.json(), indent=4))
-            return False
+            return (False, None) if no_wait else False
 
     def batch_activate_and_poll(self, wrapper_object, propertyDict,
                         contract_id, group_id, version,

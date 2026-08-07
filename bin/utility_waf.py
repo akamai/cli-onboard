@@ -17,9 +17,14 @@ dot = ' '
 
 
 class wafFunctions:
-    def activateAndPoll(self, wrap_api, onboard_object, network):
+    def activateAndPoll(self, wrap_api, onboard_object, network, no_wait=False):
         """
         Function to activate WAF configuration to Akamai Staging or Production network.
+
+        With no_wait=True, returns (submitted: bool, activation_id: str | None)
+        immediately after submitting the activation, without polling for it to
+        go ACTIVATED. With no_wait=False (default), behavior and return type
+        (a plain bool) are unchanged from before no_wait existed.
         """
         print()
         logger.warning(f'Preparing to activate WAF to Akamai {network} network')
@@ -31,8 +36,12 @@ class wafFunctions:
                                                   note='Onboard CLI Activation')
 
         if act_response.status_code == 200:
-            activation_status = False
             activation_id = act_response.json()['activationId']
+            if no_wait:
+                logger.warning(f'WAF activation submitted to Akamai {network} network '
+                                f'(activation id: {activation_id}); not waiting for completion (--no-wait)')
+                return True, activation_id
+            activation_status = False
             while activation_status is False:
                 print('Polling 30s...')
                 polling_status_response = wrap_api.pollWafActivationStatus(activation_id)
@@ -66,7 +75,7 @@ class wafFunctions:
         logger.error(json.dumps(act_response.json(), indent=4))
         logger.error('Unable to get activation status')
         logger.debug(act_response.url)
-        return False
+        return (False, None) if no_wait else False
 
     def updateActivateAndPoll(self, wrap_api, onboard_object, network):
         """
