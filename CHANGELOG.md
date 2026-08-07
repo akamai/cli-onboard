@@ -20,17 +20,18 @@ Each release is grouped into two sections:
 
 #### ENHANCEMENTS:
 
-- Add `--no-wait` to `single-host`, `multi-hosts`, `convert`, `batch-create`, `appsec-create`, `appsec-update`, and `appsec-remove`: submit production activation(s) and return immediately instead of polling for completion, recording each submission's activation ID to a manifest
-- New `check-activation` command to check the status of activation(s) submitted earlier with `--no-wait`, including a `--wait` loop mode that polls until every activation completes
 - `convert`'s Excel report labels rows submitted under `--no-wait`
-- Extract shared `--no-wait` production-activation orchestration (`bin/no_wait_activation.py`) once `single-host`/`multi-hosts`'s inline blocks turned out to be identical
+- `convert`'s Excel report now shows which CP Code was used per hostname and flags any hostnames that were skipped
+- Add `--no-wait` to `single-host`, `multi-hosts`, `convert`, `batch-create`, and the AppSec commands: submit production activation and return immediately instead of waiting for it to finish
+- Add `--unique-cpcode` to `convert`: hostnames migrated with different origins each get their own CP Code, reused if it exists, instead of sharing one CP Code for the whole property
+- New `check-activation` command checks on activation(s) submitted earlier with `--no-wait`; add `--wait` to keep polling until every activation finishes
 
 #### BUG FIXES:
 
-- `check-activation` now handles minimal, hand-built CSVs (not just ones produced by a prior `--no-wait` run)
-- `appsec-create --activate production` now actually submits its production leg to the PRODUCTION network — `activation_detail` previously hardcoded `network='STAGING'` for both legs, so production activation silently never fired
-- `batch-create`'s WAF production activation gate now fires correctly — it compared a bool (`all_properties_active`) to the string `'ACTIVE'`, which is always `False`, so WAF production activation silently never fired even when delivery production activation succeeded
-- Fall back to the package's own location instead of the current working directory when locating the CLI root directory
+- `appsec-create --activate production` now actually activates to the production network — it was silently activating to staging twice instead
+- `batch-create`'s WAF production activation now fires correctly instead of silently never running, even when delivery activation to production succeeded
+- `check-activation` now works with minimal, hand-built CSVs, not just ones produced by a prior `--no-wait` run
+- Fall back to the package's own install location instead of the current working directory when locating the CLI's root directory
 
 ## [v2.5.4] - 2026-08-04
 

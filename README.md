@@ -234,6 +234,8 @@ akamai onboard convert \
 
 Use `--cert-mode CPS` if the properties require CPS-managed certificates — see [Default DV versus CPS](#default-dv-secure-by-defaultsbd-versus-cps) for when to choose which.
 
+For a property migrated with multiple hostnames sharing one rule tree (a `PMUSER_ORIGIN` node with one child per hostname), add `--unique-cpcode` to give each onboarded hostname its own cpCode — reusing one that already exists, creating one only if needed — instead of sharing a single cpCode across the whole property. Hostnames in the rule tree that aren't part of this run's `--csv` are pruned out. The Excel report gets a `cpcodes` sheet and a `prunedHostnames` column showing what happened per property.
+
 For the full option list, see [Convert command options](#convert-command-options).
 
 ### 10. Skip waiting for activation and check status later
@@ -345,6 +347,8 @@ $ akamai onboard convert --help
 │    --rule-format                -f  rule format (typically latest, but can use frozen rule format if desired)        │
 │                                     [default: latest]                                                                │
 │    --use-cpcode                     reuse existing numeric CP Code                                                   │
+│    --unique-cpcode                  Create or reuse a unique cpCode per onboarded hostname within PMUSER_ORIGIN      │
+│                                     child rules, pruning any PMUSER_ORIGIN child hostname not present in --csv       │
 │    --cert-mode                      Certificate mode [default: SBD]                                                  │
 │    --use-existing-edgehostname      Use existing edge hostnames. Pass an EHN name for a single EHN, or pass 'CSV' to │
 │                                     use the edgeHostname column from the CSV.                                        │
