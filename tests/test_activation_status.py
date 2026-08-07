@@ -206,6 +206,39 @@ class TestLoadManifestRows:
         assert rows[0]['property_id'] == 'prp_123'
         assert rows[1]['property_id'] == ''
 
+    def test_minimal_csv_with_only_activation_id_column(self, csv_factory):
+        """A hand-built checklist of WAF activation IDs, not a --no-wait manifest."""
+        path = csv_factory([{'activation_id': 'act_1'}, {'activation_id': 'act_2'}], filename='ids.csv')
+
+        rows = activation_status.load_manifest_rows(path)
+
+        assert len(rows) == 2
+        assert rows[0]['activation_id'] == 'act_1'
+        assert rows[1]['activation_id'] == 'act_2'
+        assert 'property_id' not in rows[0]
+
+    def test_minimal_csv_with_activation_id_and_property_id(self, csv_factory):
+        path = csv_factory([{'activation_id': 'atv_1', 'property_id': 'prp_123'},
+                             {'activation_id': 'atv_2', 'property_id': 'prp_456'}], filename='ids.csv')
+
+        rows = activation_status.load_manifest_rows(path)
+
+        assert len(rows) == 2
+        assert rows[0] == {'activation_id': 'atv_1', 'property_id': 'prp_123'}
+
+    def test_csv_missing_activation_id_column_raises_value_error(self, csv_factory):
+        path = csv_factory([{'property_id': 'prp_123', 'version': '1'}], filename='bad.csv')
+
+        with pytest.raises(ValueError, match='activation_id'):
+            activation_status.load_manifest_rows(path)
+
+    def test_empty_csv_raises_value_error_not_crash(self, tmp_path):
+        path = tmp_path / 'empty.csv'
+        path.write_text('')
+
+        with pytest.raises(ValueError, match='activation_id'):
+            activation_status.load_manifest_rows(str(path))
+
 
 class TestBuildStatusTable:
     def test_renders_name_id_network_status_for_each_row(self):

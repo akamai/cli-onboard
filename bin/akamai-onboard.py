@@ -842,7 +842,7 @@ def single_host(config, file, no_wait, log_level, verbose):
 
 
 @cli.command(short_help='Check status of activation(s) submitted earlier with --no-wait')
-@click.option('--file', metavar='', default=None, help='manifest CSV written by --no-wait (see single-host --no-wait)')
+@click.option('--file', metavar='', default=None, help='CSV of activations to check')
 @click.option('--activation-id', metavar='', default=None,
               help='single activation id to check, for an ad-hoc check without --file')
 @click.option('--property-id', metavar='', default=None,
@@ -858,7 +858,9 @@ def single_host(config, file, no_wait, log_level, verbose):
 @pass_config
 def check_activation(config, file, activation_id, property_id, version, contract, group, wait, log_level, verbose):
     """
-    Check current status of activation(s) submitted earlier with --no-wait.
+    Check current status of activation(s) submitted earlier with --no-wait,
+    or of a minimal hand-built CSV of activation IDs collected from
+    elsewhere (see --file).
 
     By default queries each activation exactly once and exits -- does not
     poll or block. With --wait, polls until every activation is active or
@@ -874,7 +876,13 @@ def check_activation(config, file, activation_id, property_id, version, contract
         sys.exit(1)
 
     if file:
-        rows = activation_status.load_manifest_rows(file)
+        try:
+            rows = activation_status.load_manifest_rows(file)
+        except ValueError as err:
+            # not lg._log_error(err) -- it calls a bare sys.exit() internally,
+            # which exits 0, defeating check-activation's exit-code contract.
+            logger.error(str(err))
+            sys.exit(1)
     elif activation_id:
         rows = [{'property_name': property_id or activation_id, 'property_id': property_id or '',
                  'version': version or '', 'activation_id': activation_id}]

@@ -1,5 +1,5 @@
 """
-Drives the real `check-activation` CLI command (issues 02 and 03 of
+Drives the real `check-activation` CLI command (issues 02, 03, and 08 of
 .scratch/skip-activation-polling-spec.md) through CliRunner, with the network
 seam (wrapper_api.apiCallsWrapper.pollActivationStatus/pollWafActivationStatus)
 replaced by monkeypatched stand-ins -- init_config()'s edgerc/session setup is
@@ -189,3 +189,37 @@ def test_without_wait_flag_checks_once_and_does_not_sleep(runner, cli, fake_edge
 
     assert result.exit_code != 0
     assert 'PENDING' in result.output
+
+
+def test_minimal_csv_with_only_activation_id_checks_as_waf(runner, cli, fake_edgerc, monkeypatch, csv_factory):
+    path = csv_factory([{'activation_id': 'act_1'}], filename='ids.csv')
+    monkeypatch.setattr(wrapper_api.apiCallsWrapper, 'pollWafActivationStatus',
+                         _stub_poll_waf_activation_status({'act_1': 'ACTIVATED'}))
+
+    result = runner.invoke(cli, ['--edgerc', fake_edgerc, 'check-activation', '--file', path])
+
+    assert result.exit_code == 0
+    assert 'act_1' in result.output
+
+
+def test_minimal_csv_with_activation_id_and_property_id_checks_as_delivery(runner, cli, fake_edgerc, monkeypatch, csv_factory):
+    path = csv_factory([{'activation_id': 'atv_1', 'property_id': 'prp_123'}], filename='ids.csv')
+    monkeypatch.setattr(wrapper_api.apiCallsWrapper, 'pollActivationStatus',
+                         _stub_poll_activation_status({'atv_1': 'ACTIVE'}))
+
+    result = runner.invoke(cli, [
+        '--edgerc', fake_edgerc, 'check-activation',
+        '--file', path, '--contract', 'ctr_1', '--group', 'grp_1',
+    ])
+
+    assert result.exit_code == 0
+    assert 'atv_1' in result.output
+
+
+def test_csv_missing_activation_id_column_exits_with_clear_error(runner, cli, fake_edgerc, csv_factory):
+    path = csv_factory([{'property_id': 'prp_123', 'version': '1'}], filename='bad.csv')
+
+    result = runner.invoke(cli, ['--edgerc', fake_edgerc, 'check-activation', '--file', path])
+
+    assert result.exit_code != 0
+    assert 'activation_id' in result.output

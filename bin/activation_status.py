@@ -24,9 +24,12 @@ DEFAULT_POLL_INTERVAL_SECONDS = 30
 
 
 def load_manifest_rows(manifest_path: str) -> list[dict]:
-    """Read a --no-wait manifest CSV (see activation_manifest.py) into row dicts."""
+    """Load a --no-wait manifest or minimal CSV; raises ValueError if activation_id column is missing."""
     with open(manifest_path, newline='') as f:
-        return list(csv.DictReader(f))
+        reader = csv.DictReader(f)
+        if 'activation_id' not in (reader.fieldnames or []):
+            raise ValueError(f"{manifest_path}: missing required column 'activation_id'")
+        return list(reader)
 
 
 def _result(name: str, activation_id: str, version, status: str, is_active: bool, network: str = DEFAULT_NETWORK) -> dict:
