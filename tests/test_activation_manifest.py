@@ -136,3 +136,48 @@ class TestAppendBatch:
             rows = list(csv.DictReader(f))
         assert len(rows) == 3
         assert [r['property_id'] for r in rows] == ['prp_1', 'prp_2', '']
+
+
+class TestStampBatchReportStatus:
+    """Covers issue 07: gives --no-wait production rows a distinct,
+    Excel-report-compatible status instead of a missing/stale activationStatus
+    field (poll.py's blocking path always sets one; a --no-wait run's
+    activationDict otherwise wouldn't have the key at all)."""
+
+    def test_submitted_property_gets_submitted_status(self):
+        activation_dicts = [{'propertyName': 'prop-a', 'propertyId': 'prp_1', 'activationId': 'atv_1'}]
+
+        activation_manifest.stamp_batch_report_status(activation_dicts)
+
+        assert activation_dicts[0]['activationStatus'] == {'STAGING': '', 'PRODUCTION': 'SUBMITTED'}
+
+    def test_failed_submission_gets_activation_error_status(self):
+        activation_dicts = [{'propertyName': 'prop-a', 'propertyId': 'prp_1', 'activationId': 0}]
+
+        activation_manifest.stamp_batch_report_status(activation_dicts)
+
+        assert activation_dicts[0]['activationStatus'] == {'STAGING': '', 'PRODUCTION': 'ACTIVATION_ERROR'}
+
+    def test_mixed_batch_stamps_each_independently(self):
+        activation_dicts = [
+            {'propertyName': 'prop-a', 'propertyId': 'prp_1', 'activationId': 'atv_1'},
+            {'propertyName': 'prop-b', 'propertyId': 'prp_2', 'activationId': 0},
+        ]
+
+        activation_manifest.stamp_batch_report_status(activation_dicts)
+
+        assert activation_dicts[0]['activationStatus']['PRODUCTION'] == 'SUBMITTED'
+        assert activation_dicts[1]['activationStatus']['PRODUCTION'] == 'ACTIVATION_ERROR'
+
+    def test_status_shape_matches_pollactivation_dict_shape(self):
+        """Same two-key {'STAGING': ..., 'PRODUCTION': ...} shape poll.py's
+        blocking path produces, so a --no-wait row is shape-compatible
+        wherever activationStatus is read downstream."""
+        activation_dicts = [{'propertyName': 'prop-a', 'propertyId': 'prp_1', 'activationId': 'atv_1'}]
+
+        activation_manifest.stamp_batch_report_status(activation_dicts)
+
+        assert set(activation_dicts[0]['activationStatus'].keys()) == {'STAGING', 'PRODUCTION'}
+
+    def test_empty_batch_is_a_no_op(self):
+        activation_manifest.stamp_batch_report_status([])  # must not raise

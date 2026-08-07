@@ -471,6 +471,7 @@ def convert(config, **kwargs):
                                                             notes='Onboard CLI Activation',
                                                             no_wait=True)
                 activation_manifest.append_batch(manifest_path, prd_activation, version=1)
+                activation_manifest.stamp_batch_report_status(prd_activation)
                 prd_df = pd.DataFrame(prd_activation)
             else:
                 activation_status, success_hostnames, failed_activations, prd_activation = util_papi.batch_activate_and_poll(papi,

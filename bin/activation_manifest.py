@@ -9,6 +9,9 @@ logger = logging.getLogger(__name__)
 
 MANIFEST_FIELDS = ['property_name', 'property_id', 'version', 'activation_id', 'activation_started']
 
+NO_WAIT_SUBMITTED_STATUS = 'SUBMITTED'
+ACTIVATION_ERROR_STATUS = 'ACTIVATION_ERROR'
+
 
 def new_manifest_path(account_output: str) -> str:
     """
@@ -62,3 +65,10 @@ def append_batch(manifest_path: str, activation_dicts: list[dict], version: str 
             continue
         logger.info(f'Property {property_name} production activation submitted, activation id: {activation_id}')
         append_activation(manifest_path, property_name, property_activation['propertyId'], version, activation_id)
+
+
+def stamp_batch_report_status(activation_dicts: list[dict]) -> None:
+    """Mark --no-wait batch rows SUBMITTED/ACTIVATION_ERROR, matching pollActivation's {'STAGING','PRODUCTION'} shape."""
+    for activation in activation_dicts:
+        status = NO_WAIT_SUBMITTED_STATUS if activation['activationId'] != 0 else ACTIVATION_ERROR_STATUS
+        activation['activationStatus'] = {'STAGING': '', 'PRODUCTION': status}
