@@ -845,14 +845,18 @@ def single_host(config, file, no_wait, log_level, verbose):
               help='Contract ID; required to check any delivery activation')
 @click.option('-g', '--group', metavar='', default=None,
               help='Group ID; required to check any delivery activation')
+@click.option('--wait', metavar='', is_flag=True, default=False,
+              help='Poll until every activation is active (or errored) instead of checking once and exiting')
 @log_level_options
 @pass_config
-def check_activation(config, file, activation_id, property_id, version, contract, group, log_level, verbose):
+def check_activation(config, file, activation_id, property_id, version, contract, group, wait, log_level, verbose):
     """
     Check current status of activation(s) submitted earlier with --no-wait.
 
-    Queries each activation exactly once and exits -- does not poll or block.
-    Exit code is 0 if everything checked is active, non-zero otherwise.
+    By default queries each activation exactly once and exits -- does not
+    poll or block. With --wait, polls until every activation is active or
+    errored instead. Exit code is 0 if everything checked is active, non-zero
+    otherwise.
     """
     apply_log_level_from_flags(log_level, verbose)
     logger.info('Start Akamai CLI onboard check-activation')
@@ -875,9 +879,12 @@ def check_activation(config, file, activation_id, property_id, version, contract
         logger.error(f'No activation rows found in {file}')
         sys.exit(1)
 
-    results = activation_status.check_all(wrap_api, rows, contract, group)
-    console = Console()
-    console.print(activation_status.build_status_table(results))
+    if wait:
+        results = activation_status.wait_until_done(wrap_api, rows, contract, group)
+    else:
+        results = activation_status.check_all(wrap_api, rows, contract, group)
+        console = Console()
+        console.print(activation_status.build_status_table(results))
 
     all_active = all(r['is_active'] for r in results)
     sys.exit(0 if all_active else 1)

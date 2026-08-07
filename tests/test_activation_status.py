@@ -1,17 +1,20 @@
 """
-Covers bin/activation_status.py -- the one-shot status-check engine behind the
-`check-activation` command (issue 02 of .scratch/skip-activation-polling-spec.md).
+Covers bin/activation_status.py -- the status-check engine behind the
+`check-activation` command (issues 02 and 03 of
+.scratch/skip-activation-polling-spec.md).
 
 check_row_status/check_all must query each row EXACTLY once (no polling/sleep
--- that's issue 03's --wait mode), correctly branch delivery vs. WAF by
+-- that's wait_until_done's job), correctly branch delivery vs. WAF by
 whether property_id is populated, and produce the is_active flag the CLI uses
-for its exit code.
+for its exit code. wait_until_done (issue 03, --wait mode) must keep polling
+until every row is active or hits a terminal error, sleeping between cycles.
 """
 from __future__ import annotations
 
 from types import SimpleNamespace
 
 import activation_status
+import pytest
 
 
 class SpyWrapper:
@@ -229,3 +232,118 @@ class TestBuildStatusTable:
         assert '1' in output
         assert '3' in output
         assert 'PENDING' in output
+
+
+class SequenceWrapper:
+    """Plays back a per-activation-id sequence of statuses, advancing one step
+    each call; the last entry repeats once a sequence is exhausted. Lets tests
+    simulate a row transitioning from pending to active/errored across
+    wait_until_done's repeated check_all() cycles.
+    """
+
+    def __init__(self, delivery_sequences: dict[str, list[str]] | None = None,
+                 waf_sequences: dict[str, list[str]] | None = None,
+                 delivery_status_codes: dict[str, list[int]] | None = None):
+        self.delivery_sequences = delivery_sequences or {}
+        self.waf_sequences = waf_sequences or {}
+        self.delivery_status_codes = delivery_status_codes or {}
+        self._delivery_index: dict[str, int] = {}
+        self._waf_index: dict[str, int] = {}
+        self.delivery_call_count = 0
+        self.waf_call_count = 0
+
+    def pollActivationStatus(self, contractId, groupId, propertyId, activationId):
+        self.delivery_call_count += 1
+        i = self._delivery_index.get(activationId, 0)
+        self._delivery_index[activationId] = i + 1
+
+        codes = self.delivery_status_codes.get(activationId)
+        if codes:
+            status_code = codes[min(i, len(codes) - 1)]
+        else:
+            status_code = 200
+
+        seq = self.delivery_sequences[activationId]
+        status = seq[min(i, len(seq) - 1)]
+        body = {'activations': {'items': [{'activationId': activationId, 'network': 'PRODUCTION', 'status': status}]}}
+        return SimpleNamespace(status_code=status_code, json=lambda: body)
+
+    def pollWafActivationStatus(self, activationId):
+        self.waf_call_count += 1
+        i = self._waf_index.get(activationId, 0)
+        self._waf_index[activationId] = i + 1
+        seq = self.waf_sequences[activationId]
+        status = seq[min(i, len(seq) - 1)]
+        body = {'network': 'PRODUCTION', 'status': status}
+        return SimpleNamespace(status_code=200, json=lambda: body)
+
+
+class TestWaitUntilDone:
+    def test_polls_until_pending_becomes_active(self, monkeypatch):
+        sleeps = []
+        monkeypatch.setattr(activation_status.time, 'sleep', lambda seconds: sleeps.append(seconds))
+        wrapper = SequenceWrapper(delivery_sequences={'atv_1': ['PENDING', 'PENDING', 'ACTIVE']})
+
+        results = activation_status.wait_until_done(wrapper, [_delivery_row(activation_id='atv_1')], 'ctr_1', 'grp_1')
+
+        assert results[0]['is_active'] is True
+        assert results[0]['status'] == 'ACTIVE'
+        assert wrapper.delivery_call_count == 3
+        assert sleeps == [30, 30]
+
+    def test_stops_once_row_hits_a_terminal_error_status(self, monkeypatch):
+        """UNABLE_TO_GET_STATUS (a non-200 response) is terminal -- retrying won't
+        change the outcome, so the loop must not spin forever on it."""
+        monkeypatch.setattr(activation_status.time, 'sleep', lambda seconds: None)
+        # Cycle 1: PENDING/200 (not done, keep looping). Cycle 2: 500 -> UNABLE_TO_GET_STATUS (terminal, stop).
+        wrapper = SequenceWrapper(
+            delivery_sequences={'atv_1': ['PENDING', 'PENDING']},
+            delivery_status_codes={'atv_1': [200, 500]},
+        )
+
+        results = activation_status.wait_until_done(wrapper, [_delivery_row(activation_id='atv_1')], 'ctr_1', 'grp_1')
+
+        assert results[0]['is_active'] is False
+        assert results[0]['status'] == 'UNABLE_TO_GET_STATUS'
+        assert wrapper.delivery_call_count == 2
+
+    def test_mixed_delivery_and_waf_rows_loop_until_both_done(self, monkeypatch):
+        sleeps = []
+        monkeypatch.setattr(activation_status.time, 'sleep', lambda seconds: sleeps.append(seconds))
+        wrapper = SequenceWrapper(
+            delivery_sequences={'atv_1': ['ACTIVE']},
+            waf_sequences={'act_1': ['PENDING', 'ACTIVATED']},
+        )
+
+        results = activation_status.wait_until_done(
+            wrapper, [_delivery_row(activation_id='atv_1'), _waf_row(activation_id='act_1')], 'ctr_1', 'grp_1',
+        )
+
+        by_id = {r['activation_id']: r for r in results}
+        assert by_id['atv_1']['is_active'] is True
+        assert by_id['act_1']['is_active'] is True
+        # Delivery row was already ACTIVE on cycle 1 but keeps getting re-queried
+        # each cycle until the WAF row also finishes -- matches poll.py's existing
+        # "re-check everything every cycle" precedent.
+        assert wrapper.delivery_call_count == 2
+        assert wrapper.waf_call_count == 2
+        assert sleeps == [30]
+
+    def test_already_all_active_on_first_check_does_not_sleep(self, monkeypatch):
+        monkeypatch.setattr(activation_status.time, 'sleep', lambda seconds: pytest.fail('should not sleep'))
+        wrapper = SequenceWrapper(delivery_sequences={'atv_1': ['ACTIVE']})
+
+        results = activation_status.wait_until_done(wrapper, [_delivery_row(activation_id='atv_1')], 'ctr_1', 'grp_1')
+
+        assert results[0]['is_active'] is True
+        assert wrapper.delivery_call_count == 1
+
+    def test_custom_poll_interval_is_used(self, monkeypatch):
+        sleeps = []
+        monkeypatch.setattr(activation_status.time, 'sleep', lambda seconds: sleeps.append(seconds))
+        wrapper = SequenceWrapper(delivery_sequences={'atv_1': ['PENDING', 'ACTIVE']})
+
+        activation_status.wait_until_done(wrapper, [_delivery_row(activation_id='atv_1')], 'ctr_1', 'grp_1',
+                                           poll_interval_seconds=5)
+
+        assert sleeps == [5]

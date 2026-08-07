@@ -1,5 +1,5 @@
 """
-Drives the real `check-activation` CLI command (issue 02 of
+Drives the real `check-activation` CLI command (issues 02 and 03 of
 .scratch/skip-activation-polling-spec.md) through CliRunner, with the network
 seam (wrapper_api.apiCallsWrapper.pollActivationStatus/pollWafActivationStatus)
 replaced by monkeypatched stand-ins -- init_config()'s edgerc/session setup is
@@ -11,6 +11,7 @@ from __future__ import annotations
 from types import SimpleNamespace
 
 import activation_manifest
+import activation_status
 import pytest
 import wrapper_api
 
@@ -140,3 +141,51 @@ def test_delivery_row_without_contract_and_group_exits_non_zero(runner, cli, fak
     result = runner.invoke(cli, ['--edgerc', fake_edgerc, 'check-activation', '--file', manifest_path])
 
     assert result.exit_code != 0
+
+
+def _stub_sequenced_poll_activation_status(sequence_by_activation_id):
+    """Like _stub_poll_activation_status, but advances one step per call so
+    --wait can be exercised transitioning from pending to active."""
+    call_index: dict[str, int] = {}
+
+    def _poll(self, contractId, groupId, propertyId, activationId):
+        i = call_index.get(activationId, 0)
+        call_index[activationId] = i + 1
+        seq = sequence_by_activation_id[activationId]
+        status = seq[min(i, len(seq) - 1)]
+        body = {'activations': {'items': [{'activationId': activationId, 'network': 'PRODUCTION', 'status': status}]}}
+        return SimpleNamespace(status_code=200, json=lambda: body)
+
+    return _poll
+
+
+def test_wait_polls_until_active_then_exits_zero(runner, cli, fake_edgerc, monkeypatch, manifest_path):
+    activation_manifest.append_activation(manifest_path, 'example-prop', 'prp_123', 1, 'atv_1')
+    monkeypatch.setattr(wrapper_api.apiCallsWrapper, 'pollActivationStatus',
+                         _stub_sequenced_poll_activation_status({'atv_1': ['PENDING', 'PENDING', 'ACTIVE']}))
+    sleeps = []
+    monkeypatch.setattr(activation_status.time, 'sleep', lambda seconds: sleeps.append(seconds))
+
+    result = runner.invoke(cli, [
+        '--edgerc', fake_edgerc, 'check-activation',
+        '--file', manifest_path, '--contract', 'ctr_1', '--group', 'grp_1', '--wait',
+    ])
+
+    assert result.exit_code == 0
+    assert 'ACTIVE' in result.output
+    assert sleeps == [30, 30]
+
+
+def test_without_wait_flag_checks_once_and_does_not_sleep(runner, cli, fake_edgerc, monkeypatch, manifest_path):
+    activation_manifest.append_activation(manifest_path, 'example-prop', 'prp_123', 1, 'atv_1')
+    monkeypatch.setattr(wrapper_api.apiCallsWrapper, 'pollActivationStatus',
+                         _stub_sequenced_poll_activation_status({'atv_1': ['PENDING']}))
+    monkeypatch.setattr(activation_status.time, 'sleep', lambda seconds: pytest.fail('one-shot mode must not sleep'))
+
+    result = runner.invoke(cli, [
+        '--edgerc', fake_edgerc, 'check-activation',
+        '--file', manifest_path, '--contract', 'ctr_1', '--group', 'grp_1',
+    ])
+
+    assert result.exit_code != 0
+    assert 'PENDING' in result.output

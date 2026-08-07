@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import csv
 import logging
+import time
 
+from rich.live import Live
 from rich.table import Table
 
 logger = logging.getLogger(__name__)
@@ -10,6 +12,15 @@ logger = logging.getLogger(__name__)
 DELIVERY_ACTIVE_STATUS = 'ACTIVE'
 WAF_ACTIVE_STATUS = 'ACTIVATED'
 DEFAULT_NETWORK = 'PRODUCTION'
+
+# check_row_status's own synthetic failure statuses; wait_until_done treats
+# either as terminal, same as ACTIVE/ACTIVATED -- retrying won't change them.
+TERMINAL_ERROR_STATUSES = frozenset({'MISSING_CONTRACT_OR_GROUP', 'UNABLE_TO_GET_STATUS'})
+
+# Shared cadence for the whole combined loop (a manifest can mix delivery and
+# WAF rows). Matches poll.py's pollActivation, the closest precedent for one
+# Live loop covering multiple rows.
+DEFAULT_POLL_INTERVAL_SECONDS = 30
 
 
 def load_manifest_rows(manifest_path: str) -> list[dict]:
@@ -70,6 +81,28 @@ def check_row_status(wrapper_object, row: dict, contract_id: str | None, group_i
 def check_all(wrapper_object, rows: list[dict], contract_id: str | None, group_id: str | None) -> list[dict]:
     """Check every row exactly once. No polling/sleep -- see check_row_status."""
     return [check_row_status(wrapper_object, row, contract_id, group_id) for row in rows]
+
+
+def _is_done(result: dict) -> bool:
+    return result['is_active'] or result['status'] in TERMINAL_ERROR_STATUSES
+
+
+def wait_until_done(wrapper_object, rows: list[dict], contract_id: str | None, group_id: str | None,
+                     poll_interval_seconds: int = DEFAULT_POLL_INTERVAL_SECONDS) -> list[dict]:
+    """
+    Poll every row, refreshing a live table each cycle, until each is active
+    or hits a terminal error (see TERMINAL_ERROR_STATUSES) -- mirrors
+    poll.py's pollActivation loop shape, extended to one combined loop over a
+    manifest that may mix delivery and WAF rows.
+    """
+    results = check_all(wrapper_object, rows, contract_id, group_id)
+    with Live(build_status_table(results), refresh_per_second=1) as live:
+        while not all(_is_done(r) for r in results):
+            logger.info(f'Polling {poll_interval_seconds}s...')
+            time.sleep(poll_interval_seconds)
+            results = check_all(wrapper_object, rows, contract_id, group_id)
+            live.update(build_status_table(results))
+    return results
 
 
 def build_status_table(results: list[dict]) -> Table:
