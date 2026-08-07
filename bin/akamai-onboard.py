@@ -235,6 +235,9 @@ def help(ctx, log_level, verbose):
 @click.option('--csv', metavar='', help='csv file with headers hostname,propertyName', required=True)
 @click.option('-f', '--rule-format', metavar='', help='rule format (typically latest, but can use frozen rule format if desired)', default='latest', show_default=True)
 @click.option('--use-cpcode', metavar='', help='reuse existing numeric CP Code')
+@click.option('--unique-cpcode', metavar='', is_flag=True, default=False,
+              help='Create or reuse a unique cpCode per onboarded hostname within PMUSER_ORIGIN child rules, '
+                   'pruning any PMUSER_ORIGIN child hostname not present in --csv')
 @click.option('--cert-mode', type=click.Choice(['SBD', 'CPS'], case_sensitive=False),
               default='SBD', show_default=True, help='Certificate mode')
 @click.option('--use-existing-edgehostname', metavar='', default=None, is_flag=False,
@@ -394,6 +397,8 @@ def convert(config, **kwargs):
                 cpcode = int(click_args['use_cpcode'])
             original_ruletree = util_papi.inject_cpcode_behavior(level0, cpcode)
             all_smoketest.append([host, '/', cpcode])
+
+            util_papi.log_pmuser_origin_detection(property, original_ruletree, click_args['unique_cpcode'])
 
             property_dict[property]['ruleTree'] = {'rules': original_ruletree}
             property_dict[property]['comments'] = comments

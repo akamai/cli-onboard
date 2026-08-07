@@ -888,6 +888,35 @@ class papiFunctions:
         single_rule['behaviors'] = original_behavior
         return single_rule
 
+    def find_pmuser_origin_node(self, rule_tree: dict) -> dict | None:
+        """
+        Depth-first search a rule tree for a node named PMUSER_ORIGIN - the
+        container node Cloudflare-converted ruletrees use to hold one child
+        rule per hostname (see ./logs/*_v1.json for real examples).
+        """
+        if rule_tree.get('name') == 'PMUSER_ORIGIN':
+            return rule_tree
+        for child in rule_tree.get('children', []):
+            found = self.find_pmuser_origin_node(child)
+            if found:
+                return found
+        return None
+
+    def log_pmuser_origin_detection(self, property_name: str, rule_tree: dict, unique_cpcode_enabled: bool) -> None:
+        """
+        --unique-cpcode walking-skeleton step: detect and log whether this
+        property's ruletree has a PMUSER_ORIGIN node, without mutating
+        rule_tree. Real pruning/injection lands in later slices.
+        """
+        if not unique_cpcode_enabled:
+            return
+        pmuser_origin_node = self.find_pmuser_origin_node(rule_tree)
+        if pmuser_origin_node:
+            child_count = len(pmuser_origin_node.get('children', []))
+            logger.debug(f'{property_name}: found PMUSER_ORIGIN node with {child_count} children')
+        else:
+            logger.debug(f'{property_name}: --unique-cpcode has no effect, no PMUSER_ORIGIN node in ruletree')
+
     def get_path_value(self, single_rule: dict) -> str:
         if len(single_rule['criteria']) > 0:
             for each_criteria in single_rule['criteria']:

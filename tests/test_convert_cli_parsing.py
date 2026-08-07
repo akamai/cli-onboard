@@ -12,7 +12,7 @@ def test_help_shows_all_options(runner, cli):
     result = runner.invoke(cli, ['convert', '--help'])
     assert result.exit_code == 0
     for option in ('--contract', '--group', '--product', '--network', '--directory',
-                   '--csv', '--rule-format', '--use-cpcode', '--cert-mode',
+                   '--csv', '--rule-format', '--use-cpcode', '--unique-cpcode', '--cert-mode',
                    '--use-existing-edgehostname', '--enrollment-id', '--media-ehn',
                    '--gtm-domain', '--activate', '--email', '--force', '--dryrun',
                    '--prefix', '--launch'):
