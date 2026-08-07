@@ -77,9 +77,14 @@ class wafFunctions:
         logger.debug(act_response.url)
         return (False, None) if no_wait else False
 
-    def updateActivateAndPoll(self, wrap_api, onboard_object, network):
+    def updateActivateAndPoll(self, wrap_api, onboard_object, network, no_wait=False):
         """
         Function to activate WAF configuration to Akamai Staging or Production network when in appsec-update mode.
+
+        With no_wait=True, returns (submitted: bool, activation_id: str | None)
+        immediately after submitting the activation, without polling for it to
+        go ACTIVATED. With no_wait=False (default), behavior and return type
+        (a plain bool) are unchanged from before no_wait existed.
         """
         print()
         logger.warning(f'Preparing to activate WAF to Akamai {network} network')
@@ -91,8 +96,12 @@ class wafFunctions:
                                                 note=onboard_object.version_notes)
 
         if act_response.ok:
-            activation_status = False
             activation_id = act_response.json()['activationId']
+            if no_wait:
+                logger.warning(f'WAF activation submitted to Akamai {network} network '
+                                f'(activation id: {activation_id}); not waiting for completion (--no-wait)')
+                return True, activation_id
+            activation_status = False
             while activation_status is False:
                 print('Polling 30s...')
                 polling_status_response = wrap_api.pollWafActivationStatus(activation_id)
@@ -126,7 +135,7 @@ class wafFunctions:
         logger.error(json.dumps(act_response.json(), indent=4))
         logger.error('Unable to get activation status')
         logger.debug(act_response.url)
-        return False
+        return (False, None) if no_wait else False
 
     def addHostnames(self, wrapper_object, hostname_list, config_id, version):
         """
@@ -418,7 +427,14 @@ class wafFunctions:
                 onboard_object[i].activation_status = activation_status
         time.sleep(1)
 
-    def activate_and_poll(self, wrap_api, onboard_object, activate):
+    def activate_and_poll(self, wrap_api, onboard_object, activate, no_wait=False):
+        """
+        Staging always polls to completion. With no_wait=True, the production
+        leg (only reached when activate == 'production') submits and returns
+        immediately instead of polling -- activation_id/activation_status per
+        item are still populated from the submission response itself (see
+        activation_detail), just not polled further.
+        """
         print()
         self.activation_detail(wrap_api, onboard_object, activate)
         self.waf_poll_activation(wrap_api, onboard_object, network='STAGING')
@@ -426,9 +442,18 @@ class wafFunctions:
         if activate == 'production':
             print()
             self.activation_detail(wrap_api, onboard_object, activate)
-            self.waf_poll_activation(wrap_api, onboard_object, network='PRODUCTION')
+            self.waf_poll_activation(wrap_api, onboard_object, network='PRODUCTION', no_wait=no_wait)
 
-    def waf_poll_activation(self, wrapper_api, appsec_onboard, network):
+    def waf_poll_activation(self, wrapper_api, appsec_onboard, network, no_wait=False):
+        """
+        Poll every item in appsec_onboard until all reach ACTIVATED. With
+        no_wait=True, returns (True, appsec_onboard) immediately instead --
+        each item's activation_id/activation_status were already populated by
+        activation_detail's submission call, so nothing further is queried.
+        """
+        if no_wait:
+            return True, appsec_onboard
+
         all_waf_configs_active = False
         with Live(self.waf_activation_table(appsec_onboard, network), refresh_per_second=1) as live:
             while (not all_waf_configs_active):

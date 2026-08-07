@@ -1412,6 +1412,7 @@ def sbd_precheck(config, **kwargs):
 @click.option('--activate', metavar='', type=click.Choice(['staging', 'production']), multiple=True, help='Options: staging, production', required=False, default=[])
 @click.option('--version', metavar='', help='version to add hostname(s) to', default='latest', required=False)
 @click.option('--email', metavar='', required=False, help='email for activation notifications')
+@no_wait_option
 @log_level_options
 @pass_config
 def appsec_update(config, **kwargs):
@@ -1488,10 +1489,9 @@ def appsec_update(config, **kwargs):
 
         # Activate WAF configuration to staging
         if click_args['activate']:
-            for network in click_args['activate']:
-                waf_activation_status = utility_waf_object.updateActivateAndPoll(wrapper_object, onboard_object, network=network.upper())
-                if waf_activation_status is False:
-                    sys.exit(logger.error(f'Unable to activate WAF configuration to {network.upper()} network'))
+            no_wait_activation.fire_appsec_update_activations(
+                utility_waf_object, wrapper_object, onboard_object, click_args['activate'], click_args['no_wait'],
+                activation_manifest.new_manifest_path(account_output))
         else:
             print()
             logger.warning('Activate WAF Configuration Production: SKIPPING')
@@ -1543,6 +1543,7 @@ def appsec_policy(config, waf_config_name, policy_name, name_contains, log_level
 @click.option('--activate', metavar='', type=click.Choice(['staging', 'production']), multiple=True, help='Options: staging, production')
 @click.option('--version', metavar='', help='version to add hostname(s) to', default='latest')
 @click.option('--email', metavar='', help='email for activation notifications')
+@no_wait_option
 @log_level_options
 @pass_config
 def appsec_remove(config, **kwargs):
@@ -1624,10 +1625,9 @@ def appsec_remove(config, **kwargs):
                 logger.info(f'WAF Configuration Match Target {policy_name}: No hostnames found')
         # Activate WAF configuration to staging
         if click_args['activate']:
-            for network in click_args['activate']:
-                waf_activation_status = utility_waf_object.updateActivateAndPoll(wrapper_object, onboard_object, network=network.upper())
-                if waf_activation_status is False:
-                    sys.exit(logger.error(f'Unable to activate WAF configuration to {network.upper()} network'))
+            no_wait_activation.fire_appsec_update_activations(
+                utility_waf_object, wrapper_object, onboard_object, click_args['activate'], click_args['no_wait'],
+                activation_manifest.new_manifest_path(account_output))
         else:
             print()
             logger.warning('Activate WAF Configuration Production: SKIPPING')
@@ -1650,9 +1650,10 @@ class Fake:
               help='by command depends on data in CSV input file.     Options: hostname, propertyname')
 @click.option('--email', metavar='', required=False, help='email for activation notifications')
 @click.option('--version-notes', 'note', metavar='', default='Onboard CLI Activation', help='config version notes')
+@no_wait_option
 @log_level_options
 @pass_config
-def appsec_create(config, contract_id, group_id, by, activate, csv, email, note, log_level, verbose):
+def appsec_create(config, contract_id, group_id, by, activate, csv, email, note, no_wait, log_level, verbose):
     """
     Batch create new security configuration, security policy, and policy match target
 
@@ -1759,7 +1760,9 @@ def appsec_create(config, contract_id, group_id, by, activate, csv, email, note,
         # activating
         if activate:
             time.sleep(5)
-            util_waf.activate_and_poll(wrap_api, appsec_onboard, activate)
+            no_wait_activation.fire_appsec_create_activations(
+                util_waf, wrap_api, appsec_onboard, activate, no_wait,
+                activation_manifest.new_manifest_path(account_output))
         util.log_cli_timing()
 
 
