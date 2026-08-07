@@ -912,12 +912,9 @@ class papiFunctions:
 
     def _classify_pmuser_origin_child(self, child: dict, csv_hostnames: set[str]) -> str:
         """
-        Classify a PMUSER_ORIGIN child against a property's (lowercased) CSV
-        hostname set. Returns one of:
-        - 'wildcard'      any hostname value starts with '*.' - always kept, no cpcode
-        - 'full_match'    every hostname value is in csv_hostnames - kept, cpcode candidate
-        - 'partial_match' some but not all values are in csv_hostnames - kept untouched, warned
-        - 'no_match'      no value matches (including a child with no hostname values at all) - pruned
+        Classify a PMUSER_ORIGIN child against a property's CSV hostnames:
+        wildcard, full_match, partial_match, or no_match - see
+        prune_pmuser_origin_children/inject_unique_cpcodes for how each is handled.
         """
         values = self._pmuser_origin_child_hostname_values(child)
         if any(value.startswith('*.') for value in values):
@@ -933,14 +930,9 @@ class papiFunctions:
 
     def prune_pmuser_origin_children(self, property_name: str, rule_tree: dict, csv_hostnames: list[str]) -> list[str]:
         """
-        --unique-cpcode: prune rule_tree's PMUSER_ORIGIN children down to the
-        hostnames this property is actually onboarding (csv_hostnames),
-        mutating rule_tree in place. Wildcard children are always preserved;
-        multi-value children that only partially match are left untouched
-        (with a warning) rather than pruned or modified. A no-op (returns [],
-        no mutation) when rule_tree has no PMUSER_ORIGIN node - see
-        find_pmuser_origin_node. Returns the hostname values actually pruned,
-        for reporting.
+        Prune rule_tree's PMUSER_ORIGIN children to csv_hostnames, mutating in
+        place. Preserves wildcards; warns and skips partial matches. No-op if
+        no PMUSER_ORIGIN node. Returns pruned hostnames.
         """
         pmuser_origin_node = self.find_pmuser_origin_node(rule_tree)
         if not pmuser_origin_node:
@@ -981,14 +973,61 @@ class papiFunctions:
 
     def apply_unique_cpcode(self, property_name: str, rule_tree: dict, csv_hostnames: list[str],
                              enabled: bool) -> list[str]:
-        """
-        convert()'s --unique-cpcode call-site gate. Disabled is a pure no-op
-        (returns [] without even looking at rule_tree); enabled delegates to
-        prune_pmuser_origin_children and returns its pruned-hostname list.
-        """
+        """convert()'s --unique-cpcode prune gate. Disabled is a no-op; enabled delegates to prune_pmuser_origin_children."""
         if not enabled:
             return []
         return self.prune_pmuser_origin_children(property_name, rule_tree, csv_hostnames)
+
+    def inject_unique_cpcodes(self, onboard_object, wrapper_object, property_name: str, rule_tree: dict,
+                               csv_hostnames: list[str], contract_id: str, group_id: str,
+                               product_id: str) -> dict[str, int]:
+        """
+        For each single-value, fully CSV-matched PMUSER_ORIGIN child, search/create
+        a cpcode and inject via inject_cpcode_behavior. Other matches are skipped.
+        Returns {hostname: cpcode}.
+        """
+        pmuser_origin_node = self.find_pmuser_origin_node(rule_tree)
+        if not pmuser_origin_node:
+            return {}
+
+        csv_hostname_set = {hostname.lower() for hostname in csv_hostnames}
+        hostname_cpcodes = {}
+
+        for child in pmuser_origin_node.get('children', []):
+            if self._classify_pmuser_origin_child(child, csv_hostname_set) != 'full_match':
+                continue
+
+            values = self._pmuser_origin_child_hostname_values(child)
+            if len(values) != 1:
+                logger.warning(
+                    f"{property_name}: PMUSER_ORIGIN child '{child.get('name')}' matches multiple CSV "
+                    f'hostnames {values} - ambiguous cpcode name, no cpcode injected, review manually'
+                )
+                continue
+
+            cpcode_name = values[0]
+            cpcode = self.search_for_cpcode(onboard_object, wrapper_object, cpcode_name,
+                                            contract_id, group_id, product_id, 'PMUSER_ORIGIN')
+            if not cpcode:
+                cpcode = self.create_new_cpcode(onboard_object, wrapper_object, cpcode_name,
+                                                contract_id, group_id, product_id, 'PMUSER_ORIGIN')
+            self.inject_cpcode_behavior(child, cpcode)
+            hostname_cpcodes[cpcode_name] = cpcode
+
+        return hostname_cpcodes
+
+    def apply_unique_cpcode_injection(self, onboard_object, wrapper_object, property_name: str, rule_tree: dict,
+                                       csv_hostnames: list[str], contract_id: str, group_id: str, product_id: str,
+                                       enabled: bool) -> dict[str, int]:
+        """
+        convert()'s --unique-cpcode injection call-site gate, mirroring
+        apply_unique_cpcode for pruning. Disabled is a pure no-op; enabled
+        delegates to inject_unique_cpcodes.
+        """
+        if not enabled:
+            return {}
+        return self.inject_unique_cpcodes(onboard_object, wrapper_object, property_name, rule_tree,
+                                          csv_hostnames, contract_id, group_id, product_id)
 
     def get_path_value(self, single_rule: dict) -> str:
         if len(single_rule['criteria']) > 0:

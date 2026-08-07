@@ -400,6 +400,10 @@ def convert(config, **kwargs):
 
             property_dict[property]['prunedHostnames'] = util_papi.apply_unique_cpcode(
                 property, original_ruletree, property_dict[property]['hostnames'], click_args['unique_cpcode'])
+            property_dict[property]['uniqueCpcodes'] = util_papi.apply_unique_cpcode_injection(
+                onboard, papi, property, original_ruletree, property_dict[property]['hostnames'],
+                onboard_object.contract_id, onboard_object.group_id, property_dict[property]['product'],
+                click_args['unique_cpcode'])
 
             property_dict[property]['ruleTree'] = {'rules': original_ruletree}
             property_dict[property]['comments'] = comments
