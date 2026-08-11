@@ -1,4 +1,4 @@
-"""Ticket 01: `--preview` flag + reuse of `batch_create_update_pm_convert`'s existing
+"""`--preview` flag + reuse of `batch_create_update_pm_convert`'s existing
 `dryrun` gate + the existing-property prompt fix.
 
 Two seams under test:

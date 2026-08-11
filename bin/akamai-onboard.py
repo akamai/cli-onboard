@@ -255,9 +255,8 @@ def help(ctx, log_level, verbose):
 @click.option('--dryrun', metavar='', is_flag=True, default=False, help='admin - test config')
 @click.option('--prefix', metavar='', help='admin - required for dryrun.')
 @click.option('--preview', metavar='', is_flag=True, default=False,
-              help='Skip creating the property/edge-hostname/hostname-association on Akamai '
-                   '(ruletree JSON is still written to logs/). Runs against real --csv hostnames, '
-                   'independent of --dryrun/--prefix. Note: cpCode creation is not yet gated by this flag.')
+              help='Preview what would be created on Akamai without creating anything for real - '
+                   'writes the ruletree JSON using your real --csv hostnames.')
 @click.option('--launch/--no-launch', default=True, metavar='', help='automatically open excel application')
 @no_wait_option
 @log_level_options
@@ -383,6 +382,13 @@ def convert(config, **kwargs):
                 original_ruletree = dsa_rule_tree
 
             level0 = original_ruletree['rules']
+
+            if click_args['preview'] and not util_papi.has_hostnames_beyond_csv(
+                    level0, property_dict[property]['hostnames']):
+                logger.warning(f'{property}: --preview skipped - the source ruletree only references '
+                                'hostnames already in --csv, nothing extra to preview')
+                continue
+
             host = property_dict[property]['hostnames'][0]
             cpcode_name = f'{host}'
             if not click_args['use_cpcode']:
@@ -391,15 +397,11 @@ def convert(config, **kwargs):
                     custom_solution = True
 
                 logger.debug(f'{onboard_object.group_id=}')
-                cpcode = util_papi.search_for_cpcode(onboard, papi, cpcode_name,
+                cpcode = util_papi.resolve_root_cpcode(onboard, papi, cpcode_name,
                                                         onboard_object.contract_id,
                                                         onboard_object.group_id,
-                                                        property_dict[property]['product'], 'default')
-                if not cpcode:
-                    cpcode = util_papi.create_new_cpcode(onboard, papi, cpcode_name,
-                                                        onboard_object.contract_id,
-                                                        onboard_object.group_id,
-                                                        property_dict[property]['product'], 'default')
+                                                        property_dict[property]['product'],
+                                                        property, host, preview=click_args['preview'])
             else:
                 cpcode = int(click_args['use_cpcode'])
             original_ruletree = util_papi.inject_cpcode_behavior(level0, cpcode)
@@ -410,7 +412,7 @@ def convert(config, **kwargs):
             property_dict[property]['uniqueCpcodes'] = util_papi.apply_unique_cpcode_injection(
                 onboard, papi, property, original_ruletree, property_dict[property]['hostnames'],
                 onboard_object.contract_id, onboard_object.group_id, property_dict[property]['product'],
-                click_args['unique_cpcode'])
+                click_args['unique_cpcode'], preview=click_args['preview'])
             all_smoketest.extend(util_papi.unique_cpcode_smoketest_rows(property_dict[property]['uniqueCpcodes']))
 
             property_dict[property]['prunedRuleChildren'] = util_papi.apply_prune_hostname_rules(

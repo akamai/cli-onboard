@@ -203,6 +203,27 @@ class papiFunctions:
             )
         return int(existing_cpcode)
 
+    def _search_or_create_cpcode(self, onboard_object, wrapper_object, cpcode_name, contract_id, group_id,
+                                 product_id, path, subject: str, preview: bool) -> int:
+        """Looks for an existing cpCode and creates one if needed - unless this is a preview run, where it just warns instead."""
+        cpcode = self.search_for_cpcode(onboard_object, wrapper_object, cpcode_name,
+                                        contract_id, group_id, product_id, path)
+        if not cpcode:
+            if preview:
+                logger.warning(f'{subject}: no existing cpCode found - preview run, '
+                                'a real cpCode would be created here on a non-preview run')
+            else:
+                cpcode = self.create_new_cpcode(onboard_object, wrapper_object, cpcode_name,
+                                                contract_id, group_id, product_id, path)
+        return cpcode
+
+    def resolve_root_cpcode(self, onboard_object, wrapper_object, cpcode_name, contract_id, group_id,
+                            product_id, property_name: str, host: str, preview: bool = False) -> int:
+        """Picks the cpCode for a property: reuses an existing one, or creates a new one unless this is a preview run."""
+        return self._search_or_create_cpcode(onboard_object, wrapper_object, cpcode_name,
+                                             contract_id, group_id, product_id, 'default',
+                                             f'{property_name}/{host}', preview)
+
     def create_update_pm(self, config, onboard_object, wrapper_object, utility_object, cli_mode: str | None = None):
         """
         Function with multiple goals:
@@ -984,12 +1005,8 @@ class papiFunctions:
 
     def inject_unique_cpcodes(self, onboard_object, wrapper_object, property_name: str, rule_tree: dict,
                                csv_hostnames: list[str], contract_id: str, group_id: str,
-                               product_id: str) -> dict[str, int]:
-        """
-        For each single-value, fully CSV-matched PMUSER_ORIGIN child, search/create
-        a cpcode and inject via inject_cpcode_behavior. Other matches are skipped.
-        Returns {hostname: cpcode}.
-        """
+                               product_id: str, preview: bool = False) -> dict[str, int]:
+        """Gives each matched hostname its own cpCode, reusing or creating one - unless this is a preview run."""
         pmuser_origin_node = self.find_pmuser_origin_node(rule_tree)
         if not pmuser_origin_node:
             return {}
@@ -1010,11 +1027,10 @@ class papiFunctions:
                 continue
 
             cpcode_name = values[0]
-            cpcode = self.search_for_cpcode(onboard_object, wrapper_object, cpcode_name,
-                                            contract_id, group_id, product_id, 'PMUSER_ORIGIN')
-            if not cpcode:
-                cpcode = self.create_new_cpcode(onboard_object, wrapper_object, cpcode_name,
-                                                contract_id, group_id, product_id, 'PMUSER_ORIGIN')
+            subject = f"{property_name}: PMUSER_ORIGIN child '{cpcode_name}'"
+            cpcode = self._search_or_create_cpcode(onboard_object, wrapper_object, cpcode_name,
+                                                    contract_id, group_id, product_id, 'PMUSER_ORIGIN',
+                                                    subject, preview)
             self.inject_cpcode_behavior(child, cpcode)
             hostname_cpcodes[cpcode_name] = cpcode
 
@@ -1022,16 +1038,12 @@ class papiFunctions:
 
     def apply_unique_cpcode_injection(self, onboard_object, wrapper_object, property_name: str, rule_tree: dict,
                                        csv_hostnames: list[str], contract_id: str, group_id: str, product_id: str,
-                                       enabled: bool) -> dict[str, int]:
-        """
-        convert()'s --unique-cpcode injection call-site gate, mirroring
-        apply_unique_cpcode for pruning. Disabled is a pure no-op; enabled
-        delegates to inject_unique_cpcodes.
-        """
+                                       enabled: bool, preview: bool = False) -> dict[str, int]:
+        """Turns on per-hostname cpCodes when --unique-cpcode is enabled; does nothing otherwise."""
         if not enabled:
             return {}
         return self.inject_unique_cpcodes(onboard_object, wrapper_object, property_name, rule_tree,
-                                          csv_hostnames, contract_id, group_id, product_id)
+                                          csv_hostnames, contract_id, group_id, product_id, preview=preview)
 
     def unique_cpcode_smoketest_rows(self, unique_cpcodes: dict[str, int]) -> list[list]:
         """Report rows (hostname, hostname, cpcode), one per --unique-cpcode injected hostname."""
@@ -1125,6 +1137,23 @@ class papiFunctions:
         if not enabled:
             return []
         return self.prune_hostname_scoped_children(property_name, rule_tree, csv_hostnames)
+
+    def has_hostnames_beyond_csv(self, rule_tree: dict, csv_hostnames: list[str]) -> bool:
+        """True if the ruletree mentions any hostname that is not in this run's CSV file."""
+        csv_hostname_set = {hostname.lower() for hostname in csv_hostnames}
+        ruletree_hostnames = set()
+
+        pmuser_origin_node = self.find_pmuser_origin_node(rule_tree)
+        if pmuser_origin_node:
+            for child in pmuser_origin_node.get('children', []):
+                ruletree_hostnames.update(self._pmuser_origin_child_hostname_values(child))
+
+        for container in self.find_hostname_scoped_containers(rule_tree):
+            for child in container.get('children', []):
+                ruletree_hostnames.update(self._hostname_scoped_child_values(child))
+
+        extra = {hostname.lower() for hostname in ruletree_hostnames} - csv_hostname_set
+        return bool(extra)
 
     def get_path_value(self, single_rule: dict) -> str:
         if len(single_rule['criteria']) > 0:
