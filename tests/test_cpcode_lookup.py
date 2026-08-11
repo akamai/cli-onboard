@@ -20,9 +20,8 @@ class _FakeResponse:
 
 
 class _FakeWrapper:
-    """Records the cpcode_name it was called with so tests can confirm
-    sanitization happened before the (faked) PAPI call, without hitting a
-    real API.
+    """A fake connection that records what CP code name it was given, so a test
+    can confirm names get cleaned up before use.
     """
 
     def __init__(self, response):

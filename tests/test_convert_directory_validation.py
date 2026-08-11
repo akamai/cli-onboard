@@ -1,16 +1,9 @@
-"""TC-C: `json_input_file_validator` (Local).
-
-Correction vs. the original plan draft: template files are matched by *propertyName*
-(falling back to hostname when no propertyName is given), one JSON file per CSV row —
-not one JSON file per product as originally assumed. `csv_2_property_dict_convert`
-sets each row's `templateName` from `propertyName`; `json_input_file_validator` then
-looks for `<templateName>.json` in --directory.
-"""
+"""Checks that the folder of template files a user provides has a matching template for every property or hostname."""
 from __future__ import annotations
 
 
 class FakeOnboardObject:
-    """Minimal stand-in carrying only what json_input_file_validator reads/writes."""
+    """A minimal stand-in holding just the data needed to check template files."""
 
     def __init__(self, csv_dict, source_directory):
         self.csv_dict = csv_dict
@@ -57,10 +50,7 @@ def test_directory_path_not_found_errors(util, tmp_path):
 
 
 def test_falls_back_to_hostname_when_no_template_name(util, template_dir_factory):
-    """Not in the original plan, but load_csv_input never sets `templateName` for a row
-    with no propertyName until csv_2_property_dict_convert runs — json_input_file_validator
-    has an explicit KeyError fallback to `hostname` for that case, worth covering directly.
-    """
+    """When a CSV row has no property name, the template lookup should fall back to using the hostname instead."""
     directory = template_dir_factory(['www.example.com'])
     onboard_object = FakeOnboardObject(
         csv_dict=[{'hostname': 'www.example.com'}],  # no templateName key at all

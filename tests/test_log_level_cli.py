@@ -1,4 +1,4 @@
-"""--log-level/--debug/--verbose across the cli group and all subcommands."""
+"""Checks that logging verbosity options work consistently across the main command and all its subcommands."""
 from __future__ import annotations
 
 import logging
@@ -22,16 +22,14 @@ _REQUIRED_ARGS = {
     'appsec-create': ['--contract-id', 'ctr_1', '--group-id', 'grp_1', '--csv', 'x.csv'],
 }
 
-# Ticket 03's targets: subcommands using **kwargs, so log_level/debug/verbose land
-# there for free with no signature change.
+# Subcommands that accept open-ended options, so logging flags apply automatically.
 _KWARGS_SUBCOMMANDS = ['batch-create', 'sbd-status', 'sbd-precheck', 'appsec-update', 'appsec-remove']
 
-# Ticket 04's targets: fixed-signature subcommands that call init_config() and so
-# can be exercised via the same missing-edgerc trick as _KWARGS_SUBCOMMANDS.
+# Subcommands with a fixed set of options that also load credentials, tested the same way.
 _FIXED_SIGNATURE_SUBCOMMANDS = ['multi-hosts', 'single-host', 'create', 'appsec-policy', 'appsec-create']
 
-# Ticket 04's remaining targets: no init_config() call, so they run to completion
-# instead of failing on a missing edgerc - verified separately below.
+# Subcommands that don't need credentials, so they run to completion instead of
+# failing early - verified separately below.
 _NO_INIT_CONFIG_SUBCOMMANDS = ['fetch-sample-templates', 'help']
 
 
@@ -45,7 +43,7 @@ def _invoke(runner, cli, tmp_path, subcommand, extra_group_args=(), extra_subcom
     return result
 
 
-# --- convert (ticket 02) ---------------------------------------------------
+# --- convert -----------------------------------------------------------------
 
 def test_no_logging_flags_leaves_root_at_info(runner, cli, tmp_path, restore_logging_state):
     # Matches the real bootstrap: setup_logger() always sets root to INFO before
@@ -121,7 +119,7 @@ def test_help_shows_logging_options_on_convert(runner, cli):
         assert option in result.output
 
 
-# --- ticket 03: remaining **kwargs subcommands ------------------------------
+# --- subcommands with flexible argument handling -----------------------------
 
 @pytest.mark.parametrize('subcommand', _KWARGS_SUBCOMMANDS)
 def test_kwargs_subcommand_no_flags_leaves_root_at_info(runner, cli, tmp_path, restore_logging_state, subcommand):
@@ -159,7 +157,7 @@ def test_kwargs_subcommand_help_shows_logging_options(runner, cli, subcommand):
         assert option in result.output
 
 
-# --- ticket 04: remaining fixed-signature subcommands -----------------------
+# --- subcommands with a fixed set of options ----------------------------------
 
 @pytest.mark.parametrize('subcommand', _FIXED_SIGNATURE_SUBCOMMANDS)
 def test_fixed_signature_subcommand_no_flags_leaves_root_at_info(runner, cli, tmp_path, restore_logging_state, subcommand):
@@ -197,7 +195,7 @@ def test_fixed_signature_subcommand_help_shows_logging_options(runner, cli, subc
         assert option in result.output
 
 
-# --- ticket 04: fetch-sample-templates and help (no init_config() call) -----
+# --- fetch-sample-templates and help (no credential loading required) --------
 
 @pytest.mark.parametrize('subcommand', _NO_INIT_CONFIG_SUBCOMMANDS)
 def test_no_init_config_subcommand_no_flags_leaves_root_at_info(runner, cli, restore_logging_state, subcommand):

@@ -1,10 +1,4 @@
-"""
-Covers the `no_wait` seam added to utility_waf.py's updateActivateAndPoll
-(appsec-update/appsec-remove) and activate_and_poll/waf_poll_activation
-(appsec-create) -- issue 06 of the skip-activation-polling spec. These are
-the WAF-only commands: no paired delivery activation, so no ordering gate to
-drop, just "skip the poll, return the ID."
-"""
+"""Checks that WAF-only security activations can skip waiting and still report success right away."""
 from __future__ import annotations
 
 from types import SimpleNamespace
@@ -14,10 +8,7 @@ import utility_waf
 
 
 class FakeUpdateWrapper:
-    """Stands in for the PAPI/WAF wrapper used by updateActivateAndPoll: an
-    activateWafPolicy response keyed on `.ok`, and a pollWafActivationStatus
-    response for the polling loop.
-    """
+    """A stand-in service that simulates a security activation request and its status check for testing."""
 
     def __init__(self, activate_ok=True, poll_status='ACTIVATED', poll_ok=True):
         self.activate_ok = activate_ok
@@ -75,10 +66,7 @@ class TestUpdateActivateAndPollNoWait:
 
 
 class FakeAppsecCreateWrapper:
-    """Stands in for the wrapper used by activation_detail/waf_poll_activation
-    (appsec-create's batch path): activateWafPolicy keyed on `.ok`, one
-    canned response for every item in the batch.
-    """
+    """A stand-in service that simulates activation requests and status checks for a batch of security configs."""
 
     def __init__(self, activate_ok=True):
         self.activate_ok = activate_ok
@@ -120,15 +108,10 @@ class TestWafPollActivationNoWait:
 
 
 class TestActivateAndPollNoWait:
-    """activation_detail (submission) always sleeps 1s as a pre-existing
-    rate-limit between submissions -- unrelated to no_wait and not asserted
-    against here. What no_wait must skip is the 60s polling loop in
-    waf_poll_activation, observed via poll_call_count.
-    """
+    """Confirms the fast-skip option avoids the long wait for status confirmation while still submitting the request."""
 
     def test_production_activate_skips_only_the_production_poll(self, monkeypatch):
-        """activate='production' does staging (always polls) then production
-        (no_wait skips the poll) -- staging polling must still happen."""
+        """Checks that activating both staging and production only skips the wait for production, not staging."""
         monkeypatch.setattr('time.sleep', lambda *_: None)
         wrapper = FakeAppsecCreateWrapper()
         appsec_onboard = [_appsec_item()]
@@ -165,12 +148,7 @@ class TestActivateAndPollNoWait:
 
 
 class TestActivationDetailNetwork:
-    """Regression test for the bug where activation_detail hardcoded
-    network='STAGING' regardless of which leg (staging/production) was
-    being activated -- appsec-create --activate production silently
-    re-submitted a second staging activation instead of a real production
-    one. See .scratch/fix-appsec-create-production-network-spec.md.
-    """
+    """Checks that a production activation request is actually sent to production, not accidentally sent to staging twice."""
 
     def test_production_leg_submits_to_production_network(self, monkeypatch):
         monkeypatch.setattr('time.sleep', lambda *_: None)

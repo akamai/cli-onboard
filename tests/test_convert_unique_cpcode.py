@@ -194,10 +194,7 @@ class TestPruneCsvUnmatchedPmuserOriginChildren:
 
 
 class TestApplyUniqueCpcode:
-    """convert()'s actual call-site glue: gates prune_pmuser_origin_children
-    behind the --unique-cpcode flag value. This is what feeds
-    property_dict[property]['prunedHostnames'] in bin/akamai-onboard.py.
-    """
+    """Checks that unused origin hostnames are only cleaned up when the unique-CP-code option is turned on."""
 
     def test_disabled_is_a_noop_and_never_touches_the_rule_tree(self, papi):
         rule_tree = {
@@ -243,7 +240,7 @@ def _onboard_object(click_args_factory, config_stub):
 
 
 class _RecordingCpcodeWrapper:
-    """Fake PAPI wrapper for search/create cpcode calls, keyed by cpcode_name so one test can drive several hostnames."""
+    """Stand-in billing-code service that records which lookups and creations were requested, for test verification."""
 
     def __init__(self, search_responses=None, create_responses=None):
         self._search_responses = search_responses or {}
@@ -275,7 +272,7 @@ def _created_response(cpcode_id):
 
 
 class TestInjectUniqueCpcodes:
-    """Exercises the real inject_cpcode_behavior/template load, so CWD is pinned to repo root, not ~/.akamai-cli."""
+    """Checks that each qualifying hostname gets its own dedicated billing code assigned, reusing or creating as needed."""
 
     @pytest.fixture(autouse=True)
     def _repo_root_cwd(self, monkeypatch):
@@ -402,10 +399,7 @@ class TestInjectUniqueCpcodes:
 
 
 class TestApplyUniqueCpcodeInjection:
-    """convert()'s actual injection call-site glue: gates inject_unique_cpcodes
-    behind the --unique-cpcode flag value, mirroring TestApplyUniqueCpcode for
-    the pruning half.
-    """
+    """Checks that assigning dedicated billing codes only happens when the unique-CP-code option is turned on."""
 
     @pytest.fixture(autouse=True)
     def _repo_root_cwd(self, monkeypatch):
@@ -444,7 +438,7 @@ class TestApplyUniqueCpcodeInjection:
 
 
 class TestUniqueCpcodeSmoketestRows:
-    """Turns ticket 03's {hostname: cpcode} map into extra rows for the 'cpcodes' report sheet."""
+    """Checks that each hostname/billing-code pairing turns into a correctly formatted extra report row."""
 
     def test_empty_dict_returns_no_rows(self, papi):
         assert papi.unique_cpcode_smoketest_rows({}) == []
@@ -464,7 +458,7 @@ class TestUniqueCpcodeSmoketestRows:
 
 
 class TestSplitElementsNewlineWithcommaForPrunedHostnames:
-    """First direct coverage of the formatter the new prunedHostnames column reuses from hostnames/edgeHostnames."""
+    """Checks that the removed-hostnames list is formatted for the report the same way other hostname lists are."""
 
     def test_single_pruned_hostname_has_no_numbering_prefix(self):
         import utility

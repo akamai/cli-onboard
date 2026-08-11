@@ -1,7 +1,4 @@
-"""end-of-run --preview messaging - an unmissable banner in the
-terminal and a PREVIEW_-prefixed Excel filename, so a --preview run's output
-is never mistaken for a real onboarding run.
-"""
+"""Checks that preview runs show a clear warning banner and label their report file so it's never mistaken for a real run."""
 from __future__ import annotations
 
 import logging

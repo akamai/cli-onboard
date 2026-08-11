@@ -1,22 +1,4 @@
-"""
-Regression test for batch_create's WAF production activation gate
-(bin/akamai-onboard.py, the non-`--no-wait` production block).
-
-The gate used to read `activation_status == 'ACTIVE'`, but `activation_status`
-here is `utility_papi.papiFunctions.batch_activate_and_poll`'s
-`all_properties_active` return value -- a plain bool, never the string
-'ACTIVE' -- so the comparison was always False and WAF production activation
-silently never fired, even when `--activate waf-production` was requested and
-delivery production activation genuinely succeeded. See
-.scratch/fix-batch-create-waf-production-gate-spec.md.
-
-batch_create has no dependency-injection seam around this block (it's inline
-in a large function alongside real cpcode/property/WAF-config API calls), so
-per that spec's Testing Decisions, this exercises the corrected boolean
-condition directly rather than forcing a full CLI-level run -- plus a direct
-check against the real function's source, which is what actually would have
-caught the original `== 'ACTIVE'` bug.
-"""
+"""Checks that WAF production security activation actually runs when requested and the main site activation succeeded."""
 from __future__ import annotations
 
 import inspect
@@ -46,9 +28,7 @@ class TestBatchCreateWafProductionGate:
         assert _should_activate_waf_production(onboard_object, True) is False
 
     def test_source_no_longer_compares_activation_status_to_active_string(self, akamai_onboard_module):
-        """Guards against literally reintroducing the original bug: a bool
-        (`activation_status`) compared to the string 'ACTIVE', which is
-        always False regardless of whether production activation succeeded."""
+        """Checks that the success check wasn't accidentally reverted to a broken comparison that would always report failure."""
         source = inspect.getsource(akamai_onboard_module.batch_create.callback)
 
         assert "activation_status == 'ACTIVE'" not in source

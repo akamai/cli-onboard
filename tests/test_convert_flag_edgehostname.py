@@ -1,10 +1,4 @@
-"""TC-D flag logic, Group B: utility.csv_2_property_dict_convert() (Local, §5).
-
-Per-row edge hostname resolution — how edge_hostname_mode interacts with the CSV's
-`edgeHostname` column. Split out of test_convert_flag_logic.py; see
-test_convert_flag_constructor.py, test_convert_flag_setup_validation.py, and
-test_convert_flag_cli_guards.py for the other three groups.
-"""
+"""Checks how each row's edge hostname is worked out based on the chosen certificate/hostname settings and the CSV data."""
 from __future__ import annotations
 
 import logging
@@ -52,13 +46,7 @@ def test_cps_placeholder_mode_synthesizes_edgehostname_when_column_missing(util,
 
 
 def test_row_missing_product_secureNetwork_and_edgehostname_columns_defaults_all_three(util, click_args_factory, config_stub):
-    """Ticket 03's row-shape refactor of csv_2_property_dict_convert() must not
-    change defaulting behavior. Requested for test_convert_csv_validation.py,
-    but that file covers csv_validator_convert() (cerberus schema validation) -
-    a different function from csv_2_property_dict_convert() (the per-row
-    defaulting this refactor touches), so this lives alongside this file's
-    other csv_2_property_dict_convert() coverage instead.
-    """
+    """Checks that a row missing several optional CSV columns still gets sensible default values for all of them."""
     click_args = click_args_factory(cert_mode='SBD', enrollment_id=None, use_existing_edgehostname=None)
     onboard_object = onboard_convert.onboard(config_stub, click_args)
     onboard_object.csv_dict = [{'hostname': 'www.example.com'}]  # only hostname present
@@ -69,11 +57,7 @@ def test_row_missing_product_secureNetwork_and_edgehostname_columns_defaults_all
 
 
 def test_missing_secureNetwork_column_carries_over_previous_rows_ehn_suffix(util, click_args_factory, config_stub):
-    """Documents a subtle, deliberately-preserved behavior: ehn_suffix only resets
-    when a row's secureNetwork column is *present* (even with an unrecognized
-    value) - a row missing the column entirely keeps whatever suffix the
-    previous row resolved, rather than resetting to the network-wide default.
-    """
+    """Checks that a row with no security-network column keeps the previous row's edge hostname suffix instead of resetting it."""
     click_args = click_args_factory(cert_mode='SBD', enrollment_id=None, use_existing_edgehostname=None)
     onboard_object = onboard_convert.onboard(config_stub, click_args)
     onboard_object.csv_dict = [
@@ -95,19 +79,7 @@ def test_csv_mode_missing_edgehostname_column_errors(util, click_args_factory, c
 
 
 def test_explicit_ehn_name_is_never_actually_applied(util, click_args_factory, config_stub, caplog):
-    """Documents a discovered bug, not desired behavior.
-
-    The original plan assumed `--use-existing-edgehostname my.edgekey.net` (an
-    explicit single name) is a Positive case. Tracing the real code shows it isn't:
-    bin/akamai-onboard.py's convert() only copies a row's `edgeHostname` value into
-    the working dict when `click_args['use_existing_edgehostname'] == 'CSV'`
-    (akamai-onboard.py:265) — for any other explicit string value, that condition is
-    always False, so the explicit name is stored on the onboard object but never
-    copied anywhere csv_2_property_dict_convert can see it. Since edge_hostname_mode
-    is still 'use_existing_edgehostname', the row hits the same
-    "edgeHostname column must exist" exit as TC-D14 — every run with an explicit
-    single edge hostname name currently fails. Flip this test if that gets fixed.
-    """
+    """Documents a known bug: providing one specific existing edge hostname by name currently still fails with a missing-column error."""
     click_args = click_args_factory(use_existing_edgehostname='my.edgekey.net')
     onboard_object = onboard_convert.onboard(config_stub, click_args)
     # Mirrors exactly what convert() hands csv_2_property_dict_convert for this case:

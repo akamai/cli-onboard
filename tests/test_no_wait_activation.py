@@ -1,14 +1,4 @@
-"""
-Covers the `no_wait` seam added to papiFunctions.activate_and_poll and
-wafFunctions.activateAndPoll (issue 01 of the skip-activation-polling spec,
-.scratch/skip-activation-polling-spec.md):
-
-- no_wait=True must submit the activation and return (bool, activation_id)
-  immediately, without ever polling/sleeping.
-- no_wait=False (the default, and the only mode every other caller uses)
-  must be byte-for-byte unchanged: same plain bool return, same polling
-  behavior.
-"""
+"""Checks that skipping the wait-for-completion step still submits activations correctly, while normal runs behave as before."""
 from __future__ import annotations
 
 from types import SimpleNamespace
@@ -19,9 +9,7 @@ import utility_waf
 
 
 class FakePapiWrapper:
-    """Stands in for wrapper_api's PAPI wrapper: records calls, plays back
-    canned activateConfiguration/pollActivationStatus responses.
-    """
+    """A stand-in delivery-activation service that records calls and returns preset responses."""
 
     def __init__(self, activate_status_code=201, poll_statuses=None):
         self.activate_status_code = activate_status_code

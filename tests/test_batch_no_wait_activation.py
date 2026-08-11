@@ -1,15 +1,4 @@
-"""
-Covers the `no_wait` seam added to poll.py's pollActivation and
-utility_papi.py's batch_activate_and_poll (issue 04 of
-.scratch/skip-activation-polling-spec.md) -- the batch/multi-property
-counterpart to issue 01's single-property no_wait wiring.
-
-no_wait=True must submit every property in the batch, then return
-(submitted: bool, activationDict) immediately with activationId populated
-per property, without ever polling/sleeping. no_wait=False (the default, and
-the only mode every pre-existing caller uses) must be byte-for-byte
-unchanged: same 4-tuple return, same polling behavior.
-"""
+"""Checks that activating a batch of properties can skip waiting for confirmation and still report submission results correctly."""
 from __future__ import annotations
 
 from types import SimpleNamespace
@@ -20,11 +9,7 @@ import utility_papi
 
 
 class FakeBatchPapiWrapper:
-    """Stands in for wrapper_api's PAPI wrapper across a batch of properties:
-    records every activateConfiguration call, plays back one canned
-    activateConfiguration response per property (by propertyId), and one
-    canned pollActivationStatus response per property (by activationId).
-    """
+    """A stand-in service that simulates submitting and checking activation requests for a batch of properties."""
 
     def __init__(self, activate_status_codes: dict[str, int] | None = None,
                  poll_statuses: dict[str, str] | None = None):

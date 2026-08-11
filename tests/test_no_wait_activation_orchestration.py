@@ -1,25 +1,4 @@
-"""
-Covers bin/no_wait_activation.py -- the shared --no-wait production-activation
-orchestration extracted once commands' inline blocks turned out to be
-identical or shaped alike:
-
-- fire_single_property_production (single-host/multi-hosts): delivery
-  activation always fires (the caller already gated on
-  activate_property_production before calling this function); WAF activation
-  fires only when create_new_security_config and activate_waf_policy_production
-  are both true, and fires unconditionally once enabled -- even if the
-  delivery submission itself failed, so one activation's outcome never blocks
-  the other.
-- fire_appsec_update_activations (appsec-update/appsec-remove): loops over
-  --activate's requested networks; only 'production' is affected by no_wait.
-- fire_appsec_create_activations (appsec-create): delegates to
-  wafFunctions.activate_and_poll for the actual activation (staging always
-  polls, production only reached when activate == 'production'), then writes
-  manifest rows for whichever configs submitted successfully under no_wait.
-
-Each successful submission writes a manifest row; failures are logged and
-skipped.
-"""
+"""Checks that activations submitted without waiting still get recorded correctly, and failures are skipped rather than blocking other work."""
 from __future__ import annotations
 
 import csv
@@ -101,8 +80,7 @@ class TestFireSinglePropertyProduction:
         assert util_waf.calls == [(onboard, 'PRODUCTION', True)]
 
     def test_waf_fires_even_when_delivery_submission_fails(self, tmp_path):
-        """Per the 'WAF fires regardless of delivery outcome' decision -- WAF
-        production activation is not gated on delivery's result."""
+        """A failed delivery activation should not stop the security (WAF) activation from still going out."""
         onboard = _onboard()
         util_papi = FakePapi(submitted=False)
         util_waf = FakeWaf(submitted=True, activation_id='act_1')
@@ -158,9 +136,7 @@ class TestFireSinglePropertyProduction:
 
 
 class FakeAppsecWaf:
-    """Stands in for utility_waf.wafFunctions for
-    fire_appsec_update_activations: records every updateActivateAndPoll call
-    and plays back a canned result keyed on network."""
+    """A stand-in security service that records each activation request and returns a preset result per network."""
 
     def __init__(self, production_result=(True, 555)):
         self.production_result = production_result
@@ -245,10 +221,7 @@ class TestFireAppsecUpdateActivations:
 
 
 class FakeAppsecCreateWaf:
-    """Stands in for wafFunctions.activate_and_poll for
-    fire_appsec_create_activations: mutates appsec_onboard in place (setting
-    activation_id/activation_status per item), matching how the real
-    activation_detail/waf_poll_activation pair it wraps behaves."""
+    """A stand-in security service that fills in an activation ID and status for each config, like the real service would."""
 
     def __init__(self, activation_id=888, status='PENDING'):
         self.activation_id = activation_id

@@ -185,10 +185,7 @@ class TestFindHostnameScopedContainers:
 
 
 class TestApplyPruneHostnameRules:
-    """convert()'s --prune-hostname-rules call-site glue: gates prune_hostname_scoped_children
-    behind the flag value. This is what feeds property_dict[property]['prunedRuleChildren']
-    in bin/akamai-onboard.py.
-    """
+    """Checks that the hostname-rule cleanup only runs when the corresponding option is turned on."""
 
     def test_disabled_is_a_noop_and_never_touches_the_rule_tree(self, papi):
         rule_tree = {
@@ -415,11 +412,7 @@ class TestPruneHostnameScopedChildren:
 
 
 class TestPruneHostnameScopedChildrenAgainstRealRedirectRulesShape:
-    """Grounded against account.mrcooper.com.json's actual Redirect Rules node
-    (19 children under rules.children[6], all matchVariable/PMUSER_FULL_URL) -
-    reproduced here as a literal fixture rather than read from that file, since
-    it lives in a separate, unrelated repo outside cli-onboard.
-    """
+    """Checks the cleanup logic against a realistic, real-world set of redirect rules."""
 
     @staticmethod
     def _full_url_child(name, values, extra_criteria=None):
@@ -494,10 +487,7 @@ class TestPruneHostnameScopedChildrenAgainstRealRedirectRulesShape:
 
 
 class TestPrunedRuleChildrenReportFormatting:
-    """Closes ticket 03's 'the report column reflects ticket 02's prune list
-    correctly' criterion: prunes a realistic container and checks the result
-    renders through the same formatter prunedHostnames already uses.
-    """
+    """Checks that removed rules are listed in the report using the same readable format as other report columns."""
 
     def test_pruned_hostnames_render_with_the_report_formatter(self, papi):
         import utility
@@ -520,10 +510,7 @@ class TestPrunedRuleChildrenReportFormatting:
 
 
 class TestUniqueCpcodeAndPruneHostnameRulesAreIndependent:
-    """Ticket 03's 'prunedRuleChildren and prunedHostnames stay independent
-    columns... never merged' criterion, exercised at the function level -
-    the same two gate functions convert() calls to build each column.
-    """
+    """Checks that the two cleanup options track their own separate lists and never mix results together."""
 
     def test_both_flags_enabled_together_produce_two_independent_prune_lists(self, papi):
         rule_tree = {

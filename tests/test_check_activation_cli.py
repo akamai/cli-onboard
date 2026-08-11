@@ -1,11 +1,4 @@
-"""
-Drives the real `check-activation` CLI command (issues 02, 03, and 08 of
-.scratch/skip-activation-polling-spec.md) through CliRunner, with the network
-seam (wrapper_api.apiCallsWrapper.pollActivationStatus/pollWafActivationStatus)
-replaced by monkeypatched stand-ins -- init_config()'s edgerc/session setup is
-local/synchronous (see fake_edgerc), so nothing else needs mocking to reach
-the command's own logic.
-"""
+"""Runs the check-activation command end to end with a fake activation-status service, to confirm it reports results correctly."""
 from __future__ import annotations
 
 from types import SimpleNamespace
@@ -144,8 +137,7 @@ def test_delivery_row_without_contract_and_group_exits_non_zero(runner, cli, fak
 
 
 def _stub_sequenced_poll_activation_status(sequence_by_activation_id):
-    """Like _stub_poll_activation_status, but advances one step per call so
-    --wait can be exercised transitioning from pending to active."""
+    """Simulates a status changing over time, so waiting-for-completion behavior can be tested."""
     call_index: dict[str, int] = {}
 
     def _poll(self, contractId, groupId, propertyId, activationId):

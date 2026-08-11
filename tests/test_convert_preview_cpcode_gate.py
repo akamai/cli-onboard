@@ -1,13 +1,4 @@
-"""Block cpCode creation (root + --unique-cpcode) under --preview, plus
-an added precondition: --preview only does anything for a property whose source
-ruletree references hostnames beyond that property's --csv rows.
-
-Two seams under test:
-1. resolve_root_cpcode / inject_unique_cpcodes: search always runs, create only
-   runs when not preview - under preview + not-found, a placeholder id 0 is used
-   and a warning is logged naming the property/hostname.
-2. has_hostnames_beyond_csv: the new --preview-only precondition gate.
-"""
+"""Checks that preview runs never create new billing codes on Akamai, only look up existing ones, and warn instead when none is found."""
 from __future__ import annotations
 
 import logging
@@ -38,9 +29,7 @@ def _pmuser_origin_rule_tree(children):
 
 
 class TestResolveRootCpcode:
-    """convert()'s root-cpcode call-site glue (bin/akamai-onboard.py's per-property
-    loop): search always runs; create only runs when not preview.
-    """
+    """Checks that the main conversion process looks up an existing billing code but never creates a new one during a preview run."""
 
     def test_preview_and_found_uses_real_id_no_create_no_warning(self, papi, click_args_factory, config_stub, caplog):
         onboard_object = _onboard_object(click_args_factory, config_stub)
@@ -102,12 +91,7 @@ class TestResolveRootCpcode:
 
 
 class TestInjectUniqueCpcodesPreviewGate:
-    """--unique-cpcode's per-hostname cpcode path (inject_unique_cpcodes): same
-    found/not-found x preview/non-preview table as the root cpcode path.
-
-    Exercises the real inject_cpcode_behavior/template load, so CWD is pinned to
-    repo root, not ~/.akamai-cli.
-    """
+    """Checks the same preview-safe billing code lookup behavior when each hostname gets its own unique code."""
 
     @pytest.fixture(autouse=True)
     def _repo_root_cwd(self, monkeypatch):
@@ -178,12 +162,7 @@ class TestInjectUniqueCpcodesPreviewGate:
 
 
 class TestApplyUniqueCpcodeInjectionPreviewPassthrough:
-    """convert()'s --unique-cpcode injection call-site gate (apply_unique_cpcode_injection):
-    confirms `preview` threads through to inject_unique_cpcodes rather than being dropped.
-
-    Exercises the real inject_cpcode_behavior/template load, so CWD is pinned to
-    repo root, not ~/.akamai-cli.
-    """
+    """Checks that the preview setting is correctly passed along so unique billing code creation is properly skipped."""
 
     @pytest.fixture(autouse=True)
     def _repo_root_cwd(self, monkeypatch):
@@ -222,9 +201,7 @@ class TestApplyUniqueCpcodeInjectionPreviewPassthrough:
 
 
 class TestHasHostnamesBeyondCsv:
-    """The added --preview precondition: a preview is only meaningful when the
-    source ruletree references hostnames beyond this property's --csv rows.
-    """
+    """Checks that a preview is only shown when a property references hostnames beyond what was listed in the input file."""
 
     @staticmethod
     def _pmuser_origin_tree(children):

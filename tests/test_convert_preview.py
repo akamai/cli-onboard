@@ -1,12 +1,4 @@
-"""`--preview` flag + reuse of `batch_create_update_pm_convert`'s existing
-`dryrun` gate + the existing-property prompt fix.
-
-Two seams under test:
-1. convert()'s call-site OR (`click_args['dryrun'] or click_args['preview']`) - the
-   boolean threaded into batch_create_update_pm_convert's `dryrun` parameter.
-2. batch_create_update_pm_convert's "property already exists" prompt: under a
-   dryrun-ish run it must log a note and never call input(); unchanged otherwise.
-"""
+"""Checks that the --preview flag runs convert as a safe, read-only trial without prompting the user or creating anything."""
 from __future__ import annotations
 
 import logging
@@ -29,9 +21,7 @@ class TestEffectiveDryrunFlag:
 
 
 class TestBatchCreateUpdatePmConvertExistingPropertyGate:
-    """batch_create_update_pm_convert's "property already exists, skip? (yes/no)"
-    prompt (bin/utility_papi.py, right before the `if not dryrun:` block).
-    """
+    """Checks the "property already exists, skip it?" prompt behaves correctly in both preview and normal runs."""
 
     @staticmethod
     def _property_dict(hostnames=None):

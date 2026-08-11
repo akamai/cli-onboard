@@ -1,10 +1,4 @@
-"""TC-A: `convert` click-parsing / global sanity (Local).
-
-These exercise click's own option parsing, which runs before `convert()`'s function
-body — so no network access, no real credentials, and (for TC-A1 through TC-A7) no
-filesystem fixtures are needed either. TC-A8 reaches one line into the function body
-(init_config's edgerc check) but still makes no network call.
-"""
+"""Checks that the convert command's options are parsed correctly and invalid input is rejected with a clear message."""
 from __future__ import annotations
 
 
@@ -69,12 +63,7 @@ def test_missing_edgerc_file_exits(runner, cli, tmp_path):
 
 
 def test_edgerc_missing_section_surfaces_clean_error(runner, cli, tmp_path):
-    """init_config() used to leak a bare NameError here (session/base_url were never
-    assigned before the `except`/`finally` interaction in bin/akamai-onboard.py ran the
-    `finally` block anyway), masking the real "Edgerc section ... not found" message.
-    The `finally` was replaced with plain sequential code so `_log_error`'s sys.exit()
-    stops execution before those variables are ever referenced.
-    """
+    """Checks that an unknown credentials section produces a clear error message instead of a confusing crash."""
     edgerc = tmp_path / 'good-file-bad-section.edgerc'
     edgerc.write_text('[default]\nhost = example.com\nclient_token = a\nclient_secret = b\naccess_token = c\n')
     result = runner.invoke(cli, [

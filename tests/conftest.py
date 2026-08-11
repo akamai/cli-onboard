@@ -64,13 +64,13 @@ def click_args_factory():
 
 @pytest.fixture
 def config_stub():
-    """Stand-in for the click `Config` object passed into onboard_convert.onboard()."""
+    """A stand-in configuration object used when setting up a test run."""
     return SimpleNamespace(edgerc='/dev/null', section='onboard', account_key=None)
 
 
 @pytest.fixture
 def csv_factory(tmp_path):
-    """Write a CSV fixture file under tmp_path from a list of row dicts, return its path."""
+    """Creates a temporary CSV file from sample data rows, for use in a test."""
     def _make(rows: list[dict], filename: str = 'input.csv') -> str:
         path = tmp_path / filename
         fieldnames = []
@@ -90,7 +90,7 @@ def csv_factory(tmp_path):
 
 @pytest.fixture
 def headers_only_csv_factory(tmp_path):
-    """Write a CSV with only a header row (zero data rows), return its path."""
+    """Creates a temporary CSV file that has column headers but no data rows."""
     def _make(fieldnames: list[str], filename: str = 'empty.csv') -> str:
         path = tmp_path / filename
         with open(path, 'w', newline='') as f:
@@ -103,7 +103,7 @@ def headers_only_csv_factory(tmp_path):
 
 @pytest.fixture
 def template_dir_factory(tmp_path):
-    """Write ruletree template JSON files (named after property/hostname) under a tmp dir."""
+    """Creates sample configuration template files, one per property name, in a temporary folder."""
     def _make(names: list[str], directory: str = 'templates') -> str:
         template_dir = tmp_path / directory
         template_dir.mkdir(exist_ok=True)
@@ -126,14 +126,8 @@ def template_dir_factory(tmp_path):
 
 
 class StubWrapper:
-    """Minimal stand-in for the PAPI wrapper object used by validateSetupStepsConvert.
-
-    Real validateSetupStepsConvert calls wrapper_object.property_exists(name),
-    (via utility.validateProductId) wrapper_object.getProductsByContract(contract_id),
-    (via utility.validateGroupId) wrapper_object.get_groups(), and (via
-    utility.validateContractId) wrapper_object.get_contracts() — all genuine network
-    calls in production. This stub answers them locally so the surrounding
-    flag/GTM/email/activation logic can be exercised without a live API.
+    """A fake connection that answers questions about existing properties, products,
+    groups, and contracts locally instead of calling a real service.
     """
 
     def __init__(self, existing_properties: set[str] | None = None, valid_products: set[str] | None = None,
@@ -189,10 +183,8 @@ def runner():
 
 @pytest.fixture
 def build_onboard_object(click_args_factory, config_stub):
-    """Build a real onboard_convert.onboard() instance, then fill in the fields that,
-    in a real `convert` run, would have been populated by CSV/directory processing
-    upstream of validateSetupStepsConvert. Lets Group-C tests exercise the real
-    validation function without replaying the whole CSV pipeline each time.
+    """Builds a ready-to-validate onboarding request with realistic setup values
+    already filled in, without re-running the full CSV import each time.
     """
     import onboard_convert
 
@@ -217,32 +209,19 @@ def build_onboard_object(click_args_factory, config_stub):
 
 @pytest.fixture
 def util():
-    """A real utility.utility(), with the `akamai` CLI/pipeline shell-out (irrelevant
-    to the business logic under test, and not something a hermetic suite should
-    depend on being on PATH) skipped via its check_prereqs constructor seam.
-    """
+    """A real onboarding helper for tests, with the external command-line check turned off."""
     return utility.utility(check_prereqs=False)
 
 
 @pytest.fixture
 def papi():
-    """A real utility_papi.papiFunctions() - no constructor seam needed, it has
-    no state and no shell-out of its own; all PAPI calls go through the
-    wrapper_object it's passed, which tests double out at the call site.
-    """
+    """A real helper for CP code and property operations, paired with a fake connection in tests."""
     return utility_papi.papiFunctions()
 
 
 class FakeConvertUtility(utility.utility):
-    """Test double for the utility.utility() that convert() builds at
-    bin/akamai-onboard.py:229, injected via Config(utility_cls=...) + `obj=` on
-    CliRunner.invoke() rather than monkeypatching utility.utility.
-
-    Subclasses real utility.utility so all the business logic under test
-    (load_csv_input, csv_2_property_dict_convert, etc.) runs for real; only the two
-    genuinely-networked/shelled-out gates convert() hits before that logic
-    (check_cli_prereq, check_api_access) are replaced, plus the constructor's
-    `akamai` CLI prereq shell-out (skipped via check_prereqs=False).
+    """A test version of the conversion helper that skips real network and
+    command-line checks so the rest of its logic still runs normally.
     """
 
     def __init__(self, api_access: bool = False):
@@ -278,11 +257,7 @@ def restore_logging_state():
 
 @pytest.fixture
 def fake_edgerc(tmp_path):
-    """A syntactically valid .edgerc with a real [default] section.
-
-    init_config() reads this synchronously (EdgeRc/EdgeGridAuth) with no network call —
-    good enough to get a CLI invocation past credential loading in tests.
-    """
+    """A valid sample credentials file, just enough to let a test run past the login step."""
     edgerc_path = tmp_path / 'valid.edgerc'
     edgerc_path.write_text(
         '[default]\n'

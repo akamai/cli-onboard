@@ -1,14 +1,4 @@
-"""
-Covers bin/activation_status.py -- the status-check engine behind the
-`check-activation` command (issues 02 and 03 of
-.scratch/skip-activation-polling-spec.md).
-
-check_row_status/check_all must query each row EXACTLY once (no polling/sleep
--- that's wait_until_done's job), correctly branch delivery vs. WAF by
-whether property_id is populated, and produce the is_active flag the CLI uses
-for its exit code. wait_until_done (issue 03, --wait mode) must keep polling
-until every row is active or hits a terminal error, sleeping between cycles.
-"""
+"""Checks that activation status lookups query each item once, correctly tell delivery and WAF activations apart, and that wait mode keeps checking until everything finishes or fails."""
 from __future__ import annotations
 
 from types import SimpleNamespace
@@ -62,10 +52,7 @@ class TestCheckRowStatusDelivery:
         assert wrapper.delivery_calls == [('ctr_1', 'grp_1', 'prp_123', 'atv_1')]
 
     def test_reports_the_actual_network_from_the_response_not_a_hardcoded_default(self):
-        """Delivery activations aren't always PRODUCTION -- the queried item's own
-        'network' field must win over any default (regression: an earlier draft
-        hardcoded 'PRODUCTION' for every delivery row regardless of what the API
-        actually reported)."""
+        """Checks that the status report shows the actual network (staging or production), not always production by default."""
         wrapper = SpyWrapper(delivery_status='ACTIVE')
         wrapper.pollActivationStatus = lambda contractId, groupId, propertyId, activationId: SimpleNamespace(
             status_code=200,
@@ -207,7 +194,7 @@ class TestLoadManifestRows:
         assert rows[1]['property_id'] == ''
 
     def test_minimal_csv_with_only_activation_id_column(self, csv_factory):
-        """A hand-built checklist of WAF activation IDs, not a --no-wait manifest."""
+        """A simple checklist of WAF activation IDs entered by hand, rather than a full activation record file."""
         path = csv_factory([{'activation_id': 'act_1'}, {'activation_id': 'act_2'}], filename='ids.csv')
 
         rows = activation_status.load_manifest_rows(path)
@@ -268,11 +255,7 @@ class TestBuildStatusTable:
 
 
 class SequenceWrapper:
-    """Plays back a per-activation-id sequence of statuses, advancing one step
-    each call; the last entry repeats once a sequence is exhausted. Lets tests
-    simulate a row transitioning from pending to active/errored across
-    wait_until_done's repeated check_all() cycles.
-    """
+    """A stand-in service that simulates an activation's status changing over time, such as moving from pending to active."""
 
     def __init__(self, delivery_sequences: dict[str, list[str]] | None = None,
                  waf_sequences: dict[str, list[str]] | None = None,
@@ -325,8 +308,7 @@ class TestWaitUntilDone:
         assert sleeps == [30, 30]
 
     def test_stops_once_row_hits_a_terminal_error_status(self, monkeypatch):
-        """UNABLE_TO_GET_STATUS (a non-200 response) is terminal -- retrying won't
-        change the outcome, so the loop must not spin forever on it."""
+        """Checks that repeated wait-mode checking stops once an item hits an unrecoverable error instead of looping forever."""
         monkeypatch.setattr(activation_status.time, 'sleep', lambda seconds: None)
         # Cycle 1: PENDING/200 (not done, keep looping). Cycle 2: 500 -> UNABLE_TO_GET_STATUS (terminal, stop).
         wrapper = SequenceWrapper(

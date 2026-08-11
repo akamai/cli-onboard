@@ -1,12 +1,5 @@
-"""
-Tests for bin/sync_readme_commands.py, which keeps README.md's Command catalog
-in sync with the CLI's actual registered commands.
-
-splice_catalog/find_unknown_common_input_type_commands are pure string
-transformations, tested here with synthetic input - no need to touch the real
-README.md or spin up the CLI for those. get_commands/render_catalog are
-exercised against the real `cli` fixture (tests/conftest.py) instead, since
-those depend on the actual click app.
+"""Checks that the README's list of commands stays accurate and in sync with the
+commands the tool actually provides.
 """
 from __future__ import annotations
 

@@ -73,12 +73,7 @@ class TestAppendActivation:
 
 
 class TestAppendBatch:
-    """Covers issue 04's batch/multi-property manifest writing -- one row per
-    successfully-submitted property from a --no-wait
-    batch_activate_and_poll()/pollActivation() result (poll.py's propertyName/
-    propertyId/activationId dict shape), skipping properties whose submission
-    failed (activationId == 0).
-    """
+    """Checks that a batch run logs one row per property that was successfully submitted, skipping any that failed."""
 
     def test_writes_one_row_per_property(self, tmp_path):
         manifest_path = str(tmp_path / 'activation-status.csv')
@@ -121,8 +116,7 @@ class TestAppendBatch:
         assert not Path(manifest_path).exists()
 
     def test_mixed_waf_and_non_waf_rows_across_two_batches(self, tmp_path):
-        """Simulates convert (delivery-only batch) writing to the same manifest
-        a batch-create-style run would also append a WAF row to."""
+        """Checks that regular property rows and a later WAF row can both be appended to the same log file."""
         manifest_path = str(tmp_path / 'activation-status.csv')
         delivery_batch = [
             {'propertyName': 'prop-a', 'propertyId': 'prp_1', 'activationId': 'atv_1'},
@@ -139,10 +133,7 @@ class TestAppendBatch:
 
 
 class TestStampBatchReportStatus:
-    """Covers issue 07: gives --no-wait production rows a distinct,
-    Excel-report-compatible status instead of a missing/stale activationStatus
-    field (poll.py's blocking path always sets one; a --no-wait run's
-    activationDict otherwise wouldn't have the key at all)."""
+    """Checks that properties run without waiting still get a clear status label instead of a blank one."""
 
     def test_submitted_property_gets_submitted_status(self):
         activation_dicts = [{'propertyName': 'prop-a', 'propertyId': 'prp_1', 'activationId': 'atv_1'}]
@@ -170,9 +161,7 @@ class TestStampBatchReportStatus:
         assert activation_dicts[1]['activationStatus']['PRODUCTION'] == 'ACTIVATION_ERROR'
 
     def test_status_shape_matches_pollactivation_dict_shape(self):
-        """Same two-key {'STAGING': ..., 'PRODUCTION': ...} shape poll.py's
-        blocking path produces, so a --no-wait row is shape-compatible
-        wherever activationStatus is read downstream."""
+        """Checks that the status has both a staging and production value, matching what other reports expect."""
         activation_dicts = [{'propertyName': 'prop-a', 'propertyId': 'prp_1', 'activationId': 'atv_1'}]
 
         activation_manifest.stamp_batch_report_status(activation_dicts)
