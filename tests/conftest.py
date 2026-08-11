@@ -39,6 +39,7 @@ def _default_click_args(**overrides) -> dict:
         'rule_format': 'latest',
         'use_cpcode': None,
         'unique_cpcode': False,
+        'prune_hostname_rules': False,
         'cert_mode': 'SBD',
         'use_existing_edgehostname': None,
         'enrollment_id': None,

@@ -9,6 +9,7 @@ import time
 from pathlib import Path
 from time import gmtime
 from time import strftime
+from urllib.parse import urlparse
 
 import util_emojis as emoji
 from model.edge_hostname_mode import EdgeHostnameMode
@@ -1032,6 +1033,52 @@ class papiFunctions:
     def unique_cpcode_smoketest_rows(self, unique_cpcodes: dict[str, int]) -> list[list]:
         """Report rows (hostname, hostname, cpcode), one per --unique-cpcode injected hostname."""
         return [[hostname, hostname, cpcode] for hostname, cpcode in unique_cpcodes.items()]
+
+    def _full_url_hostname(self, value: str) -> str:
+        """Pulls the plain hostname out of a URL or wildcard pattern, e.g. 'https://example.com/*' or '*example.com*' both become 'example.com'."""
+        stripped = value.strip('*')
+        if '://' in stripped:
+            return urlparse(stripped).netloc
+        return stripped
+
+    def _hostname_scoped_child_values(self, child: dict) -> list[str]:
+        """Collects every hostname a rule refers to, whether written plainly or embedded in a URL/wildcard pattern."""
+        values = []
+        for criterion in child.get('criteria', []):
+            if criterion.get('name') == 'hostname':
+                values.extend(criterion.get('options', {}).get('values', []))
+            elif criterion.get('name') == 'matchVariable' and criterion.get('options', {}).get('variableName') == 'PMUSER_FULL_URL':
+                raw_values = criterion.get('options', {}).get('variableValues', [])
+                values.extend(self._full_url_hostname(value) for value in raw_values)
+        return values
+
+    def find_hostname_scoped_containers(self, rule_tree: dict) -> list[dict]:
+        """Finds every section of the rule tree that lists specific hostnames (e.g. redirect or page rules), skipping the PMUSER_ORIGIN section entirely."""
+        if rule_tree.get('name') == 'PMUSER_ORIGIN':
+            return []
+
+        containers = []
+        children = rule_tree.get('children', [])
+        if any(self._hostname_scoped_child_values(child) for child in children):
+            containers.append(rule_tree)
+        for child in children:
+            containers.extend(self.find_hostname_scoped_containers(child))
+        return containers
+
+    def log_hostname_rule_detection(self, property_name: str, rule_tree: dict, enabled: bool) -> None:
+        """Checks whether this property's rule tree has hostname-specific rules elsewhere, and logs what it finds. Doesn't change anything yet."""
+        if not enabled:
+            return
+        containers = self.find_hostname_scoped_containers(rule_tree)
+        if not containers:
+            logger.debug(f'{property_name}: --prune-hostname-rules found no qualifying containers')
+            return
+        for container in containers:
+            logger.debug(
+                f"{property_name}: --prune-hostname-rules found "
+                f"{len(container.get('children', []))} hostname-scoped children under "
+                f"'{container.get('name')}'"
+            )
 
     def get_path_value(self, single_rule: dict) -> str:
         if len(single_rule['criteria']) > 0:

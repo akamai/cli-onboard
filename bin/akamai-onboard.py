@@ -238,6 +238,9 @@ def help(ctx, log_level, verbose):
 @click.option('--unique-cpcode', metavar='', is_flag=True, default=False,
               help='Create or reuse a unique cpCode per onboarded hostname within PMUSER_ORIGIN child rules, '
                    'pruning any PMUSER_ORIGIN child hostname not present in --csv')
+@click.option('--prune-hostname-rules', metavar='', is_flag=True, default=False,
+              help='Prune rule-tree children elsewhere in the tree (e.g. Redirect Rules, Page Rules) that '
+                   'reference a hostname not present in --csv. PMUSER_ORIGIN is unaffected, see --unique-cpcode.')
 @click.option('--cert-mode', type=click.Choice(['SBD', 'CPS'], case_sensitive=False),
               default='SBD', show_default=True, help='Certificate mode')
 @click.option('--use-existing-edgehostname', metavar='', default=None, is_flag=False,
@@ -405,6 +408,8 @@ def convert(config, **kwargs):
                 onboard_object.contract_id, onboard_object.group_id, property_dict[property]['product'],
                 click_args['unique_cpcode'])
             all_smoketest.extend(util_papi.unique_cpcode_smoketest_rows(property_dict[property]['uniqueCpcodes']))
+
+            util_papi.log_hostname_rule_detection(property, original_ruletree, click_args['prune_hostname_rules'])
 
             property_dict[property]['ruleTree'] = {'rules': original_ruletree}
             property_dict[property]['comments'] = comments
