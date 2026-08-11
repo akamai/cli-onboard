@@ -199,9 +199,11 @@ class TestApplyPruneHostnameRules:
         }
         before = copy.deepcopy(rule_tree)
 
-        pruned = papi.apply_prune_hostname_rules('my-property', rule_tree, ['www.example.com'], enabled=False)
+        pruned, removed = papi.apply_prune_hostname_rules('my-property', rule_tree, ['www.example.com'],
+                                                            enabled=False)
 
         assert pruned == []
+        assert removed == []
         assert rule_tree == before
 
     def test_enabled_delegates_to_prune_hostname_scoped_children(self, papi):
@@ -215,10 +217,13 @@ class TestApplyPruneHostnameRules:
             ],
         }
 
-        pruned = papi.apply_prune_hostname_rules('my-property', rule_tree, ['www.example.com'], enabled=True)
+        pruned, removed = papi.apply_prune_hostname_rules('my-property', rule_tree, ['www.example.com'],
+                                                            enabled=True)
 
         assert pruned == ['old.example.com']
-        assert rule_tree['children'][0]['children'] == []
+        # Page Rules had only one child, which got pruned - Page Rules is now empty too and gets removed
+        assert removed == ['default > Page Rules']
+        assert rule_tree['children'] == []
 
 
 class TestClassifyHostnameScopedChild:
@@ -284,41 +289,46 @@ class TestPruneHostnameScopedChildren:
         rule_tree = {'name': 'default', 'children': [{'name': 'Shared Variables', 'children': []}]}
         before = copy.deepcopy(rule_tree)
 
-        pruned = papi.prune_hostname_scoped_children('my-property', rule_tree, ['www.example.com'])
+        pruned, removed = papi.prune_hostname_scoped_children('my-property', rule_tree, ['www.example.com'])
 
         assert pruned == []
+        assert removed == []
         assert rule_tree == before
 
     def test_full_match_is_kept(self, papi):
         matched = self._hostname_child('www.example.com', ['www.example.com'])
         rule_tree = self._rule_tree('Page Rules', [matched])
 
-        pruned = papi.prune_hostname_scoped_children('my-property', rule_tree, ['www.example.com'])
+        pruned, removed = papi.prune_hostname_scoped_children('my-property', rule_tree, ['www.example.com'])
 
         assert rule_tree['children'][0]['children'] == [matched]
         assert pruned == []
+        assert removed == []
 
-    def test_no_match_is_pruned(self, papi):
+    def test_no_match_leaves_container_empty_so_container_is_also_removed(self, papi):
         unmatched = self._hostname_child('old.example.com', ['old.example.com'])
         rule_tree = self._rule_tree('Page Rules', [unmatched])
 
-        pruned = papi.prune_hostname_scoped_children('my-property', rule_tree, ['www.example.com'])
+        pruned, removed = papi.prune_hostname_scoped_children('my-property', rule_tree, ['www.example.com'])
 
-        assert rule_tree['children'][0]['children'] == []
+        # Page Rules had only this one child, which got pruned - it's now empty and gets removed too
+        assert rule_tree['children'] == []
         assert pruned == ['old.example.com']
+        assert removed == ['default > Page Rules']
 
-    def test_all_children_pruned_warns_and_continues(self, papi, caplog):
+    def test_all_children_pruned_removes_the_emptied_container_and_warns(self, papi, caplog):
         unmatched = self._hostname_child('old.example.com', ['old.example.com'])
         rule_tree = self._rule_tree('Page Rules', [unmatched])
 
         with caplog.at_level(logging.WARNING, logger='utility_papi'):
-            pruned = papi.prune_hostname_scoped_children('my-property', rule_tree, ['www.example.com'])
+            pruned, removed = papi.prune_hostname_scoped_children('my-property', rule_tree, ['www.example.com'])
 
-        assert rule_tree['children'][0]['children'] == []
+        assert rule_tree['children'] == []
         assert pruned == ['old.example.com']
+        assert removed == ['default > Page Rules']
         assert 'my-property' in caplog.text
         assert "'Page Rules'" in caplog.text
-        assert 'no children' in caplog.text
+        assert 'removing empty rule' in caplog.text
 
     def test_child_with_no_hostname_criteria_is_pruned(self, papi):
         # A container is only found when at least one child has qualifying criteria
@@ -328,20 +338,22 @@ class TestPruneHostnameScopedChildren:
         no_criteria_child = {'name': 'weird', 'children': [], 'criteria': []}
         rule_tree = self._rule_tree('Page Rules', [matched, no_criteria_child])
 
-        pruned = papi.prune_hostname_scoped_children('my-property', rule_tree, ['www.example.com'])
+        pruned, removed = papi.prune_hostname_scoped_children('my-property', rule_tree, ['www.example.com'])
 
         assert rule_tree['children'][0]['children'] == [matched]
         assert pruned == []
+        assert removed == []
 
     def test_partial_match_is_left_untouched_and_warns(self, papi, caplog):
         partial = self._hostname_child('multi', ['a.example.com', 'b.example.com'])
         rule_tree = self._rule_tree('Page Rules', [partial])
 
         with caplog.at_level(logging.WARNING, logger='utility_papi'):
-            pruned = papi.prune_hostname_scoped_children('my-property', rule_tree, ['a.example.com'])
+            pruned, removed = papi.prune_hostname_scoped_children('my-property', rule_tree, ['a.example.com'])
 
         assert rule_tree['children'][0]['children'] == [partial]
         assert pruned == []
+        assert removed == []
         assert 'my-property' in caplog.text
         assert 'multi' in caplog.text
         # only the actually-mismatched value is named, not the whole criteria list
@@ -352,19 +364,21 @@ class TestPruneHostnameScopedChildren:
         matched = self._hostname_child('WWW.EXAMPLE.COM', ['WWW.EXAMPLE.COM'])
         rule_tree = self._rule_tree('Page Rules', [matched])
 
-        pruned = papi.prune_hostname_scoped_children('my-property', rule_tree, ['www.example.com'])
+        pruned, removed = papi.prune_hostname_scoped_children('my-property', rule_tree, ['www.example.com'])
 
         assert rule_tree['children'][0]['children'] == [matched]
         assert pruned == []
+        assert removed == []
 
     def test_pmuser_origin_is_never_pruned_even_when_it_would_otherwise_qualify(self, papi):
         unmatched = self._hostname_child('old.example.com', ['old.example.com'])
         rule_tree = self._rule_tree('PMUSER_ORIGIN', [unmatched])
         before = copy.deepcopy(rule_tree)
 
-        pruned = papi.prune_hostname_scoped_children('my-property', rule_tree, ['www.example.com'])
+        pruned, removed = papi.prune_hostname_scoped_children('my-property', rule_tree, ['www.example.com'])
 
         assert pruned == []
+        assert removed == []
         assert rule_tree == before
 
     def test_mixed_children_keep_prune_and_partial_together(self, papi):
@@ -373,20 +387,22 @@ class TestPruneHostnameScopedChildren:
         partial = self._hostname_child('multi', ['a.example.com', 'zzz.example.com'])
         rule_tree = self._rule_tree('Page Rules', [matched, unmatched, partial])
 
-        pruned = papi.prune_hostname_scoped_children(
+        pruned, removed = papi.prune_hostname_scoped_children(
             'my-property', rule_tree, ['www.example.com', 'a.example.com'])
 
         assert rule_tree['children'][0]['children'] == [matched, partial]
         assert pruned == ['old.example.com']
+        assert removed == []
 
     def test_pmuser_full_url_child_is_matched_via_extracted_hostname(self, papi):
         matched = self._full_url_child('redirect-1', ['https://www.example.com/path*'])
         rule_tree = self._rule_tree('Redirect Rules', [matched])
 
-        pruned = papi.prune_hostname_scoped_children('my-property', rule_tree, ['www.example.com'])
+        pruned, removed = papi.prune_hostname_scoped_children('my-property', rule_tree, ['www.example.com'])
 
         assert rule_tree['children'][0]['children'] == [matched]
         assert pruned == []
+        assert removed == []
 
     def test_multiple_containers_are_each_pruned_independently(self, papi, caplog):
         page_rules_matched = self._hostname_child('www.example.com', ['www.example.com'])
@@ -401,12 +417,13 @@ class TestPruneHostnameScopedChildren:
         }
 
         with caplog.at_level(logging.WARNING, logger='utility_papi'):
-            pruned = papi.prune_hostname_scoped_children('my-property', rule_tree, ['www.example.com'])
+            pruned, removed = papi.prune_hostname_scoped_children('my-property', rule_tree, ['www.example.com'])
 
-        assert rule_tree['children'][0]['children'] == [page_rules_matched]
-        assert rule_tree['children'][1]['children'] == []
+        # Redirect Rules had only the unmatched child, so it's now empty and gets removed entirely
+        assert rule_tree['children'] == [{'name': 'Page Rules', 'children': [page_rules_matched]}]
         assert sorted(pruned) == ['old.example.com', 'other.example.com']
-        # the emptied-out container is named in the warning, the surviving one is not
+        assert removed == ['default > Redirect Rules']
+        # the removed container is named in the warning, the surviving one is not
         assert "'Redirect Rules'" in caplog.text
         assert "'Page Rules'" not in caplog.text
 
@@ -476,7 +493,7 @@ class TestPruneHostnameScopedChildrenAgainstRealRedirectRulesShape:
         rule_tree = {'name': 'default', 'children': [{'name': 'Redirect Rules', 'children': children}]}
         csv_hostnames = ['account.mrcooper.com', 'accountuat.mrcooper.com']
 
-        pruned = papi.prune_hostname_scoped_children('account.mrcooper.com', rule_tree, csv_hostnames)
+        pruned, removed = papi.prune_hostname_scoped_children('account.mrcooper.com', rule_tree, csv_hostnames)
 
         survivors = rule_tree['children'][0]['children']
         assert [child['name'] for child in survivors] == [
@@ -484,6 +501,7 @@ class TestPruneHostnameScopedChildrenAgainstRealRedirectRulesShape:
             'accountuat-signin', 'accountuat-forgot-password',
         ]
         assert len(pruned) == 15
+        assert removed == []
 
 
 class TestPrunedRuleChildrenReportFormatting:
@@ -500,13 +518,35 @@ class TestPrunedRuleChildrenReportFormatting:
                      'criteria': [{'name': 'hostname', 'options': {'values': ['old.example.com']}}]},
                     {'name': 'stale.example.com', 'children': [],
                      'criteria': [{'name': 'hostname', 'options': {'values': ['stale.example.com']}}]},
+                    {'name': 'kept.example.com', 'children': [],
+                     'criteria': [{'name': 'hostname', 'options': {'values': ['www.example.com']}}]},
                 ]},
             ],
         }
 
-        pruned = papi.apply_prune_hostname_rules('my-property', rule_tree, ['www.example.com'], enabled=True)
+        pruned, removed = papi.apply_prune_hostname_rules('my-property', rule_tree, ['www.example.com'],
+                                                            enabled=True)
 
         assert utility.split_elements_newline_withcomma(pruned) == '1. old.example.com,\n2. stale.example.com'
+
+    def test_removed_empty_rules_render_with_the_report_formatter(self, papi):
+        import utility
+
+        rule_tree = {
+            'name': 'default',
+            'children': [
+                {'name': 'Page Rules', 'children': [
+                    {'name': 'old.example.com', 'children': [],
+                     'criteria': [{'name': 'hostname', 'options': {'values': ['old.example.com']}}]},
+                ]},
+            ],
+        }
+
+        pruned, removed = papi.apply_prune_hostname_rules('my-property', rule_tree, ['www.example.com'],
+                                                            enabled=True)
+
+        # single-element lists render without a numbered prefix, same as prunedHostnames does
+        assert utility.split_elements_newline_withcomma(removed) == 'default > Page Rules'
 
 
 class TestUniqueCpcodeAndPruneHostnameRulesAreIndependent:
@@ -535,11 +575,89 @@ class TestUniqueCpcodeAndPruneHostnameRulesAreIndependent:
         csv_hostnames = ['www.example.com']
 
         pruned_hostnames = papi.apply_unique_cpcode('my-property', rule_tree, csv_hostnames, enabled=True)
-        pruned_rule_children = papi.apply_prune_hostname_rules('my-property', rule_tree, csv_hostnames, enabled=True)
+        pruned_rule_children, removed_rules = papi.apply_prune_hostname_rules(
+            'my-property', rule_tree, csv_hostnames, enabled=True)
 
         assert pruned_hostnames == ['old-origin.example.com']
         assert pruned_rule_children == ['old-page.example.com']
+        # Page Rules still has its surviving child, so nothing gets removed entirely
+        assert removed_rules == []
         # each mechanism only ever pruned its own container, not the other's
         origin_node, page_rules_node = rule_tree['children']
         assert [child['name'] for child in origin_node['children']] == ['www.example.com']
         assert [child['name'] for child in page_rules_node['children']] == ['www.example.com']
+
+
+class TestRemoveEmptyRulesAfterPruning:
+    """Checks that a rule left with nothing in it after pruning is removed, and the removal cascades upward."""
+
+    @staticmethod
+    def _hostname_child(name, values):
+        return {
+            'name': name, 'children': [],
+            'criteria': [{'name': 'hostname', 'options': {'matchOperator': 'IS_ONE_OF', 'values': values}}],
+        }
+
+    def test_cascade_removes_a_grouping_folder_and_its_now_empty_parent(self, papi):
+        # Redirect Rules > Regional Redirects > two hostname children, none of which match this property
+        host_a = self._hostname_child('redirect-a', ['a.example.com'])
+        host_b = self._hostname_child('redirect-b', ['b.example.com'])
+        rule_tree = {
+            'name': 'default',
+            'children': [
+                {'name': 'Redirect Rules', 'children': [
+                    {'name': 'Regional Redirects', 'children': [host_a, host_b]},
+                ]},
+            ],
+        }
+
+        pruned, removed = papi.prune_hostname_scoped_children('my-property', rule_tree, ['keep.example.com'])
+
+        assert sorted(pruned) == ['a.example.com', 'b.example.com']
+        # child removed before its now-empty parent, same order the cascade unwinds in
+        assert removed == ['Redirect Rules > Regional Redirects', 'default > Redirect Rules']
+        assert rule_tree['children'] == []
+
+    def test_cascade_stops_once_an_ancestor_still_has_other_content(self, papi):
+        # Redirect Rules has two subgroups - one empties out and is removed, the other survives,
+        # so Redirect Rules itself is left alone
+        unmatched = self._hostname_child('redirect-a', ['a.example.com'])
+        matched = self._hostname_child('redirect-b', ['b.example.com'])
+        rule_tree = {
+            'name': 'default',
+            'children': [
+                {'name': 'Redirect Rules', 'children': [
+                    {'name': 'Regional Redirects A', 'children': [unmatched]},
+                    {'name': 'Regional Redirects B', 'children': [matched]},
+                ]},
+            ],
+        }
+
+        pruned, removed = papi.prune_hostname_scoped_children('my-property', rule_tree, ['b.example.com'])
+
+        assert pruned == ['a.example.com']
+        assert removed == ['Redirect Rules > Regional Redirects A']
+        redirect_rules = rule_tree['children'][0]
+        assert redirect_rules['name'] == 'Redirect Rules'
+        assert [child['name'] for child in redirect_rules['children']] == ['Regional Redirects B']
+
+    def test_console_logs_one_warning_per_removed_rule_in_cascade_order(self, papi, caplog):
+        host_a = self._hostname_child('redirect-a', ['a.example.com'])
+        rule_tree = {
+            'name': 'default',
+            'children': [
+                {'name': 'Redirect Rules', 'children': [
+                    {'name': 'Regional Redirects', 'children': [host_a]},
+                ]},
+            ],
+        }
+
+        with caplog.at_level(logging.WARNING, logger='utility_papi'):
+            papi.prune_hostname_scoped_children('my-property', rule_tree, ['keep.example.com'])
+
+        removal_lines = [record.message for record in caplog.records if 'removing empty rule' in record.message]
+        assert len(removal_lines) == 2
+        assert 'my-property' in removal_lines[0] and 'Regional Redirects' in removal_lines[0]
+        assert "from 'Redirect Rules'" in removal_lines[0]
+        assert 'my-property' in removal_lines[1] and 'Redirect Rules' in removal_lines[1]
+        assert "from 'default'" in removal_lines[1]

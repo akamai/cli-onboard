@@ -415,8 +415,10 @@ def convert(config, **kwargs):
                 click_args['unique_cpcode'], preview=click_args['preview'])
             all_smoketest.extend(util_papi.unique_cpcode_smoketest_rows(property_dict[property]['uniqueCpcodes']))
 
-            property_dict[property]['prunedRuleChildren'] = util_papi.apply_prune_hostname_rules(
-                property, original_ruletree, property_dict[property]['hostnames'], click_args['prune_hostname_rules'])
+            property_dict[property]['prunedRuleChildren'], property_dict[property]['removedEmptyRules'] = \
+                util_papi.apply_prune_hostname_rules(
+                    property, original_ruletree, property_dict[property]['hostnames'],
+                    click_args['prune_hostname_rules'])
 
             property_dict[property]['ruleTree'] = {'rules': original_ruletree}
             property_dict[property]['comments'] = comments
@@ -529,7 +531,8 @@ def convert(config, **kwargs):
         result_df.index.name = 'propertyName'
         result_df = result_df.reset_index()
 
-        cols = ['error_flags', 'hostnames', 'edgeHostnames', 'prunedHostnames', 'prunedRuleChildren']
+        cols = ['error_flags', 'hostnames', 'edgeHostnames', 'prunedHostnames', 'prunedRuleChildren',
+                'removedEmptyRules']
         for col in cols:
             result_df[col] = result_df.apply(lambda row: utility.split_elements_newline_withcomma(row[col])
                                                         if row[col] else '', axis=1)

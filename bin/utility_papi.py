@@ -1071,19 +1071,20 @@ class papiFunctions:
             return 'partial_match'
         return 'no_match'
 
-    def prune_hostname_scoped_children(self, property_name: str, rule_tree: dict, csv_hostnames: list[str]) -> list[str]:
-        """Removes rules elsewhere in the tree (e.g. redirect or page rules) that reference a hostname not in this property's CSV. Returns the hostnames that got removed."""
-        containers = self.find_hostname_scoped_containers(rule_tree)
-        if not containers:
-            logger.debug(f'{property_name}: --prune-hostname-rules found no qualifying containers')
-            return []
+    def _is_empty_rule(self, rule: dict) -> bool:
+        """True when a rule has nothing left in it - no behaviors, no criteria, no children."""
+        return not rule.get('behaviors') and not rule.get('criteria') and not rule.get('children')
 
-        csv_hostname_set = {hostname.lower() for hostname in csv_hostnames}
-        pruned_hostnames = []
+    def _prune_hostname_scoped_subtree(self, property_name: str, rule: dict, csv_hostname_set: set[str],
+                                        pruned_hostnames: list[str], removed_rules: list[str]) -> bool:
+        """Prunes hostname-mismatched children of `rule`, then drops any child left with nothing in it. Returns whether `rule` itself still has content."""
+        if rule.get('name') == 'PMUSER_ORIGIN':
+            return True
 
-        for container in containers:
+        children = rule.get('children', [])
+        if any(self._hostname_scoped_child_values(child) for child in children):
             survivors = []
-            for child in container.get('children', []):
+            for child in children:
                 classification = self._classify_hostname_scoped_child(child, csv_hostname_set)
 
                 if classification == 'no_match':
@@ -1095,26 +1096,47 @@ class papiFunctions:
                     mismatched = [value for value in values if value.lower() not in csv_hostname_set]
                     child_name = child.get('name')
                     logger.warning(
-                        f"{property_name}: '{container.get('name')}' child '{child_name}' only partially "
+                        f"{property_name}: '{rule.get('name')}' child '{child_name}' only partially "
                         f'matches CSV hostnames - {mismatched} not found - left untouched, review manually'
                     )
 
                 survivors.append(child)
+            children = survivors
 
-            container['children'] = survivors
-            if not survivors:
+        kept_children = []
+        for child in children:
+            if self._prune_hostname_scoped_subtree(property_name, child, csv_hostname_set,
+                                                     pruned_hostnames, removed_rules):
+                kept_children.append(child)
+            else:
+                removed_rules.append(f"{rule.get('name')} > {child.get('name')}")
                 logger.warning(
-                    f"{property_name}: no children in '{container.get('name')}' matched CSV hostnames "
-                    'after pruning'
+                    f"{property_name}: removing empty rule '{child.get('name')}' (no behaviors/criteria/"
+                    f"children) from '{rule.get('name')}' before property creation"
                 )
+        rule['children'] = kept_children
 
-        return pruned_hostnames
+        return not self._is_empty_rule(rule)
+
+    def prune_hostname_scoped_children(self, property_name: str, rule_tree: dict,
+                                        csv_hostnames: list[str]) -> tuple[list[str], list[str]]:
+        """Removes rules (e.g. redirect or page rules) for hostnames not in this property's CSV, then drops any rule left with nothing in it. Returns (removed hostnames, removed rule names)."""
+        if not self.find_hostname_scoped_containers(rule_tree):
+            logger.debug(f'{property_name}: --prune-hostname-rules found no qualifying containers')
+            return [], []
+
+        csv_hostname_set = {hostname.lower() for hostname in csv_hostnames}
+        pruned_hostnames: list[str] = []
+        removed_rules: list[str] = []
+        self._prune_hostname_scoped_subtree(property_name, rule_tree, csv_hostname_set,
+                                             pruned_hostnames, removed_rules)
+        return pruned_hostnames, removed_rules
 
     def apply_prune_hostname_rules(self, property_name: str, rule_tree: dict, csv_hostnames: list[str],
-                                    enabled: bool) -> list[str]:
+                                    enabled: bool) -> tuple[list[str], list[str]]:
         """Runs the --prune-hostname-rules cleanup step when that option is turned on; otherwise does nothing."""
         if not enabled:
-            return []
+            return [], []
         return self.prune_hostname_scoped_children(property_name, rule_tree, csv_hostnames)
 
     def has_hostnames_beyond_csv(self, rule_tree: dict, csv_hostnames: list[str]) -> bool:
