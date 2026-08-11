@@ -15,7 +15,7 @@ def test_help_shows_all_options(runner, cli):
                    '--csv', '--rule-format', '--use-cpcode', '--unique-cpcode', '--prune-hostname-rules', '--cert-mode',
                    '--use-existing-edgehostname', '--enrollment-id', '--media-ehn',
                    '--gtm-domain', '--activate', '--email', '--force', '--dryrun',
-                   '--prefix', '--launch'):
+                   '--prefix', '--preview', '--launch'):
         assert option in result.output
 
 

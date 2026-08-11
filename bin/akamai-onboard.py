@@ -254,6 +254,10 @@ def help(ctx, log_level, verbose):
 @click.option('--force', metavar='', is_flag=True, default=False, help='skip user confirmation prompt')
 @click.option('--dryrun', metavar='', is_flag=True, default=False, help='admin - test config')
 @click.option('--prefix', metavar='', help='admin - required for dryrun.')
+@click.option('--preview', metavar='', is_flag=True, default=False,
+              help='Skip creating the property/edge-hostname/hostname-association on Akamai '
+                   '(ruletree JSON is still written to logs/). Runs against real --csv hostnames, '
+                   'independent of --dryrun/--prefix. Note: cpCode creation is not yet gated by this flag.')
 @click.option('--launch/--no-launch', default=True, metavar='', help='automatically open excel application')
 @no_wait_option
 @log_level_options
@@ -432,7 +436,7 @@ def convert(config, **kwargs):
                                                                                    onboard_object,
                                                                                    papi,
                                                                                    property_dict,
-                                                                                   click_args['dryrun'])
+                                                                                   click_args['dryrun'] or click_args['preview'])
         logger.debug(f'{propertyIds_list=}')
         logger.debug(f'{skip_property=}')
 

@@ -557,17 +557,20 @@ class papiFunctions:
             property_exists = papi.property_exists(propertyName)
             if property_exists:
                 logger.warning(f"{emoji.pass_green} Property already exists: '{propertyName}'")
-                print()
-                print('_' * 120)
-                print()
-                logger.warning('Do you want to skip this property? (yes/no)')
-                print('_' * 120)
-                string = str(input())
-                skip_hostname_variables = ['yes', 'y', 'Y', 'YES', 'Yes']
-                if string in skip_hostname_variables:
-                    logger.warning(f'{emoji.ok_hand} Skipping property')
+                if dryrun:
+                    logger.info(f'{propertyName} already exists - preview run, nothing created')
+                else:
                     print()
-                    continue
+                    print('_' * 120)
+                    print()
+                    logger.warning('Do you want to skip this property? (yes/no)')
+                    print('_' * 120)
+                    string = str(input())
+                    skip_hostname_variables = ['yes', 'y', 'Y', 'YES', 'Yes']
+                    if string in skip_hostname_variables:
+                        logger.warning(f'{emoji.ok_hand} Skipping property')
+                        print()
+                        continue
             hostnames_to_onboard = list(onboard_object.public_hostname)
 
             onboard_object.property_name = propertyName

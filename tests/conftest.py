@@ -50,6 +50,7 @@ def _default_click_args(**overrides) -> dict:
         'force': False,
         'dryrun': False,
         'prefix': None,
+        'preview': False,
         'launch': True,
     }
     args.update(overrides)
