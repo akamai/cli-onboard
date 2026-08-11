@@ -184,57 +184,44 @@ class TestFindHostnameScopedContainers:
         assert papi.find_hostname_scoped_containers({'name': 'default'}) == []
 
 
-class TestLogHostnameRuleDetection:
-    """Tests the --prune-hostname-rules on/off switch: for now it only detects and logs, it doesn't change anything yet."""
+class TestApplyPruneHostnameRules:
+    """convert()'s --prune-hostname-rules call-site glue: gates prune_hostname_scoped_children
+    behind the flag value. This is what feeds property_dict[property]['prunedRuleChildren']
+    in bin/akamai-onboard.py.
+    """
 
     def test_disabled_is_a_noop_and_never_touches_the_rule_tree(self, papi):
         rule_tree = {
             'name': 'default',
             'children': [
                 {'name': 'Page Rules', 'children': [
-                    {'name': 'www.example.com', 'children': [],
-                     'criteria': [{'name': 'hostname', 'options': {'values': ['www.example.com']}}]},
+                    {'name': 'old.example.com', 'children': [],
+                     'criteria': [{'name': 'hostname', 'options': {'values': ['old.example.com']}}]},
                 ]},
             ],
         }
         before = copy.deepcopy(rule_tree)
 
-        papi.log_hostname_rule_detection('my-property', rule_tree, enabled=False)
+        pruned = papi.apply_prune_hostname_rules('my-property', rule_tree, ['www.example.com'], enabled=False)
 
+        assert pruned == []
         assert rule_tree == before
 
-    def test_enabled_with_no_qualifying_containers_never_touches_the_rule_tree_and_logs(self, papi, caplog):
-        rule_tree = {'name': 'default', 'children': [{'name': 'Shared Variables', 'children': []}]}
-        before = copy.deepcopy(rule_tree)
-
-        with caplog.at_level(logging.DEBUG, logger='utility_papi'):
-            papi.log_hostname_rule_detection('my-property', rule_tree, enabled=True)
-
-        assert rule_tree == before
-        assert 'my-property' in caplog.text
-        assert 'no qualifying containers' in caplog.text
-
-    def test_enabled_with_qualifying_containers_never_touches_the_rule_tree_and_logs(self, papi, caplog):
+    def test_enabled_delegates_to_prune_hostname_scoped_children(self, papi):
         rule_tree = {
             'name': 'default',
             'children': [
                 {'name': 'Page Rules', 'children': [
-                    {'name': 'www.example.com', 'children': [],
-                     'criteria': [{'name': 'hostname', 'options': {'values': ['www.example.com']}}]},
-                    {'name': 'other.example.com', 'children': [],
-                     'criteria': [{'name': 'hostname', 'options': {'values': ['other.example.com']}}]},
+                    {'name': 'old.example.com', 'children': [],
+                     'criteria': [{'name': 'hostname', 'options': {'values': ['old.example.com']}}]},
                 ]},
             ],
         }
-        before = copy.deepcopy(rule_tree)
 
-        with caplog.at_level(logging.DEBUG, logger='utility_papi'):
-            papi.log_hostname_rule_detection('my-property', rule_tree, enabled=True)
+        pruned = papi.apply_prune_hostname_rules('my-property', rule_tree, ['www.example.com'], enabled=True)
 
-        assert rule_tree == before
-        assert 'my-property' in caplog.text
-        assert 'Page Rules' in caplog.text
-        assert '2 hostname-scoped children' in caplog.text
+        assert pruned == ['old.example.com']
+        assert rule_tree['children'][0]['children'] == []
 
 
 class TestClassifyHostnameScopedChild:
@@ -504,3 +491,68 @@ class TestPruneHostnameScopedChildrenAgainstRealRedirectRulesShape:
             'accountuat-signin', 'accountuat-forgot-password',
         ]
         assert len(pruned) == 15
+
+
+class TestPrunedRuleChildrenReportFormatting:
+    """Closes ticket 03's 'the report column reflects ticket 02's prune list
+    correctly' criterion: prunes a realistic container and checks the result
+    renders through the same formatter prunedHostnames already uses.
+    """
+
+    def test_pruned_hostnames_render_with_the_report_formatter(self, papi):
+        import utility
+
+        rule_tree = {
+            'name': 'default',
+            'children': [
+                {'name': 'Page Rules', 'children': [
+                    {'name': 'old.example.com', 'children': [],
+                     'criteria': [{'name': 'hostname', 'options': {'values': ['old.example.com']}}]},
+                    {'name': 'stale.example.com', 'children': [],
+                     'criteria': [{'name': 'hostname', 'options': {'values': ['stale.example.com']}}]},
+                ]},
+            ],
+        }
+
+        pruned = papi.apply_prune_hostname_rules('my-property', rule_tree, ['www.example.com'], enabled=True)
+
+        assert utility.split_elements_newline_withcomma(pruned) == '1. old.example.com,\n2. stale.example.com'
+
+
+class TestUniqueCpcodeAndPruneHostnameRulesAreIndependent:
+    """Ticket 03's 'prunedRuleChildren and prunedHostnames stay independent
+    columns... never merged' criterion, exercised at the function level -
+    the same two gate functions convert() calls to build each column.
+    """
+
+    def test_both_flags_enabled_together_produce_two_independent_prune_lists(self, papi):
+        rule_tree = {
+            'name': 'default',
+            'children': [
+                {'name': 'PMUSER_ORIGIN', 'children': [
+                    {'name': 'www.example.com', 'children': [], 'behaviors': [],
+                     'criteria': [{'name': 'hostname', 'options': {'values': ['www.example.com']}}],
+                     'criteriaMustSatisfy': 'all'},
+                    {'name': 'old-origin.example.com', 'children': [], 'behaviors': [],
+                     'criteria': [{'name': 'hostname', 'options': {'values': ['old-origin.example.com']}}],
+                     'criteriaMustSatisfy': 'all'},
+                ]},
+                {'name': 'Page Rules', 'children': [
+                    {'name': 'www.example.com', 'children': [],
+                     'criteria': [{'name': 'hostname', 'options': {'values': ['www.example.com']}}]},
+                    {'name': 'old-page.example.com', 'children': [],
+                     'criteria': [{'name': 'hostname', 'options': {'values': ['old-page.example.com']}}]},
+                ]},
+            ],
+        }
+        csv_hostnames = ['www.example.com']
+
+        pruned_hostnames = papi.apply_unique_cpcode('my-property', rule_tree, csv_hostnames, enabled=True)
+        pruned_rule_children = papi.apply_prune_hostname_rules('my-property', rule_tree, csv_hostnames, enabled=True)
+
+        assert pruned_hostnames == ['old-origin.example.com']
+        assert pruned_rule_children == ['old-page.example.com']
+        # each mechanism only ever pruned its own container, not the other's
+        origin_node, page_rules_node = rule_tree['children']
+        assert [child['name'] for child in origin_node['children']] == ['www.example.com']
+        assert [child['name'] for child in page_rules_node['children']] == ['www.example.com']

@@ -1116,20 +1116,12 @@ class papiFunctions:
 
         return pruned_hostnames
 
-    def log_hostname_rule_detection(self, property_name: str, rule_tree: dict, enabled: bool) -> None:
-        """Checks whether this property's rule tree has hostname-specific rules elsewhere, and logs what it finds. Doesn't change anything yet."""
+    def apply_prune_hostname_rules(self, property_name: str, rule_tree: dict, csv_hostnames: list[str],
+                                    enabled: bool) -> list[str]:
+        """convert()'s --prune-hostname-rules gate. Disabled is a no-op; enabled delegates to prune_hostname_scoped_children."""
         if not enabled:
-            return
-        containers = self.find_hostname_scoped_containers(rule_tree)
-        if not containers:
-            logger.debug(f'{property_name}: --prune-hostname-rules found no qualifying containers')
-            return
-        for container in containers:
-            logger.debug(
-                f"{property_name}: --prune-hostname-rules found "
-                f"{len(container.get('children', []))} hostname-scoped children under "
-                f"'{container.get('name')}'"
-            )
+            return []
+        return self.prune_hostname_scoped_children(property_name, rule_tree, csv_hostnames)
 
     def get_path_value(self, single_rule: dict) -> str:
         if len(single_rule['criteria']) > 0:
