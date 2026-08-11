@@ -23,7 +23,9 @@ Each release is grouped into two sections:
 - `convert`'s Excel report labels rows submitted under `--no-wait`
 - `convert`'s Excel report now shows which CP Code was used per hostname and flags any hostnames that were skipped
 - Add `--no-wait` to `single-host`, `multi-hosts`, `convert`, `batch-create`, and the AppSec commands: submit production activation and return immediately instead of waiting for it to finish
-- Add `--unique-cpcode` to `convert`: hostnames migrated with different origins each get their own CP Code, reused if it exists, instead of sharing one CP Code for the whole property
+- Add `--preview` to `convert`: see exactly what a run would create before anything touches Akamai for real
+- Add `--prune-hostname-rules` to `convert`: drops rules for hostnames not in this run's CSV so each property only keeps its own rules
+- Add `--unique-cpcode` to `convert`: each hostname can get its own CP Code instead of sharing one for the whole property
 - New `check-activation` command checks on activation(s) submitted earlier with `--no-wait`; add `--wait` to keep polling until every activation finishes
 
 #### BUG FIXES:

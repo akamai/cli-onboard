@@ -234,7 +234,11 @@ akamai onboard convert \
 
 Use `--cert-mode CPS` if the properties require CPS-managed certificates — see [Default DV versus CPS](#default-dv-secure-by-defaultsbd-versus-cps) for when to choose which.
 
-For a property migrated with multiple hostnames sharing one rule tree (a `PMUSER_ORIGIN` node with one child per hostname), add `--unique-cpcode` to give each onboarded hostname its own cpCode — reusing one that already exists, creating one only if needed — instead of sharing a single cpCode across the whole property. Hostnames in the rule tree that aren't part of this run's `--csv` are pruned out. The Excel report gets a `cpcodes` sheet and a `prunedHostnames` column showing what happened per property.
+Add `--unique-cpcode` so each hostname gets its own CP Code instead of sharing one for the whole property. The Excel report shows what changed per property.
+
+Add `--prune-hostname-rules` to drop rules for any hostname not in this run's CSV, so each property only keeps its own rules. Works independently of `--unique-cpcode`.
+
+Add `--preview` to see what a run would create before anything touches Akamai. It uses your real `--csv` hostnames and creates nothing for real.
 
 For the full option list, see [Convert command options](#convert-command-options).
 
@@ -349,6 +353,9 @@ $ akamai onboard convert --help
 │    --use-cpcode                     reuse existing numeric CP Code                                                   │
 │    --unique-cpcode                  Create or reuse a unique cpCode per onboarded hostname within PMUSER_ORIGIN      │
 │                                     child rules, pruning any PMUSER_ORIGIN child hostname not present in --csv       │
+│    --prune-hostname-rules           Prune rule-tree children elsewhere in the tree (e.g. Redirect Rules, Page Rules) │
+│                                     that reference a hostname not present in --csv. PMUSER_ORIGIN is unaffected, see │
+│                                     --unique-cpcode.                                                                 │
 │    --cert-mode                      Certificate mode [default: SBD]                                                  │
 │    --use-existing-edgehostname      Use existing edge hostnames. Pass an EHN name for a single EHN, or pass 'CSV' to │
 │                                     use the edgeHostname column from the CSV.                                        │
@@ -361,6 +368,8 @@ $ akamai onboard convert --help
 │    --force                          skip user confirmation prompt                                                    │
 │    --dryrun                         admin - test config                                                              │
 │    --prefix                         admin - required for dryrun.                                                     │
+│    --preview                        Preview what would be created on Akamai without creating anything for real -     │
+│                                     writes the ruletree JSON using your real --csv hostnames.                        │
 │    --launch/--no-launch             automatically open excel application                                             │
 │    --no-wait                        Submit production activation(s) and return immediately instead of polling for    │
 │                                     completion; check status later with check-activation. Staging activation always  │
