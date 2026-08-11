@@ -1065,6 +1065,57 @@ class papiFunctions:
             containers.extend(self.find_hostname_scoped_containers(child))
         return containers
 
+    def _classify_hostname_scoped_child(self, child: dict, csv_hostnames: set[str]) -> str:
+        """Sorts a child into full_match, partial_match, or no_match against a property's CSV hostnames, same rule PMUSER_ORIGIN uses minus the wildcard exception."""
+        values = self._hostname_scoped_child_values(child)
+        if not values:
+            return 'no_match'
+        matched = [value for value in values if value.lower() in csv_hostnames]
+        if len(matched) == len(values):
+            return 'full_match'
+        if matched:
+            return 'partial_match'
+        return 'no_match'
+
+    def prune_hostname_scoped_children(self, property_name: str, rule_tree: dict, csv_hostnames: list[str]) -> list[str]:
+        """Removes rules elsewhere in the tree (e.g. redirect or page rules) that reference a hostname not in this property's CSV. Returns the hostnames that got removed."""
+        containers = self.find_hostname_scoped_containers(rule_tree)
+        if not containers:
+            logger.debug(f'{property_name}: --prune-hostname-rules found no qualifying containers')
+            return []
+
+        csv_hostname_set = {hostname.lower() for hostname in csv_hostnames}
+        pruned_hostnames = []
+
+        for container in containers:
+            survivors = []
+            for child in container.get('children', []):
+                classification = self._classify_hostname_scoped_child(child, csv_hostname_set)
+
+                if classification == 'no_match':
+                    pruned_hostnames.extend(self._hostname_scoped_child_values(child))
+                    continue
+
+                if classification == 'partial_match':
+                    values = self._hostname_scoped_child_values(child)
+                    mismatched = [value for value in values if value.lower() not in csv_hostname_set]
+                    child_name = child.get('name')
+                    logger.warning(
+                        f"{property_name}: '{container.get('name')}' child '{child_name}' only partially "
+                        f'matches CSV hostnames - {mismatched} not found - left untouched, review manually'
+                    )
+
+                survivors.append(child)
+
+            container['children'] = survivors
+            if not survivors:
+                logger.warning(
+                    f"{property_name}: no children in '{container.get('name')}' matched CSV hostnames "
+                    'after pruning'
+                )
+
+        return pruned_hostnames
+
     def log_hostname_rule_detection(self, property_name: str, rule_tree: dict, enabled: bool) -> None:
         """Checks whether this property's rule tree has hostname-specific rules elsewhere, and logs what it finds. Doesn't change anything yet."""
         if not enabled:
