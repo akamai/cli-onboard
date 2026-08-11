@@ -42,12 +42,7 @@ column_width = 50
 
 @dataclass
 class _ConvertCsvRow:
-    """One parsed row from convert's input CSV, after defaulting.
-
-    Replaces the parallel propertyList/hostnameList/edgeHostnameList/
-    secureNetworkList/productList lists csv_2_property_dict_convert() used to
-    build by index - a per-row bundle of these can't drift out of alignment.
-    """
+    """One property's details from the input spreadsheet, bundled together after applying defaults."""
     property_name: str
     hostname: str
     edge_hostname: str
@@ -474,9 +469,7 @@ class utility:
         return self.valid
 
     def validateSetupStepsConvert(self, onboard_object, wrapper_object, prefix, confirm_input=input) -> bool:
-        """
-        Function to validate the input values of {hostname}.json when in convert mode
-        """
+        """Checks that all the property settings are valid before starting a conversion."""
 
         count = 0
 
@@ -1234,12 +1227,7 @@ class utility:
         return products
 
     def _strip_id_prefix(self, value: str) -> str:
-        """
-        PAPI returns groupId/contractIds with their 'grp_'/'ctr_' prefix, but
-        onboard_object.contract_id/group_id are taken from user input, which is
-        commonly passed unprefixed (see convert's --group/--contract help text).
-        Compare on the bare id so both forms match.
-        """
+        """Strips the 'grp_'/'ctr_' prefix so IDs can be compared the same way no matter how they were entered."""
         if isinstance(value, str) and value.startswith(('ctr_', 'grp_')):
             return value.split('_', 1)[1]
         return value
@@ -1957,17 +1945,7 @@ class utility:
         return (propertyJson, hostnameList)
 
     def insert_gtm_hostname(self, data, target, replacement, count=0):
-        """
-        Recursively replaces all occurrences of a target value in a nested JSON object.
-
-        Args:
-            data (dict, list, str): The JSON object.
-            target (str): The value to replace.
-            replacement (str): The value to replace with.
-
-        Returns:
-            dict, list, or str: The modified JSON object.
-        """
+        """Replaces a placeholder hostname everywhere it appears in the configuration with the real GTM domain."""
 
         if isinstance(data, dict):
             new_data = {}
@@ -2854,13 +2832,13 @@ def open_excel_application(filepath: str, df: pd.DataFrame | None = None) -> Non
 
 
 def conversion_report_filename(account_output: str, dt_string: str, preview: bool) -> str:
-    """Builds the conversion report's file path - PREVIEW_-prefixed under --preview, unchanged otherwise."""
+    """Builds the report file's name, adding a PREVIEW label when the run used --preview."""
     prefix = 'PREVIEW_' if preview else ''
     return f'{account_output}/{prefix}{dt_string}conversion-result.xlsx'
 
 
 def log_preview_banner(preview: bool) -> None:
-    """Warns that a --preview run created nothing on Akamai; does nothing otherwise."""
+    """Shows a reminder that a --preview run didn't actually create anything on Akamai."""
     if preview:
         logger.warning('--preview: nothing was created on Akamai - rerun without --preview to actually onboard')
 

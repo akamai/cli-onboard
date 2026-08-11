@@ -553,14 +553,7 @@ class papiFunctions:
                                        papi,
                                        propertyDict,
                                        dryrun: bool | None = False) -> list:
-        """
-        Function with multiple goals:
-            1. Create a property
-            2. Create shared certed hostname (akamized.net)
-            3. Prep public hostname
-            4. Update property public hostname
-            5. Update the property with template rules define
-        """
+        """Creates each property, sets up its shared certificate hostname, and applies the public hostname and template rules."""
         propertyIds = []
         skip_property = []
         custom_solution = False
@@ -897,9 +890,7 @@ class papiFunctions:
         return rule_name
 
     def inject_cpcode_behavior(self, single_rule: dict, cpcode_value: int) -> dict:
-        """
-        inject cpcode behavior to a single rule
-        """
+        """Sets the cpCode a rule should use, replacing any existing one."""
         cpcode_behavior = self.get_behavior_template('cpCode')
         cpcode_behavior['options']['value']['id'] = cpcode_value
         original_behavior = single_rule['behaviors']
@@ -914,11 +905,7 @@ class papiFunctions:
         return single_rule
 
     def find_pmuser_origin_node(self, rule_tree: dict) -> dict | None:
-        """
-        Depth-first search a rule tree for a node named PMUSER_ORIGIN - the
-        container node Cloudflare-converted ruletrees use to hold one child
-        rule per hostname (see ./logs/*_v1.json for real examples).
-        """
+        """Finds the section of a configuration that lists per-hostname origin settings, if one exists."""
         if rule_tree.get('name') == 'PMUSER_ORIGIN':
             return rule_tree
         for child in rule_tree.get('children', []):
@@ -928,7 +915,7 @@ class papiFunctions:
         return None
 
     def _pmuser_origin_child_hostname_values(self, child: dict) -> list[str]:
-        """Every value from a PMUSER_ORIGIN child's `hostname` criteria, in order."""
+        """Lists every hostname value attached to one per-hostname origin entry."""
         values = []
         for criterion in child.get('criteria', []):
             if criterion.get('name') == 'hostname':
@@ -936,11 +923,7 @@ class papiFunctions:
         return values
 
     def _classify_pmuser_origin_child(self, child: dict, csv_hostnames: set[str]) -> str:
-        """
-        Classify a PMUSER_ORIGIN child against a property's CSV hostnames:
-        wildcard, full_match, partial_match, or no_match - see
-        prune_pmuser_origin_children/inject_unique_cpcodes for how each is handled.
-        """
+        """Checks whether a per-hostname origin entry's hostnames are fully, partially, or not covered by the CSV list."""
         values = self._pmuser_origin_child_hostname_values(child)
         if any(value.startswith('*.') for value in values):
             return 'wildcard'
@@ -954,11 +937,7 @@ class papiFunctions:
         return 'no_match'
 
     def prune_pmuser_origin_children(self, property_name: str, rule_tree: dict, csv_hostnames: list[str]) -> list[str]:
-        """
-        Prune rule_tree's PMUSER_ORIGIN children to csv_hostnames, mutating in
-        place. Preserves wildcards; warns and skips partial matches. No-op if
-        no PMUSER_ORIGIN node. Returns pruned hostnames.
-        """
+        """Removes per-hostname origin entries that don't match the CSV hostnames, keeping wildcards and flagging partial matches for review."""
         pmuser_origin_node = self.find_pmuser_origin_node(rule_tree)
         if not pmuser_origin_node:
             logger.debug(f'{property_name}: --unique-cpcode has no effect, no PMUSER_ORIGIN node in ruletree')
@@ -998,7 +977,7 @@ class papiFunctions:
 
     def apply_unique_cpcode(self, property_name: str, rule_tree: dict, csv_hostnames: list[str],
                              enabled: bool) -> list[str]:
-        """convert()'s --unique-cpcode prune gate. Disabled is a no-op; enabled delegates to prune_pmuser_origin_children."""
+        """Runs the --unique-cpcode cleanup step when that option is turned on; otherwise does nothing."""
         if not enabled:
             return []
         return self.prune_pmuser_origin_children(property_name, rule_tree, csv_hostnames)
@@ -1006,7 +985,7 @@ class papiFunctions:
     def inject_unique_cpcodes(self, onboard_object, wrapper_object, property_name: str, rule_tree: dict,
                                csv_hostnames: list[str], contract_id: str, group_id: str,
                                product_id: str, preview: bool = False) -> dict[str, int]:
-        """Gives each matched hostname its own cpCode, reusing or creating one - unless this is a preview run."""
+        """Gives each matched hostname its own cpCode, reusing or creating one, unless this is a preview run."""
         pmuser_origin_node = self.find_pmuser_origin_node(rule_tree)
         if not pmuser_origin_node:
             return {}
@@ -1046,7 +1025,7 @@ class papiFunctions:
                                           csv_hostnames, contract_id, group_id, product_id, preview=preview)
 
     def unique_cpcode_smoketest_rows(self, unique_cpcodes: dict[str, int]) -> list[list]:
-        """Report rows (hostname, hostname, cpcode), one per --unique-cpcode injected hostname."""
+        """Builds one report row per hostname that received its own cpCode."""
         return [[hostname, hostname, cpcode] for hostname, cpcode in unique_cpcodes.items()]
 
     def _full_url_hostname(self, value: str) -> str:
@@ -1068,7 +1047,7 @@ class papiFunctions:
         return values
 
     def find_hostname_scoped_containers(self, rule_tree: dict) -> list[dict]:
-        """Finds every section of the rule tree that lists specific hostnames (e.g. redirect or page rules), skipping the PMUSER_ORIGIN section entirely."""
+        """Finds every section of the configuration that lists specific hostnames, such as redirect or page rules."""
         if rule_tree.get('name') == 'PMUSER_ORIGIN':
             return []
 
@@ -1081,7 +1060,7 @@ class papiFunctions:
         return containers
 
     def _classify_hostname_scoped_child(self, child: dict, csv_hostnames: set[str]) -> str:
-        """Sorts a child into full_match, partial_match, or no_match against a property's CSV hostnames, same rule PMUSER_ORIGIN uses minus the wildcard exception."""
+        """Checks whether a rule's hostnames fully, partially, or don't match the CSV hostname list."""
         values = self._hostname_scoped_child_values(child)
         if not values:
             return 'no_match'
@@ -1133,13 +1112,13 @@ class papiFunctions:
 
     def apply_prune_hostname_rules(self, property_name: str, rule_tree: dict, csv_hostnames: list[str],
                                     enabled: bool) -> list[str]:
-        """convert()'s --prune-hostname-rules gate. Disabled is a no-op; enabled delegates to prune_hostname_scoped_children."""
+        """Runs the --prune-hostname-rules cleanup step when that option is turned on; otherwise does nothing."""
         if not enabled:
             return []
         return self.prune_hostname_scoped_children(property_name, rule_tree, csv_hostnames)
 
     def has_hostnames_beyond_csv(self, rule_tree: dict, csv_hostnames: list[str]) -> bool:
-        """True if the ruletree mentions any hostname that is not in this run's CSV file."""
+        """True if the configuration mentions any hostname that isn't in this run's CSV file."""
         csv_hostname_set = {hostname.lower() for hostname in csv_hostnames}
         ruletree_hostnames = set()
 
