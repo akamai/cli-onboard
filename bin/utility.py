@@ -2853,6 +2853,18 @@ def open_excel_application(filepath: str, df: pd.DataFrame | None = None) -> Non
             subprocess.check_call(['open', '-a', 'Microsoft Excel', filepath])
 
 
+def conversion_report_filename(account_output: str, dt_string: str, preview: bool) -> str:
+    """Builds the conversion report's file path - PREVIEW_-prefixed under --preview, unchanged otherwise."""
+    prefix = 'PREVIEW_' if preview else ''
+    return f'{account_output}/{prefix}{dt_string}conversion-result.xlsx'
+
+
+def log_preview_banner(preview: bool) -> None:
+    """Warns that a --preview run created nothing on Akamai; does nothing otherwise."""
+    if preview:
+        logger.warning('--preview: nothing was created on Akamai - rerun without --preview to actually onboard')
+
+
 def split_elements_newline(elements):
     if isinstance(elements, (list, tuple, dict)):
         return '\n'.join(map(str, elements))

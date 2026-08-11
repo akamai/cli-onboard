@@ -546,13 +546,15 @@ def convert(config, **kwargs):
 
         activation_df = pd.DataFrame()
 
-        conversion_filepath = f'{account_output}/{dt_string}conversion-result.xlsx'
+        conversion_filepath = utility.conversion_report_filename(account_output, dt_string, click_args['preview'])
         logger.info('conversion (activation) output')
         logger.info(f'{conversion_filepath} {emoji.bow}')
         utility.write_xlsx(conversion_filepath, sheet, show_index=False, freeze_column=1)
         open_excel_automatically = kwargs['launch'] if kwargs['launch'] else False
         if open_excel_automatically:
             utility.open_excel_application(conversion_filepath, result_df)
+
+        utility.log_preview_banner(click_args['preview'])
 
         print()
         util.log_cli_timing()
