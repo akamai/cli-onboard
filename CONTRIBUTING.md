@@ -44,6 +44,8 @@ uv run pytest -v
 
 This repo uses [pre-commit](https://pre-commit.com/) (`.pre-commit-config.yaml`) for formatting and lint checks: `flake8`, `reorder-python-imports`, `pyupgrade`, `markdownlint` (for `README.md`/`CHANGELOG.md`), and two local hooks that keep generated content in sync — `sync-cli-manifest` (`cli.json` version/description from `pyproject.toml`) and `sync-readme-commands` (README's Command catalog from the CLI's actual registered commands).
 
+The same hook set also runs three security checks, each blocking on any finding: `uv audit` (dependency vulnerability scanning), `bandit` (static analysis for insecure code patterns, medium+ severity), and `gitleaks` (secret scanning — staged changes locally, full git history in CI). CI (`.github/workflows/security.yml`) runs the same three on every push/PR.
+
 ```bash
 pre-commit install       # once, so hooks run automatically on every commit
 pre-commit run           # runs against your staged changes, same as a real commit
