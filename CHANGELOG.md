@@ -16,7 +16,7 @@ Each release is grouped into two sections:
 
 ---
 
-## [v2.5.5] - 2026-08-07
+## [v2.5.5] - 2026-08-17
 
 #### ENHANCEMENTS:
 
