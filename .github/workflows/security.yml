@@ -1,0 +1,27 @@
+name: Security
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  security:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: uv sync --all-groups --locked
+
+      - name: Dependency vulnerability scan (uv audit)
+        run: uv audit --locked --preview-features audit
+        env:
+          COLUMNS: "120"
+          PYTHONUTF8: "1"

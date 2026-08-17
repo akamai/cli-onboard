@@ -50,3 +50,8 @@ repos:
         language: system
         files: ^(README\.md|bin/akamai-onboard\.py)$
         pass_filenames: false
+      - id: uv-audit
+        name: uv audit dependency vulnerability scan
+        entry: uv audit --locked --preview-features audit
+        language: system
+        pass_filenames: false
