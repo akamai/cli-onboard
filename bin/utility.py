@@ -6,6 +6,7 @@ import logging
 import os
 import platform
 import re
+import shlex
 import shutil
 import subprocess
 import sys
@@ -77,12 +78,12 @@ class utility:
         if click_args['group'] is None:
             command = (f'akamai pm -s default lg -a {config.account_key}') if config.account_key is not None else ('akamai pm lg')
             logger.warning(f'Group ID is required.  Running akamai property manager cli command: {command}')
-            sys.exit(subprocess.run(command, shell=True).returncode)
+            sys.exit(subprocess.run(shlex.split(command), shell=False).returncode)
 
         if click_args['contract'] is None:
             command = (f'akamai pm lc -s default -a {config.account_key}') if config.account_key is not None else ('akamai pm lc')
             logger.warning(f'Contract ID is required.  Running akamai property manager cli command: {command}')
-            sys.exit(subprocess.run(command, shell=True).returncode)
+            sys.exit(subprocess.run(shlex.split(command), shell=False).returncode)
 
     def check_sbd_quota(self, papi, click_args, total_needed) -> bool:
         contract_id = click_args['contract']

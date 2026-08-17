@@ -16,6 +16,7 @@ import logging
 import os
 import random
 import re
+import shlex
 import string
 import subprocess
 import sys
@@ -881,7 +882,7 @@ class apiCallsWrapper:
                 command = (f'akamai pm -s default lg -a {account_switch_key}') if account_switch_key is not None else ('akamai pm lg')
                 logger.warning('Possible invalid contract/group_id')
                 logger.warning('Running akamai property manager cli command: {command}')
-                sys.exit(subprocess.run(command, shell=True).returncode)
+                sys.exit(subprocess.run(shlex.split(command), shell=False).returncode)
         return response, hostnames, selectable_df
 
     def get_property_hostnames(self, property_id: str, contract_id: str, group_id: str, network: str | None = 'staging'):
