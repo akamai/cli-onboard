@@ -25,3 +25,9 @@ jobs:
         env:
           COLUMNS: "120"
           PYTHONUTF8: "1"
+
+      - name: Static analysis security scan (bandit)
+        run: uvx bandit -r bin -ll
+        env:
+          COLUMNS: "120"
+          PYTHONUTF8: "1"
