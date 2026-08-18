@@ -26,6 +26,7 @@ Each release is grouped into two sections:
 - Add `--preview` to `convert`: see exactly what a run would create before anything touches Akamai for real
 - Add `--prune-hostname-rules` to `convert`: drops rules for hostnames not in this run's CSV so each property only keeps its own rules
 - Add `--unique-cpcode` to `convert`: each hostname can get its own CP Code instead of sharing one for the whole property
+- Add security vulnerability checks — `uv audit` (dependency vulnerabilities), `bandit` (static analysis, medium+ severity), and `gitleaks` (secret scanning) — enforced locally via pre-commit and in CI (`.github/workflows/security.yml`)
 - New `check-activation` command checks on activation(s) submitted earlier with `--no-wait`; add `--wait` to keep polling until every activation finishes
 
 #### BUG FIXES:
@@ -33,7 +34,9 @@ Each release is grouped into two sections:
 - `appsec-create --activate production` now actually activates to the production network — it was silently activating to staging twice instead
 - `batch-create`'s WAF production activation now fires correctly instead of silently never running, even when delivery activation to production succeeded
 - `check-activation` now works with minimal, hand-built CSVs, not just ones produced by a prior `--no-wait` run
+- Bump vulnerable `setuptools`/`urllib3`/`aiohttp`/`cryptography`/`idna`/`pyasn1` versions flagged by `uv audit`
 - Fall back to the package's own install location instead of the current working directory when locating the CLI's root directory
+- Fix command injection risk in `akamai pm ...` shell-outs (`akamai-onboard.py`, `utility.py`, `wrapper_api.py`) — run with argument list and `shell=False` instead of a shell string
 
 ## [v2.5.4] - 2026-08-04
 
