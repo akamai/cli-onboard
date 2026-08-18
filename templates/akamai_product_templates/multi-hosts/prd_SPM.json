@@ -100,7 +100,8 @@
               {
                 "name": "readTimeout",
                 "options": {
-                  "value": "120s"
+                  "value": "5s",
+                  "firstByteTimeout": "20s"
                 }
               }
             ],
@@ -116,6 +117,12 @@
                 "name": "enhancedAkamaiProtocol",
                 "options": {
                   "display": ""
+                }
+              },
+              {
+                "name": "http3",
+                "options": {
+                  "enable": true
                 }
               },
               {
@@ -250,19 +257,17 @@
                 "name": "adaptiveAcceleration",
                 "options": {
                   "abLogic": "DISABLED",
-                  "enableBrotliCompression": false,
+                  "enableBrotliCompression": true,
+                  "enableForNoncacheable": false,
                   "enablePreconnect": true,
                   "enablePush": true,
                   "enableRo": false,
                   "preloadEnable": true,
-                  "source": "mPulse",
+                  "source": "MPULSE",
                   "titleHttp2ServerPush": "",
                   "titlePreconnect": "",
                   "titlePreload": "",
-                  "titleRo": "",
-                  "abTesting": "",
-                  "compression": "",
-                  "titleBrotli": ""
+                  "titleRo": ""
                 }
               }
             ],
@@ -536,12 +541,6 @@
                 "options": {
                   "enabled": "false"
                 }
-              },
-              {
-                "name": "chaseRedirects",
-                "options": {
-                  "enabled": false
-                }
               }
             ],
             "criteria": [],
@@ -668,6 +667,13 @@
               "behavior": "ALLOW",
               "sendHeaders": "CACHE_CONTROL",
               "sendPrivate": false
+            }
+          },
+          {
+            "name": "modifyViaHeader",
+            "options": {
+              "enabled": true,
+              "modificationOption": "REMOVE_HEADER"
             }
           }
         ],
@@ -913,7 +919,7 @@
               {
                 "name": "healthDetection",
                 "options": {
-                  "maximumReconnects": 3,
+                  "maximumReconnects": 2,
                   "retryCount": 3,
                   "retryInterval": "10s"
                 }
@@ -975,8 +981,7 @@
                     "application/x-font-opentype",
                     "application/x-font-truetype",
                     "application/x-font-ttf",
-                    "application/xmlfont/eot",
-                    "font/eot",
+                    "font/eot*",
                     "font/opentype",
                     "font/otf",
                     "image/svg+xml",

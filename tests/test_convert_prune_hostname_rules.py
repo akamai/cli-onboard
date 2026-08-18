@@ -1,0 +1,663 @@
+from __future__ import annotations
+
+import copy
+import logging
+
+
+class TestFullUrlHostname:
+
+    def test_bare_url_with_scheme_resolves_to_netloc(self, papi):
+        assert papi._full_url_hostname('https://account.mrcooper.com/path') == 'account.mrcooper.com'
+
+    def test_trailing_wildcard_url_resolves_to_netloc(self, papi):
+        value = 'https://account.mrcooper.com/ed04d0f3/oauth2/v2.0/authorize?p=B2C_1A_PasswordReset*'
+        assert papi._full_url_hostname(value) == 'account.mrcooper.com'
+
+    def test_leading_and_trailing_wildcard_with_no_scheme_resolves_to_bare_host(self, papi):
+        assert papi._full_url_hostname('*homepoint.mrcooper.com*') == 'homepoint.mrcooper.com'
+
+    def test_trailing_slash_wildcard_url_resolves_to_netloc(self, papi):
+        assert papi._full_url_hostname('https://cooperclientconnect.mrcooper.com/*') == 'cooperclientconnect.mrcooper.com'
+
+    def test_no_wildcard_no_scheme_value_is_returned_unchanged(self, papi):
+        assert papi._full_url_hostname('www.example.com') == 'www.example.com'
+
+
+class TestHostnameScopedChildValues:
+
+    @staticmethod
+    def _hostname_child(values):
+        return {
+            'name': 'child',
+            'children': [],
+            'criteria': [{'name': 'hostname', 'options': {'matchOperator': 'IS_ONE_OF', 'values': values}}],
+        }
+
+    @staticmethod
+    def _full_url_child(values, extra_criteria=None):
+        criteria = [{'name': 'matchVariable',
+                     'options': {'variableName': 'PMUSER_FULL_URL', 'matchOperator': 'IS_ONE_OF',
+                                 'variableValues': values}}]
+        if extra_criteria:
+            criteria.extend(extra_criteria)
+        return {'name': 'child', 'children': [], 'criteria': criteria}
+
+    def test_hostname_criterion_values_used_as_is(self, papi):
+        child = self._hostname_child(['www.example.com'])
+
+        assert papi._hostname_scoped_child_values(child) == ['www.example.com']
+
+    def test_pmuser_full_url_values_are_resolved(self, papi):
+        child = self._full_url_child(['*homepoint.mrcooper.com*'])
+
+        assert papi._hostname_scoped_child_values(child) == ['homepoint.mrcooper.com']
+
+    def test_unrelated_matchvariable_is_ignored(self, papi):
+        child = self._full_url_child(
+            ['https://account.mrcooper.com/path*'],
+            extra_criteria=[{'name': 'matchVariable',
+                              'options': {'variableName': 'PMUSER_QUERY', 'matchOperator': 'IS_NOT_ONE_OF',
+                                          'variableValues': ['*connection=rkt*']}}],
+        )
+
+        assert papi._hostname_scoped_child_values(child) == ['account.mrcooper.com']
+
+    def test_child_with_no_qualifying_criteria_returns_empty_list(self, papi):
+        child = {'name': 'weird', 'children': [], 'criteria': []}
+
+        assert papi._hostname_scoped_child_values(child) == []
+
+
+class TestFindHostnameScopedContainers:
+
+    def test_finds_container_whose_children_carry_hostname_criteria(self, papi):
+        rule_tree = {
+            'name': 'default',
+            'children': [
+                {'name': 'Page Rules', 'children': [
+                    {'name': 'www.example.com', 'children': [],
+                     'criteria': [{'name': 'hostname', 'options': {'values': ['www.example.com']}}]},
+                ]},
+            ],
+        }
+
+        containers = papi.find_hostname_scoped_containers(rule_tree)
+
+        assert len(containers) == 1
+        assert containers[0]['name'] == 'Page Rules'
+
+    def test_finds_container_whose_children_carry_pmuser_full_url_criteria(self, papi):
+        rule_tree = {
+            'name': 'default',
+            'children': [
+                {'name': 'Redirect Rules', 'children': [
+                    {'name': 'redirect-1', 'children': [],
+                     'criteria': [{'name': 'matchVariable',
+                                   'options': {'variableName': 'PMUSER_FULL_URL',
+                                               'variableValues': ['https://www.example.com/*']}}]},
+                ]},
+            ],
+        }
+
+        containers = papi.find_hostname_scoped_containers(rule_tree)
+
+        assert len(containers) == 1
+        assert containers[0]['name'] == 'Redirect Rules'
+
+    def test_pmuser_origin_is_never_returned_even_though_its_children_qualify(self, papi):
+        rule_tree = {
+            'name': 'default',
+            'children': [
+                {'name': 'PMUSER_ORIGIN', 'children': [
+                    {'name': 'www.example.com', 'children': [],
+                     'criteria': [{'name': 'hostname', 'options': {'values': ['www.example.com']}}]},
+                ]},
+            ],
+        }
+
+        assert papi.find_hostname_scoped_containers(rule_tree) == []
+
+    def test_pmuser_origin_subtree_is_not_recursed_into(self, papi):
+        rule_tree = {
+            'name': 'default',
+            'children': [
+                {'name': 'PMUSER_ORIGIN', 'children': [
+                    {'name': 'Nested Page Rules', 'children': [
+                        {'name': 'www.example.com', 'children': [],
+                         'criteria': [{'name': 'hostname', 'options': {'values': ['www.example.com']}}]},
+                    ]},
+                ]},
+            ],
+        }
+
+        assert papi.find_hostname_scoped_containers(rule_tree) == []
+
+    def test_finds_container_nested_deeper_than_one_level(self, papi):
+        rule_tree = {
+            'name': 'default',
+            'children': [
+                {'name': 'Outer', 'children': [
+                    {'name': 'Page Rules', 'children': [
+                        {'name': 'www.example.com', 'children': [],
+                         'criteria': [{'name': 'hostname', 'options': {'values': ['www.example.com']}}]},
+                    ]},
+                ]},
+            ],
+        }
+
+        containers = papi.find_hostname_scoped_containers(rule_tree)
+
+        assert len(containers) == 1
+        assert containers[0]['name'] == 'Page Rules'
+
+    def test_finds_multiple_independent_containers(self, papi):
+        rule_tree = {
+            'name': 'default',
+            'children': [
+                {'name': 'PMUSER_ORIGIN', 'children': [
+                    {'name': 'www.example.com', 'children': [],
+                     'criteria': [{'name': 'hostname', 'options': {'values': ['www.example.com']}}]},
+                ]},
+                {'name': 'Page Rules', 'children': [
+                    {'name': 'www.example.com', 'children': [],
+                     'criteria': [{'name': 'hostname', 'options': {'values': ['www.example.com']}}]},
+                ]},
+                {'name': 'Redirect Rules', 'children': [
+                    {'name': 'redirect-1', 'children': [],
+                     'criteria': [{'name': 'matchVariable',
+                                   'options': {'variableName': 'PMUSER_FULL_URL',
+                                               'variableValues': ['https://www.example.com/*']}}]},
+                ]},
+            ],
+        }
+
+        containers = papi.find_hostname_scoped_containers(rule_tree)
+
+        assert sorted(container['name'] for container in containers) == ['Page Rules', 'Redirect Rules']
+
+    def test_no_qualifying_containers_returns_empty_list(self, papi):
+        rule_tree = {'name': 'default', 'children': [{'name': 'Shared Variables', 'children': []}]}
+
+        assert papi.find_hostname_scoped_containers(rule_tree) == []
+
+    def test_returns_empty_list_for_leaf_rule_with_no_children_key(self, papi):
+        assert papi.find_hostname_scoped_containers({'name': 'default'}) == []
+
+
+class TestApplyPruneHostnameRules:
+    """Checks that the hostname-rule cleanup only runs when the corresponding option is turned on."""
+
+    def test_disabled_is_a_noop_and_never_touches_the_rule_tree(self, papi):
+        rule_tree = {
+            'name': 'default',
+            'children': [
+                {'name': 'Page Rules', 'children': [
+                    {'name': 'old.example.com', 'children': [],
+                     'criteria': [{'name': 'hostname', 'options': {'values': ['old.example.com']}}]},
+                ]},
+            ],
+        }
+        before = copy.deepcopy(rule_tree)
+
+        pruned, removed = papi.apply_prune_hostname_rules('my-property', rule_tree, ['www.example.com'],
+                                                            enabled=False)
+
+        assert pruned == []
+        assert removed == []
+        assert rule_tree == before
+
+    def test_enabled_delegates_to_prune_hostname_scoped_children(self, papi):
+        rule_tree = {
+            'name': 'default',
+            'children': [
+                {'name': 'Page Rules', 'children': [
+                    {'name': 'old.example.com', 'children': [],
+                     'criteria': [{'name': 'hostname', 'options': {'values': ['old.example.com']}}]},
+                ]},
+            ],
+        }
+
+        pruned, removed = papi.apply_prune_hostname_rules('my-property', rule_tree, ['www.example.com'],
+                                                            enabled=True)
+
+        assert pruned == ['old.example.com']
+        # Page Rules had only one child, which got pruned - Page Rules is now empty too and gets removed
+        assert removed == ['default > Page Rules']
+        assert rule_tree['children'] == []
+
+
+class TestClassifyHostnameScopedChild:
+
+    @staticmethod
+    def _hostname_child(values):
+        return {'name': 'child', 'children': [], 'criteria': [{'name': 'hostname', 'options': {'values': values}}]}
+
+    def test_no_qualifying_criteria_is_no_match(self, papi):
+        child = {'name': 'weird', 'children': [], 'criteria': []}
+
+        assert papi._classify_hostname_scoped_child(child, {'www.example.com'}) == 'no_match'
+
+    def test_single_value_full_match(self, papi):
+        child = self._hostname_child(['www.example.com'])
+
+        assert papi._classify_hostname_scoped_child(child, {'www.example.com'}) == 'full_match'
+
+    def test_single_value_no_match(self, papi):
+        child = self._hostname_child(['old.example.com'])
+
+        assert papi._classify_hostname_scoped_child(child, {'www.example.com'}) == 'no_match'
+
+    def test_multi_value_all_match_is_full_match(self, papi):
+        child = self._hostname_child(['a.example.com', 'b.example.com'])
+
+        assert papi._classify_hostname_scoped_child(child, {'a.example.com', 'b.example.com'}) == 'full_match'
+
+    def test_multi_value_some_match_is_partial_match(self, papi):
+        child = self._hostname_child(['a.example.com', 'b.example.com'])
+
+        assert papi._classify_hostname_scoped_child(child, {'a.example.com'}) == 'partial_match'
+
+    def test_match_is_case_insensitive(self, papi):
+        child = self._hostname_child(['WWW.EXAMPLE.COM'])
+
+        assert papi._classify_hostname_scoped_child(child, {'www.example.com'}) == 'full_match'
+
+
+class TestPruneHostnameScopedChildren:
+
+    @staticmethod
+    def _hostname_child(name, values):
+        return {
+            'name': name, 'children': [],
+            'criteria': [{'name': 'hostname', 'options': {'matchOperator': 'IS_ONE_OF', 'values': values}}],
+        }
+
+    @staticmethod
+    def _full_url_child(name, values):
+        return {
+            'name': name, 'children': [],
+            'criteria': [{'name': 'matchVariable',
+                          'options': {'variableName': 'PMUSER_FULL_URL', 'matchOperator': 'IS_ONE_OF',
+                                      'variableValues': values}}],
+        }
+
+    @staticmethod
+    def _rule_tree(container_name, children):
+        return {'name': 'default', 'children': [{'name': container_name, 'children': children}]}
+
+    def test_no_qualifying_containers_is_a_noop(self, papi):
+        rule_tree = {'name': 'default', 'children': [{'name': 'Shared Variables', 'children': []}]}
+        before = copy.deepcopy(rule_tree)
+
+        pruned, removed = papi.prune_hostname_scoped_children('my-property', rule_tree, ['www.example.com'])
+
+        assert pruned == []
+        assert removed == []
+        assert rule_tree == before
+
+    def test_full_match_is_kept(self, papi):
+        matched = self._hostname_child('www.example.com', ['www.example.com'])
+        rule_tree = self._rule_tree('Page Rules', [matched])
+
+        pruned, removed = papi.prune_hostname_scoped_children('my-property', rule_tree, ['www.example.com'])
+
+        assert rule_tree['children'][0]['children'] == [matched]
+        assert pruned == []
+        assert removed == []
+
+    def test_no_match_leaves_container_empty_so_container_is_also_removed(self, papi):
+        unmatched = self._hostname_child('old.example.com', ['old.example.com'])
+        rule_tree = self._rule_tree('Page Rules', [unmatched])
+
+        pruned, removed = papi.prune_hostname_scoped_children('my-property', rule_tree, ['www.example.com'])
+
+        # Page Rules had only this one child, which got pruned - it's now empty and gets removed too
+        assert rule_tree['children'] == []
+        assert pruned == ['old.example.com']
+        assert removed == ['default > Page Rules']
+
+    def test_all_children_pruned_removes_the_emptied_container_and_warns(self, papi, caplog):
+        unmatched = self._hostname_child('old.example.com', ['old.example.com'])
+        rule_tree = self._rule_tree('Page Rules', [unmatched])
+
+        with caplog.at_level(logging.WARNING, logger='utility_papi'):
+            pruned, removed = papi.prune_hostname_scoped_children('my-property', rule_tree, ['www.example.com'])
+
+        assert rule_tree['children'] == []
+        assert pruned == ['old.example.com']
+        assert removed == ['default > Page Rules']
+        assert 'my-property' in caplog.text
+        assert "'Page Rules'" in caplog.text
+        assert 'removing empty rule' in caplog.text
+
+    def test_child_with_no_hostname_criteria_is_pruned(self, papi):
+        # A container is only found when at least one child has qualifying criteria
+        # (see find_hostname_scoped_containers) - pair the no-criteria child with a
+        # matched sibling so the container is detected in the first place.
+        matched = self._hostname_child('www.example.com', ['www.example.com'])
+        no_criteria_child = {'name': 'weird', 'children': [], 'criteria': []}
+        rule_tree = self._rule_tree('Page Rules', [matched, no_criteria_child])
+
+        pruned, removed = papi.prune_hostname_scoped_children('my-property', rule_tree, ['www.example.com'])
+
+        assert rule_tree['children'][0]['children'] == [matched]
+        assert pruned == []
+        assert removed == []
+
+    def test_partial_match_is_left_untouched_and_warns(self, papi, caplog):
+        partial = self._hostname_child('multi', ['a.example.com', 'b.example.com'])
+        rule_tree = self._rule_tree('Page Rules', [partial])
+
+        with caplog.at_level(logging.WARNING, logger='utility_papi'):
+            pruned, removed = papi.prune_hostname_scoped_children('my-property', rule_tree, ['a.example.com'])
+
+        assert rule_tree['children'][0]['children'] == [partial]
+        assert pruned == []
+        assert removed == []
+        assert 'my-property' in caplog.text
+        assert 'multi' in caplog.text
+        # only the actually-mismatched value is named, not the whole criteria list
+        assert 'b.example.com' in caplog.text
+        assert 'a.example.com' not in caplog.text
+
+    def test_match_is_case_insensitive(self, papi):
+        matched = self._hostname_child('WWW.EXAMPLE.COM', ['WWW.EXAMPLE.COM'])
+        rule_tree = self._rule_tree('Page Rules', [matched])
+
+        pruned, removed = papi.prune_hostname_scoped_children('my-property', rule_tree, ['www.example.com'])
+
+        assert rule_tree['children'][0]['children'] == [matched]
+        assert pruned == []
+        assert removed == []
+
+    def test_pmuser_origin_is_never_pruned_even_when_it_would_otherwise_qualify(self, papi):
+        unmatched = self._hostname_child('old.example.com', ['old.example.com'])
+        rule_tree = self._rule_tree('PMUSER_ORIGIN', [unmatched])
+        before = copy.deepcopy(rule_tree)
+
+        pruned, removed = papi.prune_hostname_scoped_children('my-property', rule_tree, ['www.example.com'])
+
+        assert pruned == []
+        assert removed == []
+        assert rule_tree == before
+
+    def test_mixed_children_keep_prune_and_partial_together(self, papi):
+        matched = self._hostname_child('www.example.com', ['www.example.com'])
+        unmatched = self._hostname_child('old.example.com', ['old.example.com'])
+        partial = self._hostname_child('multi', ['a.example.com', 'zzz.example.com'])
+        rule_tree = self._rule_tree('Page Rules', [matched, unmatched, partial])
+
+        pruned, removed = papi.prune_hostname_scoped_children(
+            'my-property', rule_tree, ['www.example.com', 'a.example.com'])
+
+        assert rule_tree['children'][0]['children'] == [matched, partial]
+        assert pruned == ['old.example.com']
+        assert removed == []
+
+    def test_pmuser_full_url_child_is_matched_via_extracted_hostname(self, papi):
+        matched = self._full_url_child('redirect-1', ['https://www.example.com/path*'])
+        rule_tree = self._rule_tree('Redirect Rules', [matched])
+
+        pruned, removed = papi.prune_hostname_scoped_children('my-property', rule_tree, ['www.example.com'])
+
+        assert rule_tree['children'][0]['children'] == [matched]
+        assert pruned == []
+        assert removed == []
+
+    def test_multiple_containers_are_each_pruned_independently(self, papi, caplog):
+        page_rules_matched = self._hostname_child('www.example.com', ['www.example.com'])
+        page_rules_unmatched = self._hostname_child('old.example.com', ['old.example.com'])
+        redirect_unmatched = self._full_url_child('redirect-1', ['https://other.example.com/*'])
+        rule_tree = {
+            'name': 'default',
+            'children': [
+                {'name': 'Page Rules', 'children': [page_rules_matched, page_rules_unmatched]},
+                {'name': 'Redirect Rules', 'children': [redirect_unmatched]},
+            ],
+        }
+
+        with caplog.at_level(logging.WARNING, logger='utility_papi'):
+            pruned, removed = papi.prune_hostname_scoped_children('my-property', rule_tree, ['www.example.com'])
+
+        # Redirect Rules had only the unmatched child, so it's now empty and gets removed entirely
+        assert rule_tree['children'] == [{'name': 'Page Rules', 'children': [page_rules_matched]}]
+        assert sorted(pruned) == ['old.example.com', 'other.example.com']
+        assert removed == ['default > Redirect Rules']
+        # the removed container is named in the warning, the surviving one is not
+        assert "'Redirect Rules'" in caplog.text
+        assert "'Page Rules'" not in caplog.text
+
+
+class TestPruneHostnameScopedChildrenAgainstRealRedirectRulesShape:
+    """Checks the cleanup logic against a realistic, real-world set of redirect rules."""
+
+    @staticmethod
+    def _full_url_child(name, values, extra_criteria=None):
+        criteria = [{'name': 'matchVariable',
+                     'options': {'variableName': 'PMUSER_FULL_URL', 'matchOperator': 'IS_ONE_OF',
+                                 'variableValues': values}}]
+        if extra_criteria:
+            criteria.extend(extra_criteria)
+        return {'name': name, 'children': [], 'criteriaMustSatisfy': 'all', 'criteria': criteria}
+
+    def _real_redirect_rules_children(self):
+        query_exclusion = {'name': 'matchVariable',
+                            'options': {'variableName': 'PMUSER_QUERY', 'matchOperator': 'IS_NOT_ONE_OF',
+                                        'variableValues': ['*connection=rkt*']}}
+        return [
+            self._full_url_child('careers-jobalert', ['https://careers.mrcooper.com/us/en/jobalert']),
+            self._full_url_child('careers-careers', ['https://careers.mrcooper.com/us/en/']),
+            self._full_url_child('careers-home', ['https://careers.mrcooper.com/us/en/home']),
+            self._full_url_child('careers-xome-team', ['https://careers.mrcooper.com/us/en/xome-team']),
+            self._full_url_child('careers-india-team', ['https://careers.mrcooper.com/us/en/india-team']),
+            self._full_url_child('careers-search-results', ['https://careers.mrcooper.com/us/en/search-results']),
+            self._full_url_child('careers-students-grads',
+                                  ['https://careers.mrcooper.com/us/en/india-students-grads']),
+            self._full_url_child('careers-jointalentcommunity',
+                                  ['https://careers.mrcooper.com/us/en/jointalentcommunity']),
+            self._full_url_child('careers-csr',
+                                  ['https://careers.mrcooper.com/us/en/india-corporate-social-responsibility']),
+            self._full_url_child('careers-benefits', ['https://careers.mrcooper.com/us/en/benefits']),
+            self._full_url_child('connect-page', ['https://connect.mrcooper.com/']),
+            self._full_url_child('www-correspondent', ['https://www.mrcooper.com/correspondent']),
+            self._full_url_child('cooperclientconnect-uat', ['https://cooperclientconnect-uat.mrcooper.com/*']),
+            self._full_url_child('cooperclientconnect', ['https://cooperclientconnect.mrcooper.com/*']),
+            self._full_url_child(
+                'account-forgot-password-prod',
+                ['https://account.mrcooper.com/ed04d0f3-eba1-467f-91e7-52505132554c/oauth2/v2.0/'
+                 'authorize?p=B2C_1A_PasswordReset*'],
+                extra_criteria=[query_exclusion],
+            ),
+            self._full_url_child(
+                'account-signin-prod',
+                ['https://account.mrcooper.com/ed04d0f3-eba1-467f-91e7-52505132554c/oauth2/v2.0/'
+                 'authorize?p=B2C_1A_SignUpOrSignIn*'],
+            ),
+            self._full_url_child(
+                'accountuat-signin',
+                ['https://accountuat.mrcooper.com/827b537c-bd22-4ffd-bd5b-f818e069de44/oauth2/v2.0/'
+                 'authorize?p=B2C_1A_SignUpOrSignIn*'],
+            ),
+            self._full_url_child(
+                'accountuat-forgot-password',
+                ['https://accountuat.mrcooper.com/827b537c-bd22-4ffd-bd5b-f818e069de44/oauth2/v2.0/'
+                 'authorize?p=B2C_1A_PasswordReset*'],
+                extra_criteria=[query_exclusion],
+            ),
+            self._full_url_child('homepoint-redirect', ['*homepoint.mrcooper.com*']),
+        ]
+
+    def test_only_account_and_accountuat_children_survive(self, papi):
+        children = self._real_redirect_rules_children()
+        assert len(children) == 19
+        rule_tree = {'name': 'default', 'children': [{'name': 'Redirect Rules', 'children': children}]}
+        csv_hostnames = ['account.mrcooper.com', 'accountuat.mrcooper.com']
+
+        pruned, removed = papi.prune_hostname_scoped_children('account.mrcooper.com', rule_tree, csv_hostnames)
+
+        survivors = rule_tree['children'][0]['children']
+        assert [child['name'] for child in survivors] == [
+            'account-forgot-password-prod', 'account-signin-prod',
+            'accountuat-signin', 'accountuat-forgot-password',
+        ]
+        assert len(pruned) == 15
+        assert removed == []
+
+
+class TestPrunedRuleChildrenReportFormatting:
+    """Checks that removed rules are listed in the report using the same readable format as other report columns."""
+
+    def test_pruned_hostnames_render_with_the_report_formatter(self, papi):
+        import utility
+
+        rule_tree = {
+            'name': 'default',
+            'children': [
+                {'name': 'Page Rules', 'children': [
+                    {'name': 'old.example.com', 'children': [],
+                     'criteria': [{'name': 'hostname', 'options': {'values': ['old.example.com']}}]},
+                    {'name': 'stale.example.com', 'children': [],
+                     'criteria': [{'name': 'hostname', 'options': {'values': ['stale.example.com']}}]},
+                    {'name': 'kept.example.com', 'children': [],
+                     'criteria': [{'name': 'hostname', 'options': {'values': ['www.example.com']}}]},
+                ]},
+            ],
+        }
+
+        pruned, removed = papi.apply_prune_hostname_rules('my-property', rule_tree, ['www.example.com'],
+                                                            enabled=True)
+
+        assert utility.split_elements_newline_withcomma(pruned) == '1. old.example.com,\n2. stale.example.com'
+
+    def test_removed_empty_rules_render_with_the_report_formatter(self, papi):
+        import utility
+
+        rule_tree = {
+            'name': 'default',
+            'children': [
+                {'name': 'Page Rules', 'children': [
+                    {'name': 'old.example.com', 'children': [],
+                     'criteria': [{'name': 'hostname', 'options': {'values': ['old.example.com']}}]},
+                ]},
+            ],
+        }
+
+        pruned, removed = papi.apply_prune_hostname_rules('my-property', rule_tree, ['www.example.com'],
+                                                            enabled=True)
+
+        # single-element lists render without a numbered prefix, same as prunedHostnames does
+        assert utility.split_elements_newline_withcomma(removed) == 'default > Page Rules'
+
+
+class TestUniqueCpcodeAndPruneHostnameRulesAreIndependent:
+    """Checks that the two cleanup options track their own separate lists and never mix results together."""
+
+    def test_both_flags_enabled_together_produce_two_independent_prune_lists(self, papi):
+        rule_tree = {
+            'name': 'default',
+            'children': [
+                {'name': 'PMUSER_ORIGIN', 'children': [
+                    {'name': 'www.example.com', 'children': [], 'behaviors': [],
+                     'criteria': [{'name': 'hostname', 'options': {'values': ['www.example.com']}}],
+                     'criteriaMustSatisfy': 'all'},
+                    {'name': 'old-origin.example.com', 'children': [], 'behaviors': [],
+                     'criteria': [{'name': 'hostname', 'options': {'values': ['old-origin.example.com']}}],
+                     'criteriaMustSatisfy': 'all'},
+                ]},
+                {'name': 'Page Rules', 'children': [
+                    {'name': 'www.example.com', 'children': [],
+                     'criteria': [{'name': 'hostname', 'options': {'values': ['www.example.com']}}]},
+                    {'name': 'old-page.example.com', 'children': [],
+                     'criteria': [{'name': 'hostname', 'options': {'values': ['old-page.example.com']}}]},
+                ]},
+            ],
+        }
+        csv_hostnames = ['www.example.com']
+
+        pruned_hostnames = papi.apply_unique_cpcode('my-property', rule_tree, csv_hostnames, enabled=True)
+        pruned_rule_children, removed_rules = papi.apply_prune_hostname_rules(
+            'my-property', rule_tree, csv_hostnames, enabled=True)
+
+        assert pruned_hostnames == ['old-origin.example.com']
+        assert pruned_rule_children == ['old-page.example.com']
+        # Page Rules still has its surviving child, so nothing gets removed entirely
+        assert removed_rules == []
+        # each mechanism only ever pruned its own container, not the other's
+        origin_node, page_rules_node = rule_tree['children']
+        assert [child['name'] for child in origin_node['children']] == ['www.example.com']
+        assert [child['name'] for child in page_rules_node['children']] == ['www.example.com']
+
+
+class TestRemoveEmptyRulesAfterPruning:
+    """Checks that a rule left with nothing in it after pruning is removed, and the removal cascades upward."""
+
+    @staticmethod
+    def _hostname_child(name, values):
+        return {
+            'name': name, 'children': [],
+            'criteria': [{'name': 'hostname', 'options': {'matchOperator': 'IS_ONE_OF', 'values': values}}],
+        }
+
+    def test_cascade_removes_a_grouping_folder_and_its_now_empty_parent(self, papi):
+        # Redirect Rules > Regional Redirects > two hostname children, none of which match this property
+        host_a = self._hostname_child('redirect-a', ['a.example.com'])
+        host_b = self._hostname_child('redirect-b', ['b.example.com'])
+        rule_tree = {
+            'name': 'default',
+            'children': [
+                {'name': 'Redirect Rules', 'children': [
+                    {'name': 'Regional Redirects', 'children': [host_a, host_b]},
+                ]},
+            ],
+        }
+
+        pruned, removed = papi.prune_hostname_scoped_children('my-property', rule_tree, ['keep.example.com'])
+
+        assert sorted(pruned) == ['a.example.com', 'b.example.com']
+        # child removed before its now-empty parent, same order the cascade unwinds in
+        assert removed == ['Redirect Rules > Regional Redirects', 'default > Redirect Rules']
+        assert rule_tree['children'] == []
+
+    def test_cascade_stops_once_an_ancestor_still_has_other_content(self, papi):
+        # Redirect Rules has two subgroups - one empties out and is removed, the other survives,
+        # so Redirect Rules itself is left alone
+        unmatched = self._hostname_child('redirect-a', ['a.example.com'])
+        matched = self._hostname_child('redirect-b', ['b.example.com'])
+        rule_tree = {
+            'name': 'default',
+            'children': [
+                {'name': 'Redirect Rules', 'children': [
+                    {'name': 'Regional Redirects A', 'children': [unmatched]},
+                    {'name': 'Regional Redirects B', 'children': [matched]},
+                ]},
+            ],
+        }
+
+        pruned, removed = papi.prune_hostname_scoped_children('my-property', rule_tree, ['b.example.com'])
+
+        assert pruned == ['a.example.com']
+        assert removed == ['Redirect Rules > Regional Redirects A']
+        redirect_rules = rule_tree['children'][0]
+        assert redirect_rules['name'] == 'Redirect Rules'
+        assert [child['name'] for child in redirect_rules['children']] == ['Regional Redirects B']
+
+    def test_console_logs_one_warning_per_removed_rule_in_cascade_order(self, papi, caplog):
+        host_a = self._hostname_child('redirect-a', ['a.example.com'])
+        rule_tree = {
+            'name': 'default',
+            'children': [
+                {'name': 'Redirect Rules', 'children': [
+                    {'name': 'Regional Redirects', 'children': [host_a]},
+                ]},
+            ],
+        }
+
+        with caplog.at_level(logging.WARNING, logger='utility_papi'):
+            papi.prune_hostname_scoped_children('my-property', rule_tree, ['keep.example.com'])
+
+        removal_lines = [record.message for record in caplog.records if 'removing empty rule' in record.message]
+        assert len(removal_lines) == 2
+        assert 'my-property' in removal_lines[0] and 'Regional Redirects' in removal_lines[0]
+        assert "from 'Redirect Rules'" in removal_lines[0]
+        assert 'my-property' in removal_lines[1] and 'Redirect Rules' in removal_lines[1]
+        assert "from 'default'" in removal_lines[1]

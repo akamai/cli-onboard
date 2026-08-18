@@ -1,15 +1,15 @@
 from __future__ import annotations
 
 import json
+import logging
 import time
 from time import gmtime
 from time import strftime
 
-from exceptions import setup_logger
 from rich.live import Live
 from rich.table import Table
 
-logger = setup_logger()
+logger = logging.getLogger(__name__)
 
 
 def generate_table(activationDict, network) -> Table:
@@ -32,7 +32,10 @@ def generate_table(activationDict, network) -> Table:
     return table
 
 
-def pollActivation(activationDict, wrapper_object, contract_id, group_id, network):
+def pollActivation(activationDict, wrapper_object, contract_id, group_id, network, no_wait=False):
+    if no_wait:
+        return True, activationDict
+
     start_time = time.perf_counter()
     all_properties_active = False
     elapse_time = 0
