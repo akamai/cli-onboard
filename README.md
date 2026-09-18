@@ -4,13 +4,17 @@
 
 `cli-onboard` is an Akamai CLI plugin for onboarding Akamai Property Manager and application security configurations. It supports guided onboarding for new properties, updates to existing Web Application Firewall (WAF) / AppSec configurations, Default DV certificate workflows, and bulk conversion from competitor CDN migration artifacts.
 
-## Quick navigation:
+## 🚀 New here? Start here
 
-- [Start with the tutorial](#-tutorial-onboard-your-first-property)
-- [How-to guides](#-how-to-guides)
-- [Commands Reference](#-commands-reference)
-- [Explanation](#-explanation)
-- [Contributing](CONTRIBUTING.md)
+1. Check the [Requirements](#requirements) — install the Akamai CLI, and add an `.edgerc` entry with API access.
+2. Install the plugin (see [Installation](#installation) below).
+3. Follow the [📘 Tutorial](#-tutorial-onboard-your-first-property) to onboard your first property safely (no production activation).
+
+Already familiar with the tool? Jump to [🎯 How-to guides](#-how-to-guides) or [📖 Commands Reference](#-commands-reference).
+
+[↑ Back to top](#top)
+
+---
 
 ## Requirements
 
@@ -18,7 +22,9 @@
 - Minimum Python 3.12
 - An `.edgerc` entry with credentials that can access the APIs you plan to use
 
-#### Minimum API grants:
+## Minimum API grants
+
+Your `.edgerc` credentials need access to all four of these APIs:
 
 - Property Manager (`/papi`)
 - Edge Hostnames API (`/hapi`)
@@ -41,11 +47,42 @@ client_token = [CLIENT_TOKEN]
 akamai install property-manager onboard
 ```
 
-## 🚀 Tutorial: onboard your first property
+Install failing? See [💡 Troubleshooting `akamai install`](CONTRIBUTING.md#troubleshooting-akamai-install) in CONTRIBUTING.md — most failures there also apply to a normal install, not just a local dev one.
+
+[↑ Back to top](#top)
+
+---
+
+## 📚 Documentation
+
+### Documentation System
+
+This project follows the [Divio documentation system](https://documentation.divio.com/):
+
+| Pillar      | Purpose                | When to use                            |
+| ----------- | ----------------------- | ---------------------------------------- |
+| [📘 Tutorial](#-tutorial-onboard-your-first-property) | Learning-oriented       | "I want to learn by doing"              |
+| [🎯 How-to](#-how-to-guides)   | Problem-oriented        | "I want to accomplish a specific task"  |
+| [💡 Explanation](#-explanation) | Understanding-oriented  | "I want to understand how this works"   |
+| [📖 Reference](#-commands-reference) | Information-oriented    | "I need to look up technical details"   |
+
+### Project Documentation
+
+| Document                                 | Tutorial                                                               | How-to                                                          | Explanation                                                              | Reference                                                              |
+| ------------------------------------------ | --------------------------------------------------------------------- | ------------------------------------------------------------------ | --------------------------------------------------------------------------- | --------------------------------------------------------------------------- |
+| **[README](README.md)** (this file)      | [Onboard your first property](#-tutorial-onboard-your-first-property) | [Task-oriented command guides](#-how-to-guides)                 | [Rule-trees, command design, staging-first, DV vs CPS](#-explanation)      | [Global options, command catalog, input types](#-commands-reference)      |
+| **[CONTRIBUTING.md](CONTRIBUTING.md)** — for developers changing this plugin's code | -                                                                      | [Dev environment setup](CONTRIBUTING.md#dev-environment-setup)  | [Troubleshooting `akamai install`](CONTRIBUTING.md#troubleshooting-akamai-install) | [Running the tests](CONTRIBUTING.md#running-the-tests)                    |
+| **[CHANGELOG.md](CHANGELOG.md)** — for checking what changed between versions | -                                                                      | -                                                                | -                                                                            | [Release history](CHANGELOG.md)                                           |
+
+[↑ Back to top](#top)
+
+---
+
+## 📘 Tutorial: onboard your first property
 
 This tutorial walks through the safest first run: create a new property from a JSON template without activating production.
 
-If you already know what you need, skip to [How-to guides](#-how-to-guides) or [Commands Reference](#-commands-reference).
+> 🚀 **Start here:** before running any command below, complete [Requirements](#requirements) and [Installation](#installation). The `onboard` command isn't recognized by the Akamai CLI until the plugin is installed with `akamai install property-manager onboard`.
 
 ### 1. Fetch the sample templates
 
@@ -59,12 +96,14 @@ This creates a local `sample_templates/` directory with starter JSON and CSV fil
 
 Open `sample_templates/create.json` and set at least these values:
 
-- `property_info.property_name`
-- `property_info.contract_id`
-- `property_info.group_id`
-- `property_info.product_id`
-- `public_hostnames`
-- `edge_hostname.mode`
+| Field                              | What it is                                                                                          |
+| ------------------------------------ | ------------------------------------------------------------------------------------------------------ |
+| `property_info.property_name`      | The name for your new Property Manager configuration (shown in Akamai Control Center).             |
+| `property_info.contract_id`        | Your Akamai contract ID, e.g. `ctr_1-ABC123` — billing/entitlement scope for the property.          |
+| `property_info.group_id`           | The Akamai group ID, e.g. `grp_12345` — controls access permissions for the property.               |
+| `property_info.product_id`         | The Akamai product ID, e.g. `prd_SPM` — determines which delivery product features are available.  |
+| `public_hostnames`                 | The list of hostnames (e.g. `["www.example.com"]`) this property will serve.                       |
+| `edge_hostname.mode`               | How the edge hostname is created — e.g. `new_enhanced_tls_edgehostname` for a new Enhanced TLS edge hostname, or use an existing one instead. |
 
 For a first run, keep activations disabled until validation succeeds:
 
@@ -95,22 +134,25 @@ Successful runs create or update Akamai configuration objects and write intermed
 
 After the command succeeds, you can enable staging activation in the JSON file and rerun.
 
+Next step: try one of the [🎯 How-to guides](#-how-to-guides) for a task closer to your real onboarding scenario.
+
 [↑ Back to top](#top)
 
-## 🧭 How-to guides
+---
 
-These are task-oriented entry points. If you are learning the tool for the first time, start with the [tutorial](#-tutorial-onboard-your-first-property). For the full command list, see the [Command catalog](#-commands-reference).
+## 🎯 How-to guides
 
-[1. Create one hostname quickly](#1-create-one-hostname-quickly)
-[2. Create one property with multiple hostnames](#2-create-one-property-with-multiple-hostnames)
-[3. Create many properties from a template and CSV](#3-create-many-properties-from-a-template-and-csv)
-[4. Work with Default DV certificates (Secure by Default / SBD)](#4-work-with-default-dv-certificates-secure-by-default--sbd)
-[5. Create new AppSec configurations in bulk](#5-create-new-appsec-configurations-in-bulk)
-[6. Add hostnames to an existing AppSec configuration](#6-add-hostnames-to-an-existing-appsec-configuration)
-[7. Remove hostnames from an existing AppSec configuration](#7-remove-hostnames-from-an-existing-appsec-configuration)
-[8. Inspect existing AppSec policies before updating them](#8-inspect-existing-appsec-policies-before-updating-them)
-[9. Convert competitor CDN artifacts into Akamai properties](#9-convert-competitor-cdn-artifacts-into-akamai-properties)
-[10. Skip waiting for activation and check status later](#10-skip-waiting-for-activation-and-check-status-later)
+These are task-oriented entry points. If you are learning the tool for the first time, start with the [📘 Tutorial](#-tutorial-onboard-your-first-property). For the full command list, see the [📖 Command catalog](#-commands-reference).
+
+1. [Create one hostname quickly](#1-create-one-hostname-quickly)
+2. [Create one property with multiple hostnames](#2-create-one-property-with-multiple-hostnames)
+3. [Create many properties from a template and CSV](#3-create-many-properties-from-a-template-and-csv)
+4. [Work with Default DV certificates (Secure by Default / SBD)](#4-work-with-default-dv-certificates-secure-by-default--sbd)
+5. [Create new AppSec configurations in bulk](#5-create-new-appsec-configurations-in-bulk)
+6. [Add hostnames to an existing AppSec configuration](#6-add-hostnames-to-an-existing-appsec-configuration)
+7. [Remove hostnames from an existing AppSec configuration](#7-remove-hostnames-from-an-existing-appsec-configuration)
+8. [Inspect existing AppSec policies before updating them](#8-inspect-existing-appsec-policies-before-updating-them)
+9. [Convert competitor CDN artifacts into Akamai properties](#9-convert-competitor-cdn-artifacts-into-akamai-properties)
 
 ### 1. Create one hostname quickly
 
@@ -125,7 +167,9 @@ akamai onboard single-host --file sample_templates/single-host.json
 - fast onboarding for one hostname
 - simple property creation
 - optional secure-by-default edge hostname handling
-- see also: [Commands Reference](#-commands-reference) for the command catalog
+- see also: [📖 Commands Reference](#-commands-reference) for the command catalog
+
+[↑ Back to How-to list](#-how-to-guides)
 
 ### 2. Create one property with multiple hostnames
 
@@ -144,6 +188,8 @@ akamai onboard multi-hosts \
 - optional initial security configuration
 - compare with [Create many properties from a template and CSV](#3-create-many-properties-from-a-template-and-csv)
 
+[↑ Back to How-to list](#-how-to-guides)
+
 ### 3. Create many properties from a template and CSV
 
 Use `batch-create` when you want to stamp out multiple properties from a common [rule-tree JSON](#what-is-a-rule-tree-json).
@@ -161,6 +207,8 @@ Add `--secure-by-default` if you want Secure by Default certificate workflows.
 
 If you are migrating from another CDN rather than stamping out a common template, use [Convert competitor CDN artifacts into Akamai properties](#9-convert-competitor-cdn-artifacts-into-akamai-properties).
 
+[↑ Back to How-to list](#-how-to-guides)
+
 ### 4. Work with Default DV certificates (Secure by Default / SBD)
 
 Use **`sbd-precheck`** to generate DNS token data before onboarding hostnames with default DV certificates.
@@ -169,11 +217,15 @@ Use **`sbd-precheck`** to generate DNS token data before onboarding hostnames wi
 akamai onboard sbd-precheck --csv sample_templates/SBD.csv
 ```
 
-Use **`sbd-status`**  to identify stalled or dangling default DV certificates.
+Use **`sbd-status`** to identify stalled or dangling default DV certificates.
 
 ```bash
 akamai onboard sbd-status
 ```
+
+See also: [💡 Default DV (Secure By Default/SBD) versus CPS](#default-dv-secure-by-defaultsbd-versus-cps) for when to choose which.
+
+[↑ Back to How-to list](#-how-to-guides)
 
 ### 5. Create new AppSec configurations in bulk
 
@@ -188,6 +240,8 @@ akamai onboard appsec-create \
 
 Use `--by propertyname` when the CSV groups work by property name instead of hostname.
 
+[↑ Back to How-to list](#-how-to-guides)
+
 ### 6. Add hostnames to an existing AppSec configuration
 
 Use `appsec-update` to add selected hosts and optionally update match targets.
@@ -197,6 +251,8 @@ akamai onboard appsec-update \
   --config-id 9999 \
   --csv sample_templates/appsec-update.csv
 ```
+
+[↑ Back to How-to list](#-how-to-guides)
 
 ### 7. Remove hostnames from an existing AppSec configuration
 
@@ -208,6 +264,8 @@ akamai onboard appsec-remove \
   --csv sample_templates/appsec-remove.csv
 ```
 
+[↑ Back to How-to list](#-how-to-guides)
+
 ### 8. Inspect existing AppSec policies before updating them
 
 Use `appsec-policy` to list security configurations, policies, and website match targets.
@@ -218,6 +276,8 @@ akamai onboard appsec-policy --name-contains test
 akamai onboard appsec-policy --waf-config-name sample_sec
 akamai onboard appsec-policy --waf-config-name sample_sec --policy-name Default
 ```
+
+[↑ Back to How-to list](#-how-to-guides)
 
 ### 9. Convert competitor CDN artifacts into Akamai properties
 
@@ -232,44 +292,24 @@ akamai onboard convert \
   --network ENHANCED_TLS
 ```
 
-Use `--cert-mode CPS` if the properties require CPS-managed certificates — see [Default DV versus CPS](#default-dv-secure-by-defaultsbd-versus-cps) for when to choose which.
+Use `--cert-mode CPS` if the properties require CPS-managed certificates — see [💡 Default DV versus CPS](#default-dv-secure-by-defaultsbd-versus-cps) for when to choose which.
 
-Add `--unique-cpcode` so each hostname gets its own CP Code instead of sharing one for the whole property. The Excel report shows what changed per property.
-
-Add `--prune-hostname-rules` to drop rules for any hostname not in this run's CSV, so each property only keeps its own rules. Works independently of `--unique-cpcode`.
-
-Add `--preview` to see what a run would create before anything touches Akamai. It uses your real `--csv` hostnames and creates nothing for real.
-
-For the full option list, see [Convert command options](#convert-command-options).
-
-### 10. Skip waiting for activation and check status later
-
-Add `--no-wait` to `single-host`, `multi-hosts`, `convert`, `batch-create`, `appsec-create`, `appsec-update`, or `appsec-remove` to submit production activation(s) and return immediately instead of polling for completion. Staging activation always waits, since production is gated on staging succeeding first.
-
-```bash
-akamai onboard batch-create \
-  --template ~/path/to/ruletree.json \
-  --csv ~/path/to/input.csv \
-  --product prd_SPM \
-  --group grp_1234 \
-  --contract ctr_1234 \
-  --activate delivery-production \
-  --no-wait
-```
-
-Each submitted activation ID is recorded to a manifest CSV (printed at the end of the run). Check on it later with `check-activation`:
-
-```bash
-akamai onboard check-activation --file output/<account>/<timestamp>_activation-status.csv
-```
-
-Add `--wait` to poll until every activation in the file is active (or errored) instead of checking once and exiting. `check-activation` also accepts a minimal, hand-built CSV or a single `--activation-id` for an ad-hoc check — see `akamai onboard check-activation --help`.
+For the full option list, see [📖 Convert command options](#convert-command-options).
 
 [↑ Back to top](#top)
 
-## 📚 Commands Reference
+---
 
-Use this section when you need facts rather than guidance. If you need a recommended path, go back to [🧭 How-to guides](#-how-to-guides).
+## 📖 Commands Reference
+
+Use this section when you need facts rather than guidance. If you need a recommended path, go back to [🎯 How-to guides](#-how-to-guides).
+
+**In this section:**
+
+1. [Global options](#global-options)
+2. [Command catalog](#command-catalog)
+3. [Common input types](#common-input-types)
+4. [Convert command options](#convert-command-options)
 
 ### Global options
 
@@ -284,6 +324,8 @@ These options apply before the subcommand:
  --version                                                    Show akamai onboard CLI version
  --help                                                   -h  Show command help
 ```
+
+[↑ Back to Commands Reference](#-commands-reference)
 
 ### Command catalog
 
@@ -301,7 +343,6 @@ $ akamai onboard --help
 │                         policy match target                                                                          │
 │ batch-create            Create a 1 or more delivery configurations using a csv input and optionally update WAF       │
 │                         policy                                                                                       │
-│ check-activation        Check status of activation(s) submitted earlier with --no-wait                               │
 │ convert                 🌈 Bring over delivery configs from Competitors 🌈                                           │
 │ create                  Create a delivery configuration and update existing WAF policy                               │
 │ fetch-sample-templates  Pull sample templates                                                                        │
@@ -314,9 +355,11 @@ $ akamai onboard --help
 ```
 <!-- command-catalog:end -->
 
+[↑ Back to Commands Reference](#-commands-reference)
+
 ### Common input types
 
-> For `batch-create` and `convert`, the JSON input is a [rule-tree JSON](#what-is-a-rule-tree-json) template rather than a setup JSON file.
+> For `batch-create` and `convert`, the JSON input is a [💡 rule-tree JSON](#what-is-a-rule-tree-json) template rather than a setup JSON file.
 
 | Command         | CSV                | JSON               |
 | --------------- | ------------------ | ------------------ |
@@ -329,6 +372,8 @@ $ akamai onboard --help
 | `appsec-remove` | :heavy_check_mark: |                    |
 | `sbd-precheck`  | :heavy_check_mark: |                    |
 | `convert`       | :heavy_check_mark: | :heavy_check_mark: |
+
+[↑ Back to Commands Reference](#-commands-reference)
 
 ### Convert command options
 
@@ -351,11 +396,6 @@ $ akamai onboard convert --help
 │    --rule-format                -f  rule format (typically latest, but can use frozen rule format if desired)        │
 │                                     [default: latest]                                                                │
 │    --use-cpcode                     reuse existing numeric CP Code                                                   │
-│    --unique-cpcode                  Create or reuse a unique cpCode per onboarded hostname within PMUSER_ORIGIN      │
-│                                     child rules, pruning any PMUSER_ORIGIN child hostname not present in --csv       │
-│    --prune-hostname-rules           Prune rule-tree children elsewhere in the tree (e.g. Redirect Rules, Page Rules) │
-│                                     that reference a hostname not present in --csv. PMUSER_ORIGIN is unaffected, see │
-│                                     --unique-cpcode.                                                                 │
 │    --cert-mode                      Certificate mode [default: SBD]                                                  │
 │    --use-existing-edgehostname      Use existing edge hostnames. Pass an EHN name for a single EHN, or pass 'CSV' to │
 │                                     use the edgeHostname column from the CSV.                                        │
@@ -366,23 +406,16 @@ $ akamai onboard convert --help
 │    --activate                       Options: staging, production                                                     │
 │    --email                          email(s) for activation notifications                                            │
 │    --force                          skip user confirmation prompt                                                    │
-│    --dryrun                         admin - test config                                                              │
-│    --prefix                         admin - required for dryrun.                                                     │
-│    --preview                        Preview what would be created on Akamai without creating anything for real -     │
-│                                     writes the ruletree JSON using your real --csv hostnames.                        │
 │    --launch/--no-launch             automatically open excel application                                             │
-│    --no-wait                        Submit production activation(s) and return immediately instead of polling for    │
-│                                     completion; check status later with check-activation. Staging activation always  │
-│                                     waits.                                                                           │
-│    --log-level                      Set logging verbosity                                                            │
-│    --debug,--verbose                shortcut for --log-level DEBUG                                                   │
 │    --help                       -h  Show this message and exit.                                                      │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
 ```
 
 `*` marks a required option.
 
-[↑ Back to top](#top)
+[↑ Back to Commands Reference](#-commands-reference) · [↑ Back to top](#top)
+
+---
 
 ## 💡 Explanation
 
@@ -390,9 +423,9 @@ $ akamai onboard convert --help
 
 A rule-tree JSON is a JSON file containing Property Manager delivery configuration rules — the same rule-tree shape PAPI accepts for a property. `batch-create` and `convert` take this as their template/per-property input, instead of the single-property setup JSON used by `create`, `single-host`, and `multi-hosts`.
 
-### Why there are multiple onboarding commands ?
+### Why there are multiple onboarding commands?
 
-The command set is organized around different operational entry points rather than one universal input format (see the [Command catalog](#-commands-reference) for the full list):
+The command set is organized around different operational entry points rather than one universal input format (see the [📖 Command catalog](#-commands-reference) for the full list):
 
 - `single-host` is the simplest onboarding case.
 - `multi-hosts` is for one property with multiple hostnames.
@@ -414,15 +447,19 @@ Many commands support activation, but a staging-first rollout is the lower-risk 
 
 ### Default DV (Secure By Default/SBD) versus [CPS](https://techdocs.akamai.com/cps/docs/cps-workflow)
 
-- Default DV certificate is designed to make HTTPS onboarding and ongoing certificate management effortless.  Certificate provisioning, deployment, and renewal are fully automated and tightly integrated with hostname activation.
+- Default DV certificate is designed to make HTTPS onboarding and ongoing certificate management effortless. Certificate provisioning, deployment, and renewal are fully automated and tightly integrated with hostname activation.
 - CPS mode exists for workflows that require managed certificate enrollments or pre-existing edge hostnames.
 - The `convert` command exposes these certificate choices explicitly because migration projects often need a mix of temporary and final certificate strategies.
 
 [↑ Back to top](#top)
 
-## Contribution guidelines
+---
+
+## 🙌 Contribution guidelines
 
 Want to contribute? See [CONTRIBUTING.md](CONTRIBUTING.md) for dev environment setup, running tests and lint, and how to submit a change.
+
+Curious what's changed recently, or upgrading from an older version? See [📖 CHANGELOG.md](CHANGELOG.md) for the release history.
 
 ## Notice
 
