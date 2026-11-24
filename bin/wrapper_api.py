@@ -153,11 +153,10 @@ class apiCallsWrapper:
         url = self.formUrl(f'{url}')
         resp = self.session.post(url, data=json.dumps(jsonBody), headers=headers)
         if resp.status_code == 200:
-            if len(resp.json()['hostnames']['items']) > 0:
-                return resp.json()['hostnames']['items']
-        else:
-            print(resp)
-            print(resp.text)
+            return resp.json()['hostnames']['items']
+        print(resp)
+        print(resp.text)
+        return None
 
     def get_groups_without_parent(self) -> list:
         url = f'https://{self.access_hostname}/papi/v1/groups/'

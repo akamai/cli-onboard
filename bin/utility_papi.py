@@ -883,7 +883,10 @@ class papiFunctions:
         chunks = [onboard_object.unique_hostnames[i:i + chunk_size] for i in range(0, len(onboard_object.unique_hostnames), chunk_size)]
         for i, chunk in enumerate(chunks):
             logger.debug(chunk)
-            onboard_object.acme_challenges.extend(wrapper_object.get_acme_tokens(chunk))
+            tokens = wrapper_object.get_acme_tokens(chunk)
+            if tokens is None:
+                sys.exit(logger.error('Unable to retrieve acme challenges. See the API error above.'))
+            onboard_object.acme_challenges.extend(tokens)
 
     def get_level1_rulename(self, current_rule: dict) -> list:
         rule_name = [rule['name'] for rule in current_rule['rules']['children']]
