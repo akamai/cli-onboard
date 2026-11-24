@@ -13,14 +13,13 @@ Copyright 2022 Akamai Technologies, Inc. All Rights Reserved.
 """
 from __future__ import annotations
 
+import logging
 import time
 from dataclasses import dataclass
 from dataclasses import field
 
-from exceptions import setup_logger
 
-
-logger = setup_logger()
+logger = logging.getLogger(__name__)
 
 
 @dataclass

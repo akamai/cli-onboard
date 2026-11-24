@@ -13,11 +13,13 @@ Copyright 2019 Akamai Technologies, Inc. All Rights Reserved.
 """
 from __future__ import annotations
 
+import logging
 import os
 from pathlib import Path
 
-from exceptions import setup_logger
-logger = setup_logger()
+from model.edge_hostname_mode import EdgeHostnameMode
+
+logger = logging.getLogger(__name__)
 
 
 class onboard:
@@ -52,9 +54,9 @@ class onboard:
             self.edge_hostname_list = []
             # Edge hostname values
             if click_args['secure_by_default']:
-                self.edge_hostname_mode = 'secure_by_default'
+                self.edge_hostname_mode = EdgeHostnameMode.SECURE_BY_DEFAULT
             else:
-                self.edge_hostname_mode = 'use_existing_edgehostname'
+                self.edge_hostname_mode = EdgeHostnameMode.USE_EXISTING_EDGEHOSTNAME
 
             # WAF values
             if click_args['waf_config']:
@@ -111,7 +113,7 @@ class onboard:
 
             if not config.section:
                 if not os.getenv('AKAMAI_EDGERC_SECTION'):
-                    self.section = 'onboard'
+                    self.section = 'default'
                 else:
                     self.section = os.getenv('AKAMAI_EDGERC_SECTION')
             else:

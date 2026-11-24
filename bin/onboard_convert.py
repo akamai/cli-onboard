@@ -13,11 +13,13 @@ Copyright 2023 Akamai Technologies, Inc. All Rights Reserved.
 """
 from __future__ import annotations
 
+import logging
 import os
 from pathlib import Path
 
-from exceptions import setup_logger
-logger = setup_logger()
+from model.edge_hostname_mode import EdgeHostnameMode
+
+logger = logging.getLogger(__name__)
 
 
 class onboard:
@@ -27,10 +29,18 @@ class onboard:
         # Certain values (onboard_) are updated in main processing later
         try:
             self.property_name = []
+            self.account_switch_key = ''
             self.csv_loc = click_args['csv']
+            self.csv_loc = self.get_actual_location(self.csv_loc)
+            self.force_mode = click_args['force']
+            self.ehn_option = click_args['media_ehn']
             self.property_list = []
+            self.product_list = []
+            self.group_list = []
             self.valid_csv = True
             self.csv_dict = []
+            self.all_template_json_exists = True
+            self.ok_to_activate = []
             self.secure_network = click_args['network']
             self.ehn_suffix = '.edgekey.net'
             if self.secure_network == 'STANDARD_TLS':
@@ -40,9 +50,11 @@ class onboard:
             self.product_id = click_args['product']
             self.rule_format = click_args['rule_format']
             self.create_new_cpcode = True
-            self.source_template_file = click_args['template']
-            self.source_template_file = self.get_actual_location(self.source_template_file)
+            self.source_directory = click_args['directory']
+            self.source_directory = self.get_actual_location(self.source_directory)
             self.level_0_rules = []
+            self.gtm_domain = click_args['gtm_domain']
+            self.gtm_replacement_count = 0
 
             self.public_hostnames = []
 
@@ -50,49 +62,26 @@ class onboard:
             self.onboard_default_cpcode = 0
             self.edge_hostname_id = 0
             self.edge_hostname_list = []
-            # Edge hostname values
-            if click_args['secure_by_default']:
-                self.edge_hostname_mode = 'secure_by_default'
+            self.cert_mode = click_args.get('cert_mode', 'SBD').upper()
+            self.enrollment_id = click_args.get('enrollment_id')
+            self.use_existing_ehn = click_args.get('use_existing_edgehostname')
+
+            if self.use_existing_ehn:
+                self.edge_hostname_mode = EdgeHostnameMode.USE_EXISTING_EDGEHOSTNAME
+            elif self.cert_mode == 'CPS' and self.enrollment_id:
+                self.edge_hostname_mode = EdgeHostnameMode.CREATE_CPS_EDGEHOSTNAME
+            elif self.cert_mode == 'CPS':
+                self.edge_hostname_mode = EdgeHostnameMode.CPS_PLACEHOLDER
             else:
-                self.edge_hostname_mode = 'use_existing_edgehostname'
+                self.edge_hostname_mode = EdgeHostnameMode.SECURE_BY_DEFAULT
 
-            # WAF values
-            if click_args['waf_config']:
-                self.add_selected_host = True
-            else:
-                self.add_selected_host = False
-
-            self.waf_config_name = click_args['waf_config']
-
-            if click_args['waf_match_target']:
-                self.update_match_target = True
-            else:
-                self.update_match_target = False
-            self.waf_match_target_id = click_args['waf_match_target']
-            if isinstance(self.waf_match_target_id, str):
-                if self.waf_match_target_id == '':
-                    self.waf_match_target_id = 0
-                else:
-                    self.waf_match_target_id = int(self.waf_match_target_id)
-
-            self.onboard_waf_config_id = None
-            self.onboard_waf_config_version = None
-            self.onboard_waf_prev_version = None
-
-            self.activate_property_staging = False
-            self.activate_waf_policy_staging = False
             self.activate_property_production = False
-            self.activate_waf_policy_production = False
-
+            self.activate_property_staging = False
             # Activation values
-            if 'delivery-staging' in click_args['activate']:
+            if 'staging' in click_args['activate']:
                 self.activate_property_staging = True
-            if 'waf-staging' in click_args['activate']:
-                self.activate_waf_policy_staging = True
-            if 'delivery-production' in click_args['activate']:
+            if 'production' in click_args['activate']:
                 self.activate_property_production = True
-            if 'waf-production' in click_args['activate']:
-                self.activate_waf_policy_production = True
 
             if click_args['email']:
                 self.notification_emails = click_args['email']
@@ -111,7 +100,7 @@ class onboard:
 
             if not config.section:
                 if not os.getenv('AKAMAI_EDGERC_SECTION'):
-                    self.section = 'onboard'
+                    self.section = 'default'
                 else:
                     self.section = os.getenv('AKAMAI_EDGERC_SECTION')
             else:

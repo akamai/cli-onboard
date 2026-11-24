@@ -12,18 +12,23 @@
 from __future__ import annotations
 
 import json
+import logging
+import os
 import random
+import re
+import shlex
 import string
+import subprocess
 import sys
 
 import _logging as lg
 import pandas as pd
-from exceptions import setup_logger
+import util_emojis as emoji
 from rich import print_json
 from tabulate import tabulate
 
 
-logger = setup_logger()
+logger = logging.getLogger(__name__)
 headers = {'Content-Type': 'application/json'}
 
 
@@ -44,12 +49,53 @@ class apiCallsWrapper:
             url = f'{url}{upd_acct_switch_key}'
         return url
 
+    def get_api_client(self):
+        url = f'https://{self.access_hostname}/identity-management/v3/api-clients/self'
+        resp = self.session.get(url, headers={'Accept': 'application/json'})
+        return resp
+
+    def all_api_permission(self, username: str):
+        url = f'https://{self.access_hostname}/identity-management/v3/users/{username}/allowed-apis'
+        ask = self.account_switch_key.split('=')[1]
+        params = {'accountSwitchKey': ask,
+                   'clientType': 'USER_CLIENT',
+                   'allowAccountSwitch': True}
+        resp = self.session.get(url, headers={'Accept': 'application/json'}, params=params)
+        return resp
+
+    def allowed_api_permission(self, access_token: str):
+        url = f'https://{self.access_hostname}/identity-management/v1/open-identities/tokens/{access_token}'
+        resp = self.session.get(url, headers={'Accept': 'application/json'})
+        return resp
+
+    def remove_account_type(self, account_name: str):
+        substrings_to_remove = ['_Akamai Internal',
+                                '_Indirect Customer',
+                                '_Direct Customer',
+                                '_Marketplace Prospect',
+                                '_NAP Master Agreement',
+                                '_NAP Master Agreement ',
+                                '_Value Added Reseller',
+                                '_Value Added Reseller ',
+                                '_Tier 1 Reseller',
+                                '_Tier 1 Reseller ',
+                                '_VAR Customer',
+                                '_ISP']
+        for substring in substrings_to_remove:
+            if substring in account_name:
+                return account_name.replace(substring, '')
+        return account_name
+
     def get_account_name(self, account_id: str) -> str:
         account_id = account_id.split(':')
         url = f'https://{self.access_hostname}/identity-management/v3/api-clients/self/account-switch-keys?search={account_id[0]}'
         resp = self.session.get(url)
+        if resp.status_code == 400 and 'WAF deny rule IPBLOCK-' in resp.json()['detail']:
+            return sys.exit(logger.error('Oopsie! You just hit rate limit. Try again in 10 minutes'))
         try:
-            return resp.json()[0]['accountName']
+            account_name = resp.json()[0]['accountName']
+            account_name = self.remove_account_type(account_name)
+            return account_name
         except:
             return sys.exit(logger.error(f'Invalid account key {account_id}'))
 
@@ -70,18 +116,48 @@ class apiCallsWrapper:
         url = self.formUrl(url)
         payload = {'propertyName': property_name}
         resp = self.session.post(url, headers=headers, json=payload)
-        if resp.status_code == 200:
+        if resp.ok:
             if len(resp.json()['versions']['items']) > 0:
                 return resp.json()['versions']['items']
 
-    def list_property_hostname(self, property_id: str, contract_id: str, group_id: str):
-        url = f'https://{self.access_hostname}/papi/v1/properties/{property_id}/hostnames'
-        query_parm = f'?contractId={contract_id}&groupId={group_id}'
-        url = self.formUrl(f'{url}{query_parm}')
+    def get_edittable_property_version(self, property_id: str, version: int, network: str | None = 'staging'):
+        url = f'https://{self.access_hostname}/papi/v1/properties/{property_id}/versions/{version}'
+        response = self.session.get(self.formUrl(url), headers=headers)
+        if response.ok:
+            if network == 'staging':
+                return response.json()['versions']['items'][0]['stagingStatus']
+            else:
+                return response.json()['versions']['items'][0]['productionStatus']
+
+    def list_property_hostname(self, property_id):
+        url = f'https://{self.access_hostname}/papi/v1/properties/{property_id}/hostnames?includeCertStatus=true'
+        url = self.formUrl(f'{url}')
         resp = self.session.get(url, headers=headers)
+        if resp.ok:
+            if len(resp.json()['hostnames']['items']) > 0:
+                items = resp.json()['hostnames']['items']
+                return items
+
+    def get_property_version_hostname(self, property_id, version):
+        url = f'https://{self.access_hostname}/papi/v1/properties/{property_id}/versions/{version}/hostnames'
+        url = self.formUrl(f'{url}')
+        resp = self.session.get(url, headers=headers)
+        if resp.ok:
+            if len(resp.json()['hostnames']['items']) > 0:
+                return resp.json()['hostnames']['items']
+
+    def get_acme_tokens(self, hostname_list):
+        jsonBody = {}
+        jsonBody['cnamesFrom'] = hostname_list
+        url = f'https://{self.access_hostname}/papi/v1/hostnames/certificate-challenges'
+        url = self.formUrl(f'{url}')
+        resp = self.session.post(url, data=json.dumps(jsonBody), headers=headers)
         if resp.status_code == 200:
             if len(resp.json()['hostnames']['items']) > 0:
                 return resp.json()['hostnames']['items']
+        else:
+            print(resp)
+            print(resp.text)
 
     def get_groups_without_parent(self) -> list:
         url = f'https://{self.access_hostname}/papi/v1/groups/'
@@ -99,6 +175,30 @@ class apiCallsWrapper:
                 except KeyError:
                     groups.append(grp)
         return groups
+
+    def get_groups(self) -> list:
+        url = f'https://{self.access_hostname}/papi/v1/groups/'
+        url = self.formUrl(url)
+        resp = self.session.get(url)
+
+        groups = []
+        if resp.status_code == 401:
+            lg._log_error('accountSwitchKey is invalid')
+        elif resp.status_code == 200:
+            groups = resp.json()['groups']['items']
+        return groups
+
+    def get_contracts(self) -> list:
+        url = f'https://{self.access_hostname}/papi/v1/contracts'
+        url = self.formUrl(url)
+        resp = self.session.get(url)
+
+        contracts = []
+        if resp.status_code == 401:
+            lg._log_error('accountSwitchKey is invalid')
+        elif resp.status_code == 200:
+            contracts = resp.json()['contracts']['items']
+        return contracts
 
     def checkAuthorization(self):
         """
@@ -124,6 +224,31 @@ class apiCallsWrapper:
                                               data=json.dumps(newCpcodeData),
                                               headers=headers)
         return create_cpcode_response
+
+    def searchCpcode(self, contractId, groupId, productId, cpcode_name):
+        """
+        Function to search cpcode
+
+        NOTE: productId is intentionally NOT sent as a filter here. The cprg/v1/cpcodes
+        productId values (e.g. 'AdvSite::Reporter') don't line up with the PAPI-style
+        productId (e.g. 'prd_Fresca') this codebase passes in, so filtering on it caused
+        every search to come back empty and fall through to create_new_cpcode, silently
+        creating duplicate cpcodes for names that already existed.
+        """
+        if contractId.startswith('ctr_'):
+            contractId = contractId[4:]
+        if groupId.startswith('grp_'):
+            groupId = groupId[4:]
+        params = {'contractId': contractId,
+                  'groupId': groupId,
+                  'cpcodeName': cpcode_name}
+
+        search_cpcode_url = f'https://{self.access_hostname}/cprg/v1/cpcodes'
+        search_cpcode_url = self.formUrl(search_cpcode_url)
+        resp = self.session.get(search_cpcode_url, headers=headers, params=params)
+        logger.debug(f'Original cpcode: {cpcode_name}')
+        logger.debug(resp.url)
+        return resp
 
     def createProperty(self, contractId, groupId, productId, property_name):
         """
@@ -152,7 +277,7 @@ class apiCallsWrapper:
             headers['Content-Type'] = version_string
         update_property_url = 'https://' + self.access_hostname + '/papi/v1/properties/' + \
                               propertyId + '/versions/1/rules?contractId=' + \
-                              contractId + '&groupId=' + groupId + '&validateRules=false'
+                              contractId + '&groupId=' + groupId + '&validateRules=true'
         update_property_url = self.formUrl(update_property_url)
         update_property_response = self.session.put(update_property_url, data=ruletree, headers=headers)
         return update_property_response
@@ -197,39 +322,91 @@ class apiCallsWrapper:
             edgehostname_array.append(edgehostnameDetails)
         return edgehostname_array
 
+    def buildCpsManagedHostnameArray(self, hostname_list, cname_to, edge_hostname_id=None):
+        """
+        Build hostname array where all hostnames share one CPS_MANAGED edge hostname.
+        edge_hostname_id is optional — omitted for placeholder mode.
+        """
+        edgehostname_list = []
+        for hostname in hostname_list:
+            entry = {'cnameType': 'EDGE_HOSTNAME',
+                     'cnameFrom': hostname,
+                     'cnameTo': cname_to,
+                     'certProvisioningType': 'CPS_MANAGED'}
+            if edge_hostname_id is not None:
+                entry['edgeHostnameId'] = edge_hostname_id
+            edgehostname_list.append(entry)
+        return edgehostname_list
+
     def checkEdgeHostname(self, edge_hostname):
         """
         Function to check the validity of edge_hostname
         """
         dns_zone = ''
 
-        record_name_substring = edge_hostname
-        if str(edge_hostname).endswith('edgekey.net'):
+        record_name = edge_hostname
+        if edge_hostname.endswith('edgekey.net'):
             dns_zone = 'edgekey.net'
-            record_name_substring = str(edge_hostname).split('.edgekey.net')[0]
-        elif str(edge_hostname).endswith('edgesuite.net'):
+            record_name = edge_hostname.split('.edgekey.net')[0]
+        elif edge_hostname.endswith('edgesuite.net'):
             dns_zone = 'edgesuite.net'
-            record_name_substring = str(edge_hostname).split('.edgesuite.net')[0]
-        get_edgehostnameid_url = 'https://' + self.access_hostname + \
-                                 '/hapi/v1/edge-hostnames?recordNameSubstring=' + \
-                                 record_name_substring + '&dnsZone=' + dns_zone
-        get_edgehostnameid_url = self.formUrl(get_edgehostnameid_url)
-        edgehostname_response = self.session.get(get_edgehostnameid_url)
-        return edgehostname_response
+            record_name = edge_hostname.split('.edgesuite.net')[0]
+        elif edge_hostname.endswith('akamaized.net'):
+            dns_zone = 'akamaized.net'
+            record_name = edge_hostname.split('.akamaized.net')[0]
+        url = f'https://{self.access_hostname}/hapi/v1/edge-hostnames?recordNameSubstring={record_name}&dnsZone={dns_zone}'
+        resp = self.session.get(self.formUrl(url))
+        return resp
+
+    def findExistingEdgeHostname(self, domainPrefix, domainSuffix):
+        """Check if an edge hostname exists via HAPI. Returns edgeHostnameId or None."""
+        ehn_fqdn = f'{domainPrefix}.{domainSuffix}'
+        resp = self.checkEdgeHostname(ehn_fqdn)
+        if resp.ok:
+            for ehn in resp.json().get('edgeHostnames', []):
+                if ehn.get('recordName') == domainPrefix and ehn.get('dnsZone') == domainSuffix:
+                    logger.info(f'Found existing edge hostname: {ehn_fqdn} (id: {ehn["edgeHostnameId"]})')
+                    return ehn['edgeHostnameId']
+        return None
 
     def updatePropertyHostname(self, contractId, groupId, propertyId, edgehostnamedata):
         """
         Function to update property hostnames and edgehostname
         """
-        update_prop_hostname_url = 'https://' + self.access_hostname + \
-                                   '/papi/v1/properties/' + propertyId + \
-                                   '/versions/1/hostnames?contractId=' + contractId + \
-                                   '&groupId=' + groupId + '&validateHostnames=true&includeCertStatus=true'
-        update_prop_hostname_url = self.formUrl(update_prop_hostname_url)
-        update_prop_hostname_response = self.session.put(update_prop_hostname_url,
-                                                    data=edgehostnamedata,
-                                                    headers=headers)
-        return update_prop_hostname_response
+        url = f'https://{self.access_hostname}/papi/v1/properties/{propertyId}'
+        url = f'{url}/versions/1/hostnames?contractId={contractId}&groupId={groupId}'
+        url = f'{url}&validateHostnames=true&includeCertStatus=true'
+
+        url = self.formUrl(url)
+        logger.debug(f'{url} {edgehostnamedata}')
+        hostname_resp = self.session.put(url, headers=headers, data=edgehostnamedata)
+        return hostname_resp
+
+    def updatePropertyHostnameNoValidation(self, contractId, groupId, propertyId, edgehostnamedata):
+        """
+        Update property hostnames without hostname validation (for placeholder edge hostnames).
+        """
+        url = f'https://{self.access_hostname}/papi/v1/properties/{propertyId}'
+        url = f'{url}/versions/1/hostnames?contractId={contractId}&groupId={groupId}'
+        url = f'{url}&validateHostnames=false&includeCertStatus=false'
+
+        url = self.formUrl(url)
+        logger.debug(f'{url} {edgehostnamedata}')
+        hostname_resp = self.session.put(url, headers=headers, data=edgehostnamedata)
+        return hostname_resp
+
+    def add_property_hostname(self, contractId, groupId, propertyId, property_version, edgehostnamedata):
+        """
+        Function to add edgehostname to property version
+        """
+        url = f'https://{self.access_hostname}/papi/v1/properties/{propertyId}'
+        url = f'{url}/versions/{property_version}/hostnames?contractId={contractId}&groupId={groupId}'
+        url = f'{url}&validateHostnames=true&includeCertStatus=true'
+
+        url = self.formUrl(url)
+        logger.debug(f'{url} {edgehostnamedata}')
+        hostname_resp = self.session.patch(url, headers=headers, json=edgehostnamedata)
+        return hostname_resp
 
     def pollActivationStatus(self, contractId, groupId, propertyId, activationId):
         """
@@ -266,32 +443,37 @@ class apiCallsWrapper:
         actUrl = self.formUrl(actUrl)
         try:
             response = self.session.post(actUrl, data=json.dumps(activationDetails), headers=headers)
-            logger.debug(f'{response.text} {response.status_code}')
-            if response.status_code == 201:
-                link = response.json()['activationLink']
-                logger.info(f'Activation link {link}')
-                return response
-            elif response.status_code == 422 and response.json()['detail'].find('version already activated'):
-                logger.info('Property version already activated')
-                return response
-            elif response.status_code == 404 and response.json()['detail'].find('unable to locate'):
-                logger.error('The system was unable to locate the requested version of configuration')
-                return response
+            if response.ok:
+                pass
+            elif 400 <= response.status_code <= 500:
+                try:
+                    detail = response.json()['errors']
+                    errors = []
+                    for dtl in detail:
+                        errors.append(dtl['detail'])
+                    logger.info(f'{propertyId=} {emoji.poop} {errors}')
+                except KeyError:
+                    detail = response.json()
+                    if response.status_code == 422:
+                        logger.info(f"  {emoji.poop} {propertyId} v{version} already activated ")
+                    else:
+                        logger.info(f"  {emoji.poop} {propertyId} {detail['title']} {detail['status']}")
             else:
-                logger.error(f'{response.url} {response.status_code}')
-                return response
-        except KeyError:
-            logger.error('Looks like there is some error in configuration. Unable to activate configuration at this moment')
+                logger.info(f'{response.json().keys()}')
+            return response
+        except Exception as e:
+            logger.info(f'{response.status_code} {response.json().keys()}')
+            logger.error(f'Unable to activate configuration at this moment {e}')
             return response
 
     def getProductsByContract(self, contractId):
         """
         Function to get product ids for a contract
         """
-        get_products_url = f'https://{self.access_hostname}/papi/v1/products?contractId={contractId}'
-        get_products_url = self.formUrl(get_products_url)
-        get_products_response = self.session.get(get_products_url)
-        return get_products_response
+        url = f'https://{self.access_hostname}/papi/v1/products?contractId={contractId}'
+        url = self.formUrl(url)
+        resp = self.session.get(url)
+        return resp
 
     def createEdgehostname(self, productId: str, domainPrefix: str, secureNetwork: str,
                            certEnrollmentId: int,
@@ -314,27 +496,38 @@ class apiCallsWrapper:
             edgehostname_content['domainSuffix'] = 'edgesuite.net'
             edgehostname_content['secureNetwork'] = secureNetwork
             edgehostname_content['ipVersionBehavior'] = 'IPV4'
+            if certEnrollmentId:
+                edgehostname_content['certEnrollmentId'] = certEnrollmentId
             logger.warning(f'Trying to create edge_hostname: {domainPrefix}.edgesuite.net')
         else:
-            logger.error('Invalid secure network')
-
-        logger.debug(json.dumps(edgehostname_content, indent=4))
+            if productId not in ['prd_SPM',
+                                 'prd_Fresca',
+                                 'prd_Site_Accel',
+                                 'prd_Adaptive_Media_Delivery',
+                                 'prd_Download_Delivery']:
+                logger.error('Invalid product')
+            else:
+                edgehostname_content['productId'] = productId
+                edgehostname_content['domainPrefix'] = domainPrefix
+                edgehostname_content['domainSuffix'] = 'akamaized.net'
+                edgehostname_content['secureNetwork'] = secureNetwork
+                edgehostname_content['ipVersionBehavior'] = 'IPV4'
+                logger.warning(f'Trying to create edge_hostname: {domainPrefix}.akamaized.net')
 
         # Create a edgehostname
-        create_edgehostname_url = 'https://' + self.access_hostname + \
-                                  '/papi/v1/edgehostnames?contractId=' + contractId + \
-                                  '&groupId=' + groupId
-        create_edgehostname_url = self.formUrl(create_edgehostname_url)
-        create_edgehostname_response = self.session.post(create_edgehostname_url,
-                                                    data=json.dumps(edgehostname_content),
-                                                    headers=headers)
+        url = f'https://{self.access_hostname}/papi/v1/edgehostnames?contractId={contractId}&groupId={groupId}'
+        url = self.formUrl(url)
+        ehn_resp = self.session.post(url,
+                                     headers=headers,
+                                     json=edgehostname_content)
 
-        if create_edgehostname_response.status_code == 201:
-            edgehostnameId = create_edgehostname_response.json()['edgeHostnameLink'].split('?')[0].split('/')[4]
-            logger.info(f'Successfully created edge_hostname: {edgehostnameId}')
-            return edgehostnameId
+        logger.debug(json.dumps(edgehostname_content, indent=4))
+        if ehn_resp.ok:
+            ehn_id = ehn_resp.json()['edgeHostnameLink'].split('?')[0].split('/')[4]
+            logger.info(f'Successfully created edge_hostname: {ehn_id}')
+            return ehn_id
         else:
-            logger.error(json.dumps(create_edgehostname_response.json(), indent=4))
+            logger.error(json.dumps(ehn_resp.json(), indent=4))
             return -1
 
     def create_enrollment(self, contractId, data, allowDuplicateCn=True):
@@ -444,7 +637,7 @@ class apiCallsWrapper:
         waf_match_target_ids = []
         if resp.status_code == 200:
             web_tgts = resp.json()['matchTargets']['websiteTargets']
-            logger.warning(f'{"Policy Name":<50}waf_target_id (Website Match Target)')
+            logger.warning(f'{'Policy Name':<50}waf_target_id (Website Match Target)')
             for tgt in web_tgts:
                 if tgt['securityPolicy']['policyId'] == policy_id:
                     logger.info(f"{policy_name:<50}{tgt['targetId']}")
@@ -584,7 +777,7 @@ class apiCallsWrapper:
         policies_name = {}
         if resp.status_code == 200:
             pol_list = resp.json()['policies']
-            logger.debug(f'{"Policy Name":<20}Policy ID')
+            logger.debug(f'{'Policy Name':<20}Policy ID')
 
             for p in pol_list:
                 logger.debug(f"{p['policyName']:<20}{p['policyId']}")
@@ -597,7 +790,7 @@ class apiCallsWrapper:
         policies_name = {}
         if resp.status_code == 200:
             pol_list = resp.json()['policies']
-            logger.debug(f'{"Policy Name":<40}Policy ID')
+            logger.debug(f'{'Policy Name':<40}Policy ID')
             for p in pol_list:
                 logger.debug(f"{p['policyName']:<40}{p['policyId']}")
                 policies_name[f"{p['policyId']}"] = [f"{p['policyName']}"]
@@ -683,20 +876,17 @@ class apiCallsWrapper:
                 hostnames = sorted(selectable_df['hostname'].unique().tolist())
         else:
             logger.error(response.text)
+            match = re.search(r'=(.*)', self.account_switch_key)
+            if match:
+                account_switch_key = match.group(1)
+                command = (f'akamai pm -s default lg -a {account_switch_key}') if account_switch_key is not None else ('akamai pm lg')
+                logger.warning('Possible invalid contract/group_id')
+                logger.warning('Running akamai property manager cli command: {command}')
+                sys.exit(subprocess.run(shlex.split(command), shell=False).returncode)
         return response, hostnames, selectable_df
 
     def get_property_hostnames(self, property_id: str, contract_id: str, group_id: str, network: str | None = 'staging'):
-        response = self.list_property_hostname(property_id, contract_id, group_id)
-        hostnames = []
-        if isinstance(response, list):
-            hostname_df = pd.DataFrame(response)
-            if network == 'staging':
-                new_df = hostname_df[~hostname_df['stagingCnameTo'].isnull()]
-            else:
-                new_df = hostname_df[~hostname_df['productionCnameTo'].isnull()]
-            hostnames = new_df['cnameFrom'].unique().tolist()
-            logger.debug(hostnames)
-        return hostnames
+        return self.list_property_hostname(property_id)
 
     def getAllWebMatchTargets(self, config_id, version):
         url = f'https://{self.access_hostname}/appsec/v1/configs/{config_id}/versions/{version}/match-targets'
@@ -717,3 +907,234 @@ class apiCallsWrapper:
         if not resp.ok:
             logger.error('The system was unable to locate security match targets.')
         return resp.json()
+
+    def list_properties(self, contract_id: str, group_id: str):
+        url = f'https://{self.access_hostname}/papi/v1/properties/'
+        url = self.formUrl(f'{url}')
+        resp = self.session.get(url, headers=headers, params={'contractId': contract_id,
+                                                              'groupId': group_id})
+        if resp.ok:
+            if len(resp.json()['properties']['items']) > 0:
+                return resp.json()['properties']['items']
+
+    def create_new_property_version(self, property_id: str, base_version: int) -> int:
+        url = self.formUrl(f'https://{self.access_hostname}/papi/v1/properties/{property_id}/versions')
+        resp = self.session.post(url, headers=headers, json={'createFromVersion': base_version})
+        if resp.ok:
+            new_version = resp.json()['versionLink'].split('?')[0].split('/')[-1]
+            return int(new_version)
+        else:
+            return -1
+
+    def create_edge_hostname(self, hostname: list,
+                             product_id: str,
+                             contract_id: str,
+                             group_id: str,
+                             tls: str,
+                             secureNetwork: list,
+                             ipVersion: str | None = 'IPV6_COMPLIANCE',
+                             option: str | None = 'VOD') -> dict:
+
+        url = self.formUrl(f'https://{self.access_hostname}/papi/v1/edgehostnames')
+        params = {'contractId': contract_id,
+                  'groupId': group_id}
+
+        if product_id == 'prd_Adaptive_Media_Delivery':
+            usecase = 'Segmented_Media_Mode'
+        elif product_id == 'prd_Download_Delivery':
+            usecase = 'Download_Mode'
+            option = 'BACKGROUND'
+
+        all_edgehostnames = []
+        for i, host in enumerate(hostname):
+
+            reg = re.compile(r'[^\-a-zA-Z0-9]+')
+            if re.search(reg, host):
+                logger.error(f'{host} contains invalid characters. Only alphanumeric (a-z, A-Z, 0-9) and hyphen (-) characters are supported.')
+                # Replace '.' with '-' if no invalid characters are found
+                host = re.sub(r'\.', '-', host)
+                logger.info(f'{host} replace . with -')
+
+            network = secureNetwork[i]
+            logger.debug(f'{host:<40} {network=}')
+            single_host = {'productId': product_id,
+                           'ipVersionBehavior': ipVersion,
+                           'domainPrefix': host}
+
+            if network == 'SHARED_CERT':
+                single_host['certProvisioningType'] = 'CPS_MANAGED'
+                single_host['domainSuffix'] = 'akamaized.net'
+                single_host['secureNetwork'] = network
+                single_host['useCases'] = [{'useCase': usecase,
+                                            'option': option,
+                                            'type': 'GLOBAL'}]
+            elif network == 'DEFAULT':
+                single_host['certProvisioningType'] = network
+                if tls == 'STANDARD_TLS':
+                    single_host['domainSuffix'] = 'edgesuite.net'
+                    single_host['secureNetwork'] = tls
+                elif tls == 'ENHANCED_TLS':
+                    single_host['domainSuffix'] = 'edgekey.net'
+                    single_host['secureNetwork'] = tls
+            elif network == 'CPS_MANAGED':
+                single_host['certProvisioningType'] = 'CPS_MANAGED'
+                if tls == 'STANDARD_TLS':
+                    single_host['domainSuffix'] = 'edgesuite.net'
+                    single_host['secureNetwork'] = tls
+                elif tls == 'ENHANCED_TLS':
+                    single_host['domainSuffix'] = 'edgekey.net'
+                    single_host['secureNetwork'] = tls
+            all_edgehostnames.append(single_host)
+
+        shared_cert_hosts = []
+
+        for single_host in all_edgehostnames:
+            ehn_id = -1
+            if single_host['domainSuffix'] == 'akamaized.net':
+                resp = self.session.post(url, params=params, headers=headers, json=single_host)
+                if not resp.ok:
+                    detail = resp.json()['detail']
+                    logger.info(f'{emoji.poop} {detail}')
+                else:
+                    ehn_id = resp.json()['edgeHostnameLink'].split('?')[0].split('/')[-1]
+                    detail = 'success'
+                shared_cert_hosts.append({single_host['domainPrefix']: {'edgeHostnameId': ehn_id,
+                                                                        'detail': detail}})
+        return shared_cert_hosts, all_edgehostnames
+
+    def get_edge_hostname(self, ehn_id: str, contract_id: str, group_id: str) -> list:
+        url = self.formUrl(f'https://{self.access_hostname}/papi/v1/edgehostnames/{ehn_id}')
+        params = {'contractId': contract_id,
+                  'groupId': group_id,
+                  'validateHostnames': True,
+                  'includeCertStatus': True}
+        resp = self.session.get(url, params=params)
+        if resp.ok:
+            ehn_item = resp.json()['edgeHostnames']['items'][0]
+        else:
+            print_json(data=resp.json())
+            ehn_item = []
+        return ehn_item
+
+    def get_edge_hostname_hapi(self, ehn_id: int) -> dict:
+        url = self.formUrl(f'https://{self.access_hostname}/hapi/v1/edge-hostnames/{ehn_id}')
+
+        resp = self.session.get(url)
+        if resp.ok:
+            ehn_item = resp.json()
+        else:
+            print_json(data=resp.json())
+            ehn_item = {}
+        return ehn_item
+
+    def get_property_hostname(self, property_id: str, version: int, contract_id: str, group_id: str) -> list:
+        url = self.formUrl(f'https://{self.access_hostname}/papi/v1/properties/{property_id}/versions/{version}/hostnames')
+        params = {'contractId': contract_id,
+                  'groupId': group_id,
+                  'validateHostnames': True,
+                  'includeCertStatus': True}
+
+        resp = self.session.get(url, params=params, headers=headers)
+        if resp.ok:
+            hostname_list = resp.json()['hostnames']['items']
+        else:
+            hostname_list = []
+        return hostname_list
+
+    def add_hostname(self, property_id: str, version: int, hostname: list, contract_id: str, group_id: str) -> list:
+        url = self.formUrl(f'https://{self.access_hostname}/papi/v1/properties/{property_id}/versions/{version}/hostnames')
+        params = {'contractId': contract_id,
+                  'groupId': group_id,
+                  'validateHostnames': False,
+                  'includeCertStatus': True}
+        all_hosts = []
+        for host in hostname:
+            single_host = {'cnameFrom': f'{host}.akamaized.net',
+                           'cnameTo': f'{host}.akamaized.net'}
+            all_hosts.append(single_host)
+        payload = {'add': all_hosts}
+
+        resp = self.session.patch(url, params=params, headers=headers, json=payload)
+        if resp.ok:
+            hostname_list = resp.json()['hostnames']['items']
+        else:
+            hostname_list = []
+        return hostname_list
+
+    def get_all_account_hostnames(self):
+        url = f'https://{self.access_hostname}/papi/v1/hostnames'
+        hostnameJson = []
+        account_key = self.account_switch_key.split('=')[1]
+        params = {
+            'accountSwitchKey': account_key,
+            'limit': '999'
+        }
+
+        nextLink = True
+        offset = 0
+        while nextLink is True:
+            result = self.session.get(url, params=params)
+            if result.ok:
+                resultJson = result.json()
+                assert 'hostnames' in resultJson
+                hostnameJson.extend(resultJson['hostnames']['items'])
+                if 'nextLink' not in resultJson['hostnames'].keys():
+                    nextLink = False
+                    continue
+                else:
+                    params['offset'] = offset + 999
+            else:
+                pass
+
+        return hostnameJson
+
+    def get_property_all_hostnames(self, propertyId, groupId, contractId):
+        url = f'https://{self.access_hostname}/papi/v1/properties/{propertyId}/hostnames'
+        hostnameJson = []
+        account_key = self.account_switch_key.split('=')[1]
+        params = {
+            'accountSwitchKey': account_key,
+            'includeCertStatus': 'true',
+            'contractId': contractId,
+            'groupId': groupId
+        }
+
+        nextLink = True
+        offset = 0
+        while nextLink is True:
+            result = self.session.get(url, params=params)
+            if result.ok:
+                resultJson = result.json()
+                assert 'hostnames' in resultJson
+                hostnameJson.extend(resultJson['hostnames']['items'])
+                if 'nextLink' not in resultJson['hostnames'].keys():
+                    nextLink = False
+                    continue
+                else:
+                    params['offset'] = offset + 999
+            else:
+                pass
+
+        return hostnameJson
+
+    def search_property_by_hostname(self, hostname):
+
+        """
+        Function to search property by hostname
+        """
+        account_key = self.account_switch_key.split('=')[1]
+        reqBody = {}
+        reqBody['hostname'] = hostname
+        params = {'accountSwitchKey': account_key}
+        url = f'https://{self.access_hostname}/papi/v1/search/find-by-value'
+        resp = self.session.post(url, data=json.dumps(reqBody),
+                                 params=params)
+
+        if resp.ok:
+            json_resp = resp.json()
+            if json_resp['versions']['items']:
+                production_version = (list(filter(lambda x: x['productionStatus'] == 'ACTIVE', json_resp['versions']['items'])))
+                if production_version:
+                    return (production_version[0])
+
+        return False

@@ -13,10 +13,11 @@ Copyright 2023 Akamai Technologies, Inc. All Rights Reserved.
 """
 from __future__ import annotations
 
-from exceptions import get_cli_root_directory
-from exceptions import setup_logger
+import logging
 
-logger = setup_logger()
+from exceptions import get_cli_root_directory
+
+logger = logging.getLogger(__name__)
 root = get_cli_root_directory()
 
 

@@ -1,0 +1,24 @@
+# Relaxes only the rules that conflict with this repo's existing, consistently-used
+# Markdown conventions. Everything else stays on the default markdownlint ruleset.
+default: true
+
+# README.md/CHANGELOG.md aren't wrapped at 80 columns (long prose, table rows, and
+# option-reference blocks routinely exceed it) - this was never this repo's convention.
+MD013: false
+
+# README.md's `<a id="top"></a>` back-to-top anchor is intentional inline HTML.
+MD033: false
+MD041: false
+
+# Every section in both files jumps from `##` straight to `####` (no `###` level
+# used) - consistent throughout, not a mistake to fix section-by-section.
+MD001: false
+
+# `#### ENHANCEMENTS/BUG FIXES:` (trailing colon) is CHANGELOG.md's established
+# heading convention (see CHANGELOG.md's own heading-convention note).
+MD026: false
+
+# CHANGELOG.md repeats the same heading text (e.g. "BUG FIXES:") under different
+# version headings by design - only flag duplicates within the same parent section.
+MD024:
+  siblings_only: true
