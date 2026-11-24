@@ -35,7 +35,7 @@ jobs:
         if: steps.check.outputs.exists == 'false'
         run: |
           awk -v ver="${{ steps.version.outputs.version }}" '
-            $0 == "## " ver { found=1; next }
+            $0 == "## " ver || index($0, "## [v" ver "]") == 1 { found=1; next }
             found && /^## / { exit }
             found { print }
           ' CHANGELOG.md > release_notes.md
