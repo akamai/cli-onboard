@@ -1,5 +1,16 @@
 # RELEASE NOTES
 
+<a id="top"></a>
+
+> Reference: historical record of enhancements and bug fixes for each released version.
+
+## 🔗 Quick Links
+
+**External Documentation:**
+
+- [← Back to README](README.md)
+- [🎯 CONTRIBUTING.md](CONTRIBUTING.md) - How-to / Explanation
+
 <!-- Format: new entries use separate "#### ENHANCEMENTS:" and "#### BUG FIXES:"
      headings (omit whichever has no items). Historical entries below that use
      a different heading are left as originally written. -->
@@ -22,21 +33,32 @@ Each release is grouped into two sections:
 
 - `convert`'s Excel report labels rows submitted under `--no-wait`
 - `convert`'s Excel report now shows which CP Code was used per hostname and flags any hostnames that were skipped
-- Add `--no-wait` to `single-host`, `multi-hosts`, `convert`, `batch-create`, and the AppSec commands: submit production activation and return immediately instead of waiting for it to finish
+- Add `--no-wait` to `single-host`, `multi-hosts`, `convert`, `batch-create`, and the AppSec commands: submit produ
+ction activation and return immediately instead of waiting for it to finish
 - Add `--preview` to `convert`: see exactly what a run would create before anything touches Akamai for real
-- Add `--prune-hostname-rules` to `convert`: drops rules for hostnames not in this run's CSV so each property only keeps its own rules
-- Add `--unique-cpcode` to `convert`: each hostname can get its own CP Code instead of sharing one for the whole property
-- Add security vulnerability checks — `uv audit` (dependency vulnerabilities), `bandit` (static analysis, medium+ severity), and `gitleaks` (secret scanning) — enforced locally via pre-commit and in CI (`.github/workflows/security.yml`)
-- New `check-activation` command checks on activation(s) submitted earlier with `--no-wait`; add `--wait` to keep polling until every activation finishes
+- Add `--prune-hostname-rules` to `convert`: drops rules for hostnames not in this run's CSV so each property only 
+keeps its own rules
+- Add `--unique-cpcode` to `convert`: each hostname can get its own CP Code instead of sharing one for the whole pr
+operty
+- Add security vulnerability checks — `uv audit` (dependency vulnerabilities), `bandit` (static analysis, medium+ s
+everity), and `gitleaks` (secret scanning) — enforced locally via pre-commit and in CI (`.github/workflows/security.
+yml`)
+- New `check-activation` command checks on activation(s) submitted earlier with `--no-wait`; add `--wait` to keep p
+olling until every activation finishes
 
 #### BUG FIXES:
 
-- `appsec-create --activate production` now actually activates to the production network — it was silently activating to staging twice instead
-- `batch-create`'s WAF production activation now fires correctly instead of silently never running, even when delivery activation to production succeeded
+- `appsec-create --activate production` now actually activates to the production network — it was silently activati
+ng to staging twice instead
+- `batch-create`'s WAF production activation now fires correctly instead of silently never running, even when deliv
+ery activation to production succeeded
 - `check-activation` now works with minimal, hand-built CSVs, not just ones produced by a prior `--no-wait` run
 - Bump vulnerable `setuptools`/`urllib3`/`aiohttp`/`cryptography`/`idna`/`pyasn1` versions flagged by `uv audit`
-- Fall back to the package's own install location instead of the current working directory when locating the CLI's root directory
-- Fix command injection risk in `akamai pm ...` shell-outs (`akamai-onboard.py`, `utility.py`, `wrapper_api.py`) — run with argument list and `shell=False` instead of a shell string
+- Fall back to the package's own install location instead of the current working directory when locating the CLI's 
+root directory
+- Fix command injection risk in `akamai pm ...` shell-outs (`akamai-onboard.py`, `utility.py`, `wrapper_api.py`) — 
+run with argument list and `shell=False` instead of a shell string
+
 
 ## [v2.5.4] - 2026-08-04
 
@@ -58,6 +80,8 @@ Each release is grouped into two sections:
 - An invalid group only surfaced later as a raw API failure mid-run; it's now checked up front, same as `--product`
 - Fixed a prefix mismatch: PAPI returns group/contract IDs with their `grp_`/`ctr_` prefix
 - Replace deprecated `os.system()` calls with `subprocess.run()` in `akamai-onboard.py`, `utility.py`, `wrapper_api.py`
+
+[↑ Back to top](#top)
 
 ## [v2.5.3] - 2026-07-31
 
@@ -92,6 +116,8 @@ Each release is grouped into two sections:
 - utility.py - better error handling
 - wrapper_api.py - better error handling
 
+[↑ Back to top](#top)
+
 ## [v2.4.0] - 2025-02-06
 
 #### ENHANCEMENTS/BUG FIXES:
@@ -100,12 +126,16 @@ Each release is grouped into two sections:
 - `appsec-update` improve logging messages
 - Bump minimum python version to 3.12
 
+[↑ Back to top](#top)
+
 ## [v2.3.7] - 2024-08-19
 
 #### ENHANCEMENTS:
 
 - Replaced `cerberus` with `jsonschema`
 - Upgraded `pandas` to version `2.2.2`
+
+[↑ Back to top](#top)
 
 ## [v2.3.6] - 2024-07-25
 
@@ -114,6 +144,8 @@ Each release is grouped into two sections:
 - appsec-create fail on brand new group without any config
 - appsec-create version/activation note is empty
 
+[↑ Back to top](#top)
+
 ## [v2.3.5] - 2024-07-25
 
 #### BUG FIXES:
@@ -121,3 +153,5 @@ Each release is grouped into two sections:
 - Update origin behavior template to [match Jun 12 2024 release](https://techdocs.akamai.com/property-mgr/changelog)
 - Display API creation error but not visible on the UI
 - Fix script error when create property using fixed ruleformat (ie. vYYYY-MM-DD)
+
+[↑ Back to top](#top)
